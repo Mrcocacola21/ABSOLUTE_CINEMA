@@ -1,0 +1,25 @@
+# Python / Backend
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Environment files
+backend/.env
+frontend/.env
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

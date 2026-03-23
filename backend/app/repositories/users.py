@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from app.adapters.mongo_adapter import MongoDocumentAdapter
@@ -40,3 +42,37 @@ class UserRepository(BaseRepository):
         """Return a user document by its identifier."""
         user = await self.collection.find_one({"_id": to_object_id(user_id)})
         return MongoDocumentAdapter.normalize(user)
+
+    async def list_users(self) -> list[dict[str, Any]]:
+        """Return all users ordered by creation time."""
+        cursor = self.collection.find({}).sort("created_at", -1)
+        documents = await cursor.to_list(length=500)
+        return MongoDocumentAdapter.normalize_many(documents)
+
+    async def list_by_ids(self, user_ids: list[str]) -> list[dict[str, Any]]:
+        """Return users for the provided identifiers."""
+        if not user_ids:
+            return []
+        cursor = self.collection.find(
+            {"_id": {"$in": [to_object_id(user_id) for user_id in set(user_ids)]}}
+        )
+        documents = await cursor.to_list(length=len(user_ids))
+        return MongoDocumentAdapter.normalize_many(documents)
+
+    async def update_user(
+        self,
+        user_id: str,
+        *,
+        updates: dict[str, Any],
+        updated_at: datetime,
+    ) -> dict[str, Any] | None:
+        """Apply partial updates to a user and return the updated document."""
+        try:
+            updated = await self.collection.find_one_and_update(
+                {"_id": to_object_id(user_id)},
+                {"$set": {**updates, "updated_at": updated_at}},
+                return_document=ReturnDocument.AFTER,
+            )
+        except DuplicateKeyError as exc:
+            raise ConflictException("A user with this email already exists.") from exc
+        return MongoDocumentAdapter.normalize(updated)

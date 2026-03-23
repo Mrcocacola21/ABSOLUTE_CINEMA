@@ -56,3 +56,5 @@ class TicketDocument(TypedDict):
     price: float
     status: str
     purchased_at: datetime
+    updated_at: NotRequired[datetime | None]
+    cancelled_at: NotRequired[datetime | None]

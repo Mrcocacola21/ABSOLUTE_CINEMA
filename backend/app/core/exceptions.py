@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -82,7 +83,7 @@ class ValidationException(AppException):
     def __init__(self, message: str = "Validation failed.") -> None:
         super().__init__(
             message,
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             code="validation_error",
         )
 
@@ -112,9 +113,9 @@ async def request_validation_exception_handler(
     exc: RequestValidationError,
 ) -> JSONResponse:
     """Convert FastAPI validation errors into the shared error envelope."""
-    response = ErrorResponse.validation_error(exc.errors())
+    response = ErrorResponse.validation_error(jsonable_encoder(exc.errors()))
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=response.model_dump(mode="json"),
     )
 

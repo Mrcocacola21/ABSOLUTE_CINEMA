@@ -7,6 +7,7 @@ interface PurchaseTicketCardProps {
   selectedSeat: SeatAvailability | null;
   price?: number;
   isSubmitting: boolean;
+  statusHint?: string;
   onPurchase: () => void;
 }
 
@@ -15,6 +16,7 @@ export function PurchaseTicketCard({
   selectedSeat,
   price,
   isSubmitting,
+  statusHint,
   onPurchase,
 }: PurchaseTicketCardProps) {
   const { t } = useTranslation();
@@ -27,6 +29,7 @@ export function PurchaseTicketCard({
           ? `${t("selectedSeat")}: ${selectedSeat.row}-${selectedSeat.number}`
           : t("chooseSeatPrompt")}
       </p>
+      {statusHint ? <p className="muted">{statusHint}</p> : null}
       {price !== undefined ? <p className="badge">{t("price")}: {price}</p> : null}
       <button
         type="button"

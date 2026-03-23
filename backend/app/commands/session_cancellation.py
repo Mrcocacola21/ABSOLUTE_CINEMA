@@ -30,6 +30,8 @@ class SessionCancellationCommand:
             raise NotFoundException("Session was not found.")
         if existing_session["status"] != SessionStatuses.SCHEDULED:
             raise ConflictException("Only scheduled sessions can be cancelled.")
+        if existing_session["start_time"] <= datetime.now(tz=timezone.utc):
+            raise ConflictException("Only future scheduled sessions can be cancelled.")
 
         updated_session = await self.session_repository.update_status(
             session_id=session_id,

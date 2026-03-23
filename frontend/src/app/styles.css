@@ -46,6 +46,12 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
 #root {
   min-height: 100vh;
 }
@@ -236,6 +242,22 @@ button {
   color: #fff;
 }
 
+.field textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.field--checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.field--checkbox input {
+  width: 18px;
+  height: 18px;
+}
+
 .list {
   display: grid;
   gap: 16px;
@@ -261,6 +283,11 @@ button {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-muted);
+}
+
+.badge--danger {
+  background: rgba(228, 93, 93, 0.18);
+  color: #ffdede;
 }
 
 .seat-grid {

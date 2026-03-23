@@ -8,6 +8,7 @@ import {
   purchaseTicketRequest,
 } from "@/api/schedule";
 import { useAuth } from "@/features/auth/useAuth";
+import { extractApiErrorMessage } from "@/shared/apiErrors";
 import type { SeatAvailability, SessionDetails, SessionSeats } from "@/types/domain";
 import { SeatMap } from "@/widgets/session/SeatMap";
 import { PurchaseTicketCard } from "@/widgets/tickets/PurchaseTicketCard";
@@ -43,16 +44,33 @@ export function SessionDetailsPage() {
     setIsSubmitting(true);
     try {
       await purchaseTicketRequest(sessionId, selectedSeat.row, selectedSeat.number);
-      const seatsResponse = await getSessionSeatsRequest(sessionId);
+      const [detailsResponse, seatsResponse] = await Promise.all([
+        getSessionDetailsRequest(sessionId),
+        getSessionSeatsRequest(sessionId),
+      ]);
+      setDetails(detailsResponse.data);
       setSeats(seatsResponse.data);
       setStatusMessage(t("ticketPurchaseSubmitted"));
       setSelectedSeat(null);
-    } catch {
-      setStatusMessage(t("ticketPurchaseFailed"));
+    } catch (error) {
+      setStatusMessage(extractApiErrorMessage(error, t("ticketPurchaseFailed")));
     } finally {
       setIsSubmitting(false);
     }
   }
+
+  const isSessionPurchasable = Boolean(
+    isAuthenticated &&
+      details &&
+      details.status === "scheduled" &&
+      new Date(details.start_time).getTime() > Date.now(),
+  );
+
+  const purchaseHint = !isAuthenticated
+    ? "Sign in to buy tickets."
+    : details && !isSessionPurchasable
+      ? "This session is not available for ticket purchase."
+      : undefined;
 
   return (
     <>
@@ -75,10 +93,11 @@ export function SessionDetailsPage() {
           onSelect={setSelectedSeat}
         />
         <PurchaseTicketCard
-          canPurchase={isAuthenticated}
+          canPurchase={isSessionPurchasable}
           selectedSeat={selectedSeat}
           price={details?.price}
           isSubmitting={isSubmitting}
+          statusHint={purchaseHint}
           onPurchase={() => void handlePurchase()}
         />
       </section>

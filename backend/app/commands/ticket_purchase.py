@@ -64,6 +64,8 @@ class TicketPurchaseCommand:
             "price": session["price"],
             "status": TicketStatuses.PURCHASED,
             "purchased_at": now,
+            "updated_at": None,
+            "cancelled_at": None,
         }
         ticket = await self.ticket_repository.create_ticket(ticket_document)
 

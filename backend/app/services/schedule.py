@@ -44,13 +44,14 @@ class ScheduleService:
     ) -> tuple[list[ScheduleItemRead], PaginationMeta]:
         """Return public schedule items with pagination metadata."""
         now = datetime.now(tz=timezone.utc)
+        await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
         session_documents = await self.session_repository.list_public_schedule(
             current_time=now,
             movie_id=filters.movie_id,
         )
         sessions = [SessionRead.model_validate(document) for document in session_documents]
         movies = await self.movie_repository.list_by_ids([session.movie_id for session in sessions])
-        movie_map = {movie["id"]: movie for movie in movies if movie.get("is_active", True)}
+        movie_map = {movie["id"]: movie for movie in movies}
 
         items = [
             ScheduleItemFactory.build(
@@ -71,6 +72,8 @@ class ScheduleService:
 
     async def get_session_details(self, session_id: str) -> SessionDetailsRead:
         """Return a session by id or raise if it does not exist."""
+        now = datetime.now(tz=timezone.utc)
+        await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
         session_document = await self.session_repository.get_by_id(session_id)
         if session_document is None:
             raise NotFoundException("Session was not found.")

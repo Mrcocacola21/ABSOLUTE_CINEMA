@@ -28,8 +28,10 @@ class SessionBase(BaseSchema):
     available_seats: int = Field(ge=0)
 
     @model_validator(mode="after")
-    def validate_available_seats(self) -> "SessionBase":
-        """Ensure the stored seat counters remain internally consistent."""
+    def validate_session_state(self) -> "SessionBase":
+        """Ensure session timing and stored counters remain internally consistent."""
+        if self.end_time <= self.start_time:
+            raise ValueError("end_time must be greater than start_time.")
         if self.available_seats > self.total_seats:
             raise ValueError("available_seats cannot exceed total_seats.")
         return self
@@ -40,7 +42,31 @@ class SessionCreate(BaseSchema):
 
     movie_id: str
     start_time: datetime
+    end_time: datetime
     price: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_time_window(self) -> "SessionCreate":
+        """Ensure the requested session slot has a positive duration."""
+        if self.end_time <= self.start_time:
+            raise ValueError("end_time must be greater than start_time.")
+        return self
+
+
+class SessionUpdate(BaseSchema):
+    """Payload for updating a session."""
+
+    movie_id: str | None = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    price: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_partial_time_window(self) -> "SessionUpdate":
+        """Ensure explicitly provided start/end pairs form a valid slot."""
+        if self.start_time is not None and self.end_time is not None and self.end_time <= self.start_time:
+            raise ValueError("end_time must be greater than start_time.")
+        return self
 
 
 class SessionRead(SessionBase):

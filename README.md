@@ -156,6 +156,7 @@ Public routes:
 - `POST /api/v1/auth/login`
 - `GET /api/v1/health`
 - `GET /api/v1/movies`
+- `GET /api/v1/movies/{movie_id}`
 - `GET /api/v1/schedule`
 - `GET /api/v1/schedule/{session_id}`
 - `GET /api/v1/sessions/{session_id}/seats`
@@ -163,16 +164,28 @@ Public routes:
 Authenticated user routes:
 
 - `POST /api/v1/tickets/purchase`
+- `GET /api/v1/tickets/me`
+- `PATCH /api/v1/tickets/{ticket_id}/cancel`
 - `GET /api/v1/users/me`
+- `PATCH /api/v1/users/me`
+- `DELETE /api/v1/users/me`
 
 Admin routes:
 
 - `GET /api/v1/admin/movies`
+- `GET /api/v1/admin/movies/{movie_id}`
 - `POST /api/v1/admin/movies`
 - `PATCH /api/v1/admin/movies/{movie_id}`
+- `PATCH /api/v1/admin/movies/{movie_id}/deactivate`
+- `DELETE /api/v1/admin/movies/{movie_id}`
 - `GET /api/v1/admin/sessions`
+- `GET /api/v1/admin/sessions/{session_id}`
 - `POST /api/v1/admin/sessions`
+- `PATCH /api/v1/admin/sessions/{session_id}`
 - `PATCH /api/v1/admin/sessions/{session_id}/cancel`
+- `DELETE /api/v1/admin/sessions/{session_id}`
+- `GET /api/v1/admin/tickets`
+- `GET /api/v1/admin/users`
 - `GET /api/v1/admin/attendance`
 
 The API uses a standardized success/error envelope and exposes Swagger UI at `http://localhost:8000/docs`.
@@ -184,23 +197,38 @@ Already implemented:
 - unique email validation
 - JWT registration/login flow
 - role-based access for `user` and `admin`
+- current user profile update and self-deactivation
 - public schedule browsing with pagination
 - schedule filtering by movie
 - schedule sorting by start time, movie title, and available seats
-- seat availability derived from purchased tickets
-- authenticated ticket purchase
+- public movie list + read-one for active movies
+- full admin movie CRUD with safe delete/deactivate behavior
+- full admin session CRUD with cancel/edit/delete behavior
+- seat availability derived from active tickets
+- authenticated ticket purchase, list, and cancellation
+- admin ticket and user lists
 - unique seat per session
 - session overlap validation for the one-hall cinema
 - session start time validation between `09:00` and `22:00`
-- prevention of ticket purchase for cancelled or past sessions
+- validation that `end_time > start_time`
+- validation that a session slot is at least as long as the linked movie duration
+- prevention of ticket purchase for cancelled, completed, or past sessions
 - seat coordinate validation against configured hall dimensions
+- automatic session transition to `completed` once `end_time` has passed
+- `available_seats` restoration on valid ticket cancellation
 
 Still intentionally simple:
 
 - no MongoDB transaction around ticket purchase yet
 - no refresh tokens or password reset flow
-- no automatic session transition to `completed`
 - admin bootstrap is controlled through `ADMIN_EMAILS`
+
+Management rules documented in code and README:
+
+- Movie deletion: hard delete is allowed only if the movie has never been used in any session. If at least one session references the movie, admins must deactivate it instead so schedule and ticket history keep a valid movie record.
+- Session deletion: hard delete is allowed only if the session has no stored tickets at all. If tickets exist, admins should cancel the session instead so historical ticket data is preserved.
+- Ticket cancellation: cancelled tickets stay stored with `status = cancelled`, restore one `available_seat`, and are allowed only before the session start time. The unique seat index now applies only to active purchased tickets, so a cancelled seat can be bought again.
+- User deletion/deactivation: self-service account removal is implemented as soft deactivation (`is_active = false`) instead of hard delete so ticket ownership and audit history remain intact.
 
 ## MongoDB collections and indexes
 
@@ -222,7 +250,7 @@ Indexes created on startup:
 - `sessions.status`
 - `tickets.user_id`
 - `tickets.session_id`
-- `tickets(session_id, seat_row, seat_number)` unique
+- `tickets(session_id, seat_row, seat_number)` unique for active purchased tickets only
 
 ## Frontend
 
@@ -243,9 +271,12 @@ Implemented frontend behavior:
 - schedule sorting/filtering synced with URL query params
 - separate movie list for schedule filtering
 - session details with fixed-size seat map
-- ticket purchase request flow
-- admin movie create/edit
-- admin session creation and cancellation
+- ticket purchase request flow with client-side purchasable-state feedback
+- profile edit form and self-deactivation
+- current user ticket list with cancellation
+- admin movie create/read/update/delete/deactivate
+- admin session create/read/update/cancel/delete
+- admin ticket and user overview panels
 - attendance overview
 
 The admin dashboard is intentionally aligned with a timeline/chronoboard direction: movies are managed first, then scheduled into time slots. Drag-and-drop is not implemented yet, but the data model and forms are prepared for that workflow.

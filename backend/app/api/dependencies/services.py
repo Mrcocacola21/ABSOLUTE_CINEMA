@@ -67,6 +67,8 @@ def get_ticket_service() -> TicketService:
     return TicketService(
         session_repository=get_session_repository(),
         ticket_repository=get_ticket_repository(),
+        movie_repository=get_movie_repository(),
+        user_repository=get_user_repository(),
     )
 
 

@@ -31,3 +31,10 @@ class PaginationMeta(BaseSchema):
     offset: int
     current_page: int
     total_pages: int
+
+
+class DeleteResultRead(BaseSchema):
+    """Standard payload returned by delete operations."""
+
+    id: str
+    deleted: bool = True

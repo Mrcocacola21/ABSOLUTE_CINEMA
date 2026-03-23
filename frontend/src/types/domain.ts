@@ -86,6 +86,19 @@ export interface Ticket {
   price: number;
   status: string;
   purchased_at: string;
+  updated_at?: string | null;
+  cancelled_at?: string | null;
+}
+
+export interface TicketListItem extends Ticket {
+  movie_id: string;
+  movie_title: string;
+  session_start_time: string;
+  session_end_time: string;
+  session_status: string;
+  is_cancellable: boolean;
+  user_name?: string | null;
+  user_email?: string | null;
 }
 
 export interface AttendanceSessionSummary {

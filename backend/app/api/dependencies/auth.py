@@ -30,6 +30,8 @@ async def get_current_user(
     user = await user_service.get_user_by_id(user_id)
     if not user:
         raise AuthenticationException("Authenticated user no longer exists.")
+    if not user.is_active:
+        raise AuthenticationException("This account is inactive.")
     return user
 
 

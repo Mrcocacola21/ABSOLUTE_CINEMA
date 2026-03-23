@@ -46,6 +46,11 @@ class MovieRepository(BaseRepository):
         movie = await self.collection.find_one({"_id": to_object_id(movie_id)})
         return MongoDocumentAdapter.normalize(movie)
 
+    async def delete_movie(self, movie_id: str) -> bool:
+        """Delete a movie by identifier."""
+        result = await self.collection.delete_one({"_id": to_object_id(movie_id)})
+        return result.deleted_count == 1
+
     async def list_movies(self, *, active_only: bool) -> list[dict[str, Any]]:
         """Return movies ordered by title."""
         query: dict[str, Any] = {"is_active": True} if active_only else {}

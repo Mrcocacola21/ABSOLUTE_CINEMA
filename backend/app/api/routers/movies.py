@@ -20,3 +20,13 @@ async def list_movies(
     """Return active movies that can appear in the public schedule."""
     movies = await movie_service.list_available_movies()
     return ApiResponseFactory.success(data=movies, message="Movies loaded.")
+
+
+@router.get("/{movie_id}", response_model=ApiResponse[MovieRead])
+async def get_movie(
+    movie_id: str,
+    movie_service: MovieService = Depends(get_movie_service),
+) -> ApiResponse[MovieRead]:
+    """Return a single active movie."""
+    movie = await movie_service.get_available_movie(movie_id)
+    return ApiResponseFactory.success(data=movie, message="Movie loaded.")

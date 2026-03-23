@@ -33,6 +33,16 @@ class SessionRepository(BaseRepository):
         session = await self.collection.find_one({"_id": to_object_id(session_id)})
         return MongoDocumentAdapter.normalize(session)
 
+    async def list_by_ids(self, session_ids: list[str]) -> list[dict[str, Any]]:
+        """Return sessions for the provided identifiers."""
+        if not session_ids:
+            return []
+        cursor = self.collection.find(
+            {"_id": {"$in": [to_object_id(session_id) for session_id in set(session_ids)]}}
+        )
+        documents = await cursor.to_list(length=len(session_ids))
+        return MongoDocumentAdapter.normalize_many(documents)
+
     async def list_public_schedule(
         self,
         *,
@@ -62,16 +72,34 @@ class SessionRepository(BaseRepository):
         *,
         start_time: datetime,
         end_time: datetime,
+        exclude_session_id: str | None = None,
     ) -> dict[str, Any] | None:
         """Return an overlapping non-cancelled session if one exists."""
-        overlapping = await self.collection.find_one(
-            {
-                "status": {"$ne": SessionStatuses.CANCELLED},
-                "start_time": {"$lt": end_time},
-                "end_time": {"$gt": start_time},
-            }
-        )
+        query: dict[str, Any] = {
+            "status": {"$ne": SessionStatuses.CANCELLED},
+            "start_time": {"$lt": end_time},
+            "end_time": {"$gt": start_time},
+        }
+        if exclude_session_id is not None:
+            query["_id"] = {"$ne": to_object_id(exclude_session_id)}
+
+        overlapping = await self.collection.find_one(query)
         return MongoDocumentAdapter.normalize(overlapping)
+
+    async def update_session(
+        self,
+        session_id: str,
+        *,
+        updates: dict[str, Any],
+        updated_at: datetime,
+    ) -> dict[str, Any] | None:
+        """Apply partial updates to a session and return the updated document."""
+        updated = await self.collection.find_one_and_update(
+            {"_id": to_object_id(session_id)},
+            {"$set": {**updates, "updated_at": updated_at}},
+            return_document=ReturnDocument.AFTER,
+        )
+        return MongoDocumentAdapter.normalize(updated)
 
     async def update_status(
         self,
@@ -87,6 +115,31 @@ class SessionRepository(BaseRepository):
             return_document=ReturnDocument.AFTER,
         )
         return MongoDocumentAdapter.normalize(updated)
+
+    async def delete_session(self, session_id: str) -> bool:
+        """Delete a session by identifier."""
+        result = await self.collection.delete_one({"_id": to_object_id(session_id)})
+        return result.deleted_count == 1
+
+    async def count_by_movie(self, movie_id: str) -> int:
+        """Return the number of sessions linked to a movie."""
+        return await self.collection.count_documents({"movie_id": movie_id})
+
+    async def sync_completed_sessions(self, *, current_time: datetime, updated_at: datetime) -> int:
+        """Mark sessions that have already ended as completed."""
+        result = await self.collection.update_many(
+            {
+                "status": SessionStatuses.SCHEDULED,
+                "end_time": {"$lte": current_time},
+            },
+            {
+                "$set": {
+                    "status": SessionStatuses.COMPLETED,
+                    "updated_at": updated_at,
+                }
+            },
+        )
+        return result.modified_count
 
     async def decrement_available_seats_for_purchase(
         self,

@@ -311,6 +311,11 @@ Backend variables in `backend/.env`:
 - `LAST_SESSION_START_HOUR`
 - `ADMIN_EMAILS`
 
+Optional test-only overrides:
+
+- `TEST_MONGODB_URI`
+- `TEST_MONGODB_DB_NAME`
+
 Frontend variables in `frontend/.env`:
 
 - `VITE_API_BASE_URL`, usually `http://localhost:8000/api/v1`
@@ -338,6 +343,7 @@ npm run dev
 MongoDB:
 
 Run MongoDB separately and point `MONGODB_URI` to it.
+The integration test suite defaults to `mongodb://127.0.0.1:27017` and uses the dedicated database `cinema_showcase_test`.
 
 ## Docker Compose startup
 
@@ -362,6 +368,7 @@ Backend:
 cd backend
 uvicorn app.main:app --reload
 pytest
+pytest app/tests/integration -o addopts=
 ```
 
 Frontend:
@@ -375,11 +382,43 @@ npm run build
 
 ## Testing
 
-Starter backend unit tests currently cover:
+The backend now has both unit tests and API-level integration tests.
 
-- password hashing
-- pagination metadata
-- schedule sorting strategy selection
+Unit tests cover focused utility and service behavior such as password hashing, pagination metadata, and schedule sorting strategy selection.
+
+Integration tests run against a dedicated MongoDB test database instead of the main working database. By default the test harness connects to `mongodb://127.0.0.1:27017` and uses `cinema_showcase_test`. The test setup explicitly refuses to run against the development database name `cinema_showcase`.
+
+Integration test isolation is handled in two layers:
+
+- the dedicated test database is dropped before and after the full test session
+- the `users`, `movies`, `sessions`, and `tickets` collections are cleared before and after each individual test
+
+The integration suite exercises real end-to-end backend flows through FastAPI routes, dependency wiring, services, repositories, and MongoDB. Covered scenarios include:
+
+- user registration, duplicate email rejection, login, and authenticated `/users/me`
+- admin movie create/list/read/update/deactivate/delete flows
+- admin session create/list/read/update/cancel/delete flows
+- overlap rejection and invalid session time validation
+- public schedule listing, sorting, filtering, session details, and seat availability
+- ticket purchase, duplicate seat rejection, out-of-bounds seat rejection, and purchase blocking for cancelled/completed/past sessions
+- current-user ticket listing and cancellation
+- admin ticket/user access and non-admin access denial
+
+Run the integration tests locally with:
+
+```powershell
+cd backend
+pytest app/tests/integration -o addopts=
+```
+
+To override the MongoDB target explicitly:
+
+```powershell
+cd backend
+$env:TEST_MONGODB_URI="mongodb://127.0.0.1:27017"
+$env:TEST_MONGODB_DB_NAME="cinema_showcase_test"
+pytest app/tests/integration -o addopts=
+```
 
 Coverage reporting is configured in `backend/pyproject.toml`.
 

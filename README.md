@@ -126,6 +126,33 @@ Important behavior:
 - If you already registered that email as a normal user, use a new admin email, delete that user from MongoDB, or reset the demo database.
 - For Docker demo reset, use `docker compose down -v` and then start the stack again. This removes the MongoDB volume and all stored data.
 
+## Admin workspace flow
+
+After signing in with an admin account, open `http://localhost:5173/admin`.
+
+The admin area is now split into three working sections:
+
+- Movie management: create, edit, deactivate, and delete movies from the catalog.
+- Session management: use the one-hall chronoboard to schedule sessions by day and time.
+- Reports / attendance: review attendance summaries, latest bookings, and recent users.
+
+### How the chronoboard works
+
+1. Create or activate a movie in the movie management section.
+2. In the session planner, pick a day from the quick day pills or the date input.
+3. Drag an active movie from the planning shelf onto the board.
+4. Drop it on a free time slot. The planner panel opens with the movie and start time already filled in.
+5. Confirm the price and save the session.
+6. The board refreshes automatically and shows the new session in its time range.
+
+Existing session cards on the board can be clicked to inspect details. From the inspector panel you can:
+
+- edit the session
+- cancel the session
+- delete the session when backend rules allow it
+
+Overlap rules remain enforced for the one-hall cinema model. Blocked slots are highlighted before save, and the backend still validates overlaps and other session constraints.
+
 ## Frontend browsing flow
 
 The public frontend now has three main browsing entry points:

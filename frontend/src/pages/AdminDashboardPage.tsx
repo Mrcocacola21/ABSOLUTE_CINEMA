@@ -23,7 +23,7 @@ import {
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
-import type { AttendanceReport, Movie, SessionDetails, TicketListItem, User } from "@/types/domain";
+import type { AttendanceReport, Movie, Session, SessionDetails, TicketListItem, User } from "@/types/domain";
 import { AttendancePanel } from "@/widgets/admin/AttendancePanel";
 import { AdminScheduleManagement } from "@/widgets/admin/AdminScheduleManagement";
 
@@ -92,12 +92,12 @@ export function AdminDashboardPage() {
     void refreshDashboard();
   }, []);
 
-  async function runAdminAction(
-    action: () => Promise<{ message: string }>,
+  async function runAdminAction<T>(
+    action: () => Promise<{ message: string; data: T }>,
     actionLabel: string,
     successTitle: string,
     fallbackMessage: string,
-  ) {
+  ): Promise<T | null> {
     setPendingActionLabel(actionLabel);
     setFeedback(null);
     try {
@@ -108,47 +108,89 @@ export function AdminDashboardPage() {
         title: successTitle,
         message: response.message,
       });
+      return response.data;
     } catch (error) {
       setFeedback({
         tone: "error",
         title: `${successTitle} failed`,
         message: extractApiErrorMessage(error, fallbackMessage),
       });
+      return null;
     } finally {
       setPendingActionLabel("");
     }
   }
 
   async function handleCreateMovie(payload: MovieCreatePayload) {
-    await runAdminAction(() => createMovieRequest(payload), "Creating movie", "Movie created", "Movie creation failed.");
+    return runAdminAction(
+      () => createMovieRequest(payload),
+      "Creating movie",
+      "Movie created",
+      "Movie creation failed.",
+    );
   }
 
   async function handleUpdateMovie(movieId: string, payload: MovieUpdatePayload) {
-    await runAdminAction(() => updateMovieRequest(movieId, payload), "Updating movie", "Movie updated", "Movie update failed.");
+    return runAdminAction(
+      () => updateMovieRequest(movieId, payload),
+      "Updating movie",
+      "Movie updated",
+      "Movie update failed.",
+    );
   }
 
   async function handleDeactivateMovie(movieId: string) {
-    await runAdminAction(() => deactivateMovieRequest(movieId), "Deactivating movie", "Movie deactivated", "Movie deactivation failed.");
+    return runAdminAction(
+      () => deactivateMovieRequest(movieId),
+      "Deactivating movie",
+      "Movie deactivated",
+      "Movie deactivation failed.",
+    );
   }
 
   async function handleDeleteMovie(movieId: string) {
-    await runAdminAction(() => deleteMovieRequest(movieId), "Deleting movie", "Movie deleted", "Movie deletion failed.");
+    return runAdminAction(
+      () => deleteMovieRequest(movieId),
+      "Deleting movie",
+      "Movie deleted",
+      "Movie deletion failed.",
+    );
   }
 
   async function handleCreateSession(payload: SessionCreatePayload) {
-    await runAdminAction(() => createSessionRequest(payload), "Creating session", "Session created", "Session creation failed.");
+    return runAdminAction(
+      () => createSessionRequest(payload),
+      "Creating session",
+      "Session created",
+      "Session creation failed.",
+    );
   }
 
   async function handleUpdateSession(sessionId: string, payload: SessionUpdatePayload) {
-    await runAdminAction(() => updateSessionRequest(sessionId, payload), "Updating session", "Session updated", "Session update failed.");
+    return runAdminAction(
+      () => updateSessionRequest(sessionId, payload),
+      "Updating session",
+      "Session updated",
+      "Session update failed.",
+    );
   }
 
   async function handleCancelSession(sessionId: string) {
-    await runAdminAction(() => cancelSessionRequest(sessionId), "Cancelling session", "Session cancelled", "Session cancellation failed.");
+    return runAdminAction(
+      () => cancelSessionRequest(sessionId),
+      "Cancelling session",
+      "Session cancelled",
+      "Session cancellation failed.",
+    );
   }
 
   async function handleDeleteSession(sessionId: string) {
-    await runAdminAction(() => deleteSessionRequest(sessionId), "Deleting session", "Session deleted", "Session deletion failed.");
+    return runAdminAction(
+      () => deleteSessionRequest(sessionId),
+      "Deleting session",
+      "Session deleted",
+      "Session deletion failed.",
+    );
   }
 
   const activeMoviesCount = movies.filter((movie) => movie.is_active).length;
@@ -162,7 +204,7 @@ export function AdminDashboardPage() {
           <h1 className="page-title">{t("dashboard")}</h1>
           <p className="page-subtitle">{t("adminIntro")}</p>
         </div>
-        <div className="stats-row">
+        <div className="actions-row">
           <span className="badge">
             {activeMoviesCount}/{movies.length} {t("movieCatalogTitle")}
           </span>
@@ -175,19 +217,50 @@ export function AdminDashboardPage() {
           <span className="badge">
             {users.length} {t("usersPanelTitle")}
           </span>
+          <button
+            className="button--ghost"
+            type="button"
+            disabled={isLoading || isRefreshing || Boolean(pendingActionLabel)}
+            onClick={() => void refreshDashboard({ background: true })}
+          >
+            {isRefreshing ? "Refreshing..." : "Refresh data"}
+          </button>
         </div>
       </section>
 
-      <section className="cards-grid admin-workflow">
-        <article className="card admin-step">
-          <p className="page-eyebrow">1</p>
-          <h2 className="section-title">{t("adminWorkflowMoviesTitle")}</h2>
-          <p className="muted">{t("adminWorkflowMoviesText")}</p>
+      <section className="cards-grid admin-overview-grid">
+        <article className="card admin-overview-card">
+          <p className="page-eyebrow">Movie Management</p>
+          <h2 className="section-title">Maintain the catalog</h2>
+          <p className="muted">
+            Create titles, update metadata, and keep the active lineup ready for scheduling.
+          </p>
+          <div className="stats-row">
+            <span className="badge">{activeMoviesCount} active</span>
+            <span className="badge">{movies.length - activeMoviesCount} archived</span>
+          </div>
         </article>
-        <article className="card admin-step">
-          <p className="page-eyebrow">2</p>
-          <h2 className="section-title">{t("adminWorkflowSessionsTitle")}</h2>
-          <p className="muted">{t("adminWorkflowSessionsText")}</p>
+        <article className="card admin-overview-card">
+          <p className="page-eyebrow">Session Planner</p>
+          <h2 className="section-title">Schedule on the chronoboard</h2>
+          <p className="muted">
+            Drag an active movie onto the board, confirm the slot, and manage the day view in one lane.
+          </p>
+          <div className="stats-row">
+            <span className="badge">{scheduledSessionsCount} scheduled</span>
+            <span className="badge">{sessions.length - scheduledSessionsCount} closed out</span>
+          </div>
+        </article>
+        <article className="card admin-overview-card">
+          <p className="page-eyebrow">Reports</p>
+          <h2 className="section-title">Track demand and attendance</h2>
+          <p className="muted">
+            Review attendance, latest bookings, and new users without leaving the admin workspace.
+          </p>
+          <div className="stats-row">
+            <span className="badge">{tickets.length} bookings</span>
+            <span className="badge">{users.length} accounts</span>
+          </div>
         </article>
       </section>
 
@@ -233,8 +306,6 @@ export function AdminDashboardPage() {
           <AdminScheduleManagement
             movies={movies}
             sessions={sessions}
-            tickets={tickets}
-            users={users}
             isBusy={Boolean(pendingActionLabel)}
             busyActionLabel={pendingActionLabel}
             onCreateMovie={handleCreateMovie}
@@ -246,7 +317,7 @@ export function AdminDashboardPage() {
             onCancelSession={handleCancelSession}
             onDeleteSession={handleDeleteSession}
           />
-          <AttendancePanel report={report} />
+          <AttendancePanel report={report} tickets={tickets} users={users} />
         </>
       ) : null}
     </>

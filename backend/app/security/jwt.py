@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.core.config import get_settings
 from app.core.exceptions import AuthenticationException
@@ -41,5 +41,5 @@ def decode_access_token(token: str) -> AccessTokenPayload:
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         return AccessTokenPayload.model_validate(payload)
-    except JWTError as exc:
+    except (JWTError, ValidationError) as exc:
         raise AuthenticationException("Invalid or expired access token.") from exc

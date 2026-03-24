@@ -222,3 +222,35 @@ async def test_public_movie_details_can_include_inactive_movies_when_requested(
     assert catalog_response.status_code == 200
     assert catalog_response.json()["data"]["id"] == inactive_movie["id"]
     assert catalog_response.json()["data"]["is_active"] is False
+
+
+@pytest.mark.asyncio
+async def test_movie_routes_return_404_for_missing_movies_and_422_for_invalid_identifiers(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+) -> None:
+    missing_movie_id = str(ObjectId())
+
+    public_missing_response = await client.get(f"{API_PREFIX}/movies/{missing_movie_id}")
+    assert public_missing_response.status_code == 404
+    public_missing_body = public_missing_response.json()
+    assert public_missing_body["success"] is False
+    assert public_missing_body["error"]["code"] == "not_found"
+    assert public_missing_body["error"]["message"] == "Movie was not found."
+
+    admin_missing_response = await client.get(
+        f"{API_PREFIX}/admin/movies/{missing_movie_id}",
+        headers=admin_auth["headers"],
+    )
+    assert admin_missing_response.status_code == 404
+    admin_missing_body = admin_missing_response.json()
+    assert admin_missing_body["success"] is False
+    assert admin_missing_body["error"]["code"] == "not_found"
+    assert admin_missing_body["error"]["message"] == "Movie was not found."
+
+    invalid_public_response = await client.get(f"{API_PREFIX}/movies/not-a-valid-object-id")
+    assert invalid_public_response.status_code == 422
+    invalid_public_body = invalid_public_response.json()
+    assert invalid_public_body["success"] is False
+    assert invalid_public_body["error"]["code"] == "validation_error"
+    assert invalid_public_body["error"]["message"] == "Invalid MongoDB identifier format."

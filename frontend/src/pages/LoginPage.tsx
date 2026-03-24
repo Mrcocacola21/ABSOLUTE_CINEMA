@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/useAuth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { StatusBanner } from "@/shared/ui/StatusBanner";
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -21,16 +22,20 @@ export function LoginPage() {
       : "",
   );
   const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatusMessage("");
     setErrorMessage("");
+    setIsSubmitting(true);
     try {
       await login(email, password);
       navigate("/profile");
     } catch (error) {
       setErrorMessage(extractApiErrorMessage(error, t("loginFailed")));
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -56,6 +61,7 @@ export function LoginPage() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               type="email"
+              disabled={isSubmitting}
               required
             />
           </label>
@@ -65,15 +71,16 @@ export function LoginPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               type="password"
+              disabled={isSubmitting}
               required
             />
           </label>
         </div>
-        {statusMessage ? <p className="badge">{statusMessage}</p> : null}
-        {errorMessage ? <p className="badge badge--danger">{errorMessage}</p> : null}
+        {statusMessage ? <StatusBanner tone="info" message={statusMessage} /> : null}
+        {errorMessage ? <StatusBanner tone="error" title="Unable to sign in" message={errorMessage} /> : null}
         <div className="actions-row">
-          <button className="button" type="submit">
-            {t("login")}
+          <button className="button" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Signing in..." : t("login")}
           </button>
           <Link to="/register" className="button--ghost">
             {t("registerInstead")}

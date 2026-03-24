@@ -4,11 +4,14 @@ import { useTranslation } from "react-i18next";
 
 import { getScheduleRequest } from "@/api/schedule";
 import { useScheduleQueryParams } from "@/hooks/useScheduleQueryParams";
+import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { formatCurrency, formatStateLabel, formatTime } from "@/shared/presentation";
 import {
   filterScheduleItems,
   getAvailableMovieOptions,
   sortScheduleItems,
 } from "@/shared/scheduleBrowse";
+import { StatePanel } from "@/shared/ui/StatePanel";
 import type { ScheduleItem } from "@/types/domain";
 import { ScheduleToolbar } from "@/widgets/schedule/ScheduleToolbar";
 
@@ -29,14 +32,6 @@ function formatDayLabel(value: string): string {
   });
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "UAH",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
 function getMovieMonogram(title: string): string {
   return title
     .split(" ")
@@ -50,23 +45,30 @@ export function SchedulePage() {
   const { t } = useTranslation();
   const { values, updateParam, resetParams } = useScheduleQueryParams();
   const [items, setItems] = useState<ScheduleItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
-  useEffect(() => {
-    void getScheduleRequest({
-      sortBy: "start_time",
-      sortOrder: "asc",
-      limit: "100",
-      offset: "0",
-    })
-      .then((response) => {
-        setItems(response.data);
-        setErrorMessage("");
-      })
-      .catch(() => {
-        setItems([]);
-        setErrorMessage(t("backendScheduleUnavailable"));
+  async function loadSchedule() {
+    setIsLoading(true);
+    try {
+      const response = await getScheduleRequest({
+        sortBy: "start_time",
+        sortOrder: "asc",
+        limit: "100",
+        offset: "0",
       });
+      setItems(response.data);
+      setErrorMessage("");
+    } catch (error) {
+      setItems([]);
+      setErrorMessage(extractApiErrorMessage(error, t("backendScheduleUnavailable")));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadSchedule();
   }, [t]);
 
   const baseFilteredItems = useMemo(
@@ -139,52 +141,75 @@ export function SchedulePage() {
         </div>
       </section>
 
-      <section className="panel day-panel">
-        <div className="toolbar-panel__header">
-          <div>
-            <p className="page-eyebrow">{t("chooseDay")}</p>
-            <h2 className="section-title">{selectedDay ? formatDayLabel(selectedDay) : t("schedule")}</h2>
+      {isLoading ? (
+        <StatePanel
+          tone="loading"
+          title="Loading the schedule"
+          message="Fetching upcoming sessions and available days."
+        />
+      ) : null}
+
+      {!isLoading && errorMessage ? (
+        <StatePanel
+          tone="error"
+          title="Unable to load the schedule"
+          message={errorMessage}
+          action={
+            <button className="button--ghost" type="button" onClick={() => void loadSchedule()}>
+              Try again
+            </button>
+          }
+        />
+      ) : null}
+
+      {!isLoading && !errorMessage ? (
+        <section className="panel day-panel">
+          <div className="toolbar-panel__header">
+            <div>
+              <p className="page-eyebrow">{t("chooseDay")}</p>
+              <h2 className="section-title">{selectedDay ? formatDayLabel(selectedDay) : t("schedule")}</h2>
+            </div>
+            <p className="toolbar-panel__summary">{t("scheduleDayHint")}</p>
           </div>
-          <p className="toolbar-panel__summary">{t("scheduleDayHint")}</p>
-        </div>
 
-        {dayOptions.length > 0 ? (
-          <div className="day-pills">
-            {dayOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`day-pill${option.value === selectedDay ? " is-active" : ""}`}
-                onClick={() => updateParam("day", option.value)}
-              >
-                <strong>{option.label}</strong>
-                <span>{option.count}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">{t("scheduleEmptyDays")}</div>
-        )}
-      </section>
+          {dayOptions.length > 0 ? (
+            <div className="day-pills">
+              {dayOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`day-pill${option.value === selectedDay ? " is-active" : ""}`}
+                  onClick={() => updateParam("day", option.value)}
+                >
+                  <strong>{option.label}</strong>
+                  <span>{option.count}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">{t("scheduleEmptyDays")}</div>
+          )}
+        </section>
+      ) : null}
 
-      <ScheduleToolbar
-        query={values.query}
-        sortBy={values.sortBy}
-        sortOrder={values.sortOrder}
-        movieId={values.movieId}
-        movies={movieOptions}
-        resultsLabel={t("scheduleDayResultsLabel", {
-          sessions: dayItems.length,
-          movies: new Set(dayItems.map((item) => item.movie_id)).size,
-          day: selectedDay ? formatDayLabel(selectedDay) : "-",
-        })}
-        onChange={updateParam}
-        onReset={resetParams}
-      />
+      {!isLoading && !errorMessage ? (
+        <ScheduleToolbar
+          query={values.query}
+          sortBy={values.sortBy}
+          sortOrder={values.sortOrder}
+          movieId={values.movieId}
+          movies={movieOptions}
+          resultsLabel={t("scheduleDayResultsLabel", {
+            sessions: dayItems.length,
+            movies: new Set(dayItems.map((item) => item.movie_id)).size,
+            day: selectedDay ? formatDayLabel(selectedDay) : "-",
+          })}
+          onChange={updateParam}
+          onReset={resetParams}
+        />
+      ) : null}
 
-      {errorMessage ? <section className="empty-state">{errorMessage}</section> : null}
-
-      {!errorMessage && dayOptions.length === 0 ? (
+      {!isLoading && !errorMessage && dayOptions.length === 0 ? (
         <section className="empty-state empty-state--panel">
           <h2>{t("noMatchingSessions")}</h2>
           <p>{t("scheduleQueryHint")}</p>
@@ -194,7 +219,7 @@ export function SchedulePage() {
         </section>
       ) : null}
 
-      {!errorMessage && dayOptions.length > 0 && dayItems.length === 0 ? (
+      {!isLoading && !errorMessage && dayOptions.length > 0 && dayItems.length === 0 ? (
         <section className="empty-state empty-state--panel">
           <h2>{t("noMatchingSessions")}</h2>
           <p>{t("scheduleQueryHint")}</p>
@@ -204,23 +229,13 @@ export function SchedulePage() {
         </section>
       ) : null}
 
-      {!errorMessage && dayItems.length > 0 ? (
+      {!isLoading && !errorMessage && dayItems.length > 0 ? (
         <section className="schedule-board">
           {dayItems.map((item) => (
             <article key={item.id} className="card timeline-card">
               <div className="timeline-card__time">
-                <strong>
-                  {new Date(item.start_time).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </strong>
-                <span>
-                  {new Date(item.end_time).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
+                <strong>{formatTime(item.start_time)}</strong>
+                <span>{formatTime(item.end_time)}</span>
               </div>
 
               <div className="media-tile timeline-card__media" aria-hidden="true">
@@ -233,7 +248,7 @@ export function SchedulePage() {
 
               <div className="timeline-card__body">
                 <div className="meta-row">
-                  <span className="badge">{item.status}</span>
+                  <span className="badge">{formatStateLabel(item.status)}</span>
                   {item.age_rating ? <span className="badge">{item.age_rating}</span> : null}
                   <span className="badge">
                     {item.available_seats}/{item.total_seats}

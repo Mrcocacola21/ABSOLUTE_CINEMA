@@ -4,12 +4,14 @@ import { useTranslation } from "react-i18next";
 
 import { getMoviesRequest, getScheduleRequest } from "@/api/schedule";
 import { useAuth } from "@/features/auth/useAuth";
+import { extractApiErrorMessage } from "@/shared/apiErrors";
 import {
   buildRotationMovies,
   filterScheduleItems,
   getAvailableMovieOptions,
   sortScheduleItems,
 } from "@/shared/scheduleBrowse";
+import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, ScheduleItem } from "@/types/domain";
 import { ScheduleToolbar } from "@/widgets/schedule/ScheduleToolbar";
 
@@ -44,32 +46,39 @@ export function HomePage() {
   const { role } = useAuth();
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [movies, setMovies] = useState<Movie[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState("start_time");
   const [sortOrder, setSortOrder] = useState("asc");
   const [movieId, setMovieId] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  async function loadHomeData() {
+    setIsLoading(true);
+    try {
+      const [scheduleResponse, moviesResponse] = await Promise.all([
+        getScheduleRequest({
+          sortBy: "start_time",
+          sortOrder: "asc",
+          limit: "100",
+          offset: "0",
+        }),
+        getMoviesRequest(),
+      ]);
+      setItems(scheduleResponse.data);
+      setMovies(moviesResponse.data);
+      setErrorMessage("");
+    } catch (error) {
+      setItems([]);
+      setMovies([]);
+      setErrorMessage(extractApiErrorMessage(error, t("backendScheduleUnavailable")));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   useEffect(() => {
-    void Promise.all([
-      getScheduleRequest({
-        sortBy: "start_time",
-        sortOrder: "asc",
-        limit: "100",
-        offset: "0",
-      }),
-      getMoviesRequest(),
-    ])
-      .then(([scheduleResponse, moviesResponse]) => {
-        setItems(scheduleResponse.data);
-        setMovies(moviesResponse.data);
-        setErrorMessage("");
-      })
-      .catch(() => {
-        setItems([]);
-        setMovies([]);
-        setErrorMessage(t("backendScheduleUnavailable"));
-      });
+    void loadHomeData();
   }, [t]);
 
   const moviesById = useMemo(
@@ -151,23 +160,44 @@ export function HomePage() {
         </div>
       </section>
 
-      <ScheduleToolbar
-        query={query}
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        movieId={movieId}
-        movies={availableMovieOptions}
-        resultsLabel={t("homeResultsLabel", {
-          movies: rotationMovies.length,
-          sessions: sortedItems.length,
-        })}
-        onChange={handleToolbarChange}
-        onReset={resetFilters}
-      />
+      {!isLoading && !errorMessage ? (
+        <ScheduleToolbar
+          query={query}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          movieId={movieId}
+          movies={availableMovieOptions}
+          resultsLabel={t("homeResultsLabel", {
+            movies: rotationMovies.length,
+            sessions: sortedItems.length,
+          })}
+          onChange={handleToolbarChange}
+          onReset={resetFilters}
+        />
+      ) : null}
 
-      {errorMessage ? <section className="empty-state">{errorMessage}</section> : null}
+      {isLoading ? (
+        <StatePanel
+          tone="loading"
+          title="Loading the home page"
+          message="Fetching active movies and upcoming sessions."
+        />
+      ) : null}
 
-      {!errorMessage && rotationMovies.length === 0 ? (
+      {!isLoading && errorMessage ? (
+        <StatePanel
+          tone="error"
+          title="Unable to load the home page"
+          message={errorMessage}
+          action={
+            <button className="button--ghost" type="button" onClick={() => void loadHomeData()}>
+              Try again
+            </button>
+          }
+        />
+      ) : null}
+
+      {!isLoading && !errorMessage && rotationMovies.length === 0 ? (
         <section className="empty-state empty-state--panel">
           <h2>{t("homeEmptyTitle")}</h2>
           <p>{t("homeEmptyText")}</p>
@@ -177,7 +207,7 @@ export function HomePage() {
         </section>
       ) : null}
 
-      {!errorMessage && rotationMovies.length > 0 ? (
+      {!isLoading && !errorMessage && rotationMovies.length > 0 ? (
         <section className="cards-grid showing-grid">
           {rotationMovies.map((movie) => (
             <article key={movie.id} className="card showing-card movie-card">

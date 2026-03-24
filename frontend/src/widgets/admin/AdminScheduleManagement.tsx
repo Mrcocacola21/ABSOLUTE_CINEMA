@@ -7,6 +7,7 @@ import type {
   SessionCreatePayload,
   SessionUpdatePayload,
 } from "@/api/admin";
+import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
 import type { Movie, SessionDetails, TicketListItem, User } from "@/types/domain";
 
 interface AdminScheduleManagementProps {
@@ -14,6 +15,8 @@ interface AdminScheduleManagementProps {
   sessions: SessionDetails[];
   tickets: TicketListItem[];
   users: User[];
+  isBusy: boolean;
+  busyActionLabel?: string;
   onCreateMovie: (payload: MovieCreatePayload) => Promise<void>;
   onUpdateMovie: (movieId: string, payload: MovieUpdatePayload) => Promise<void>;
   onDeactivateMovie: (movieId: string) => Promise<void>;
@@ -49,23 +52,13 @@ function toDateTimeLocal(value: string): string {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "UAH",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatState(value: string): string {
-  return value.replaceAll("_", " ");
-}
-
 export function AdminScheduleManagement({
   movies,
   sessions,
   tickets,
   users,
+  isBusy,
+  busyActionLabel,
   onCreateMovie,
   onUpdateMovie,
   onDeactivateMovie,
@@ -114,6 +107,8 @@ export function AdminScheduleManagement({
     () => sortedMovies.filter((movie) => movie.is_active || movie.id === sessionForm.movie_id),
     [sessionForm.movie_id, sortedMovies],
   );
+  const movieSubmitLabel = editingMovieId ? "Save movie changes" : "Create movie";
+  const sessionSubmitLabel = editingSessionId ? "Save session changes" : "Create session";
 
   function resetMovieForm() {
     setMovieForm(emptyMovieForm);
@@ -174,17 +169,19 @@ export function AdminScheduleManagement({
               </h2>
             </div>
             {editingMovieId ? (
-              <button className="button--ghost" type="button" onClick={resetMovieForm}>
+              <button className="button--ghost" type="button" disabled={isBusy} onClick={resetMovieForm}>
                 {t("clearForm")}
               </button>
             ) : null}
           </div>
+          {busyActionLabel ? <p className="muted">{busyActionLabel}...</p> : null}
 
           <div className="form-grid">
             <label className="field">
               <span>{t("movie")}</span>
               <input
                 required
+                disabled={isBusy}
                 value={movieForm.title}
                 onChange={(event) =>
                   setMovieForm((current) => ({ ...current, title: event.target.value }))
@@ -195,6 +192,7 @@ export function AdminScheduleManagement({
               <span>{t("descriptionLabel")}</span>
               <textarea
                 required
+                disabled={isBusy}
                 value={movieForm.description}
                 onChange={(event) =>
                   setMovieForm((current) => ({ ...current, description: event.target.value }))
@@ -208,6 +206,7 @@ export function AdminScheduleManagement({
                 max={600}
                 required
                 type="number"
+                disabled={isBusy}
                 value={movieForm.duration_minutes}
                 onChange={(event) =>
                   setMovieForm((current) => ({
@@ -220,6 +219,7 @@ export function AdminScheduleManagement({
             <label className="field">
               <span>{t("ageRating")}</span>
               <input
+                disabled={isBusy}
                 value={movieForm.age_rating ?? ""}
                 onChange={(event) =>
                   setMovieForm((current) => ({
@@ -233,6 +233,7 @@ export function AdminScheduleManagement({
               <span>{t("posterUrl")}</span>
               <input
                 type="url"
+                disabled={isBusy}
                 value={movieForm.poster_url ?? ""}
                 onChange={(event) =>
                   setMovieForm((current) => ({
@@ -245,6 +246,7 @@ export function AdminScheduleManagement({
             <label className="field">
               <span>{t("genresLabel")}</span>
               <input
+                disabled={isBusy}
                 value={genresInput}
                 onChange={(event) => setGenresInput(event.target.value)}
                 placeholder={t("genresPlaceholder")}
@@ -254,6 +256,7 @@ export function AdminScheduleManagement({
               <input
                 checked={movieForm.is_active}
                 type="checkbox"
+                disabled={isBusy}
                 onChange={(event) =>
                   setMovieForm((current) => ({
                     ...current,
@@ -266,8 +269,8 @@ export function AdminScheduleManagement({
           </div>
 
           <div className="actions-row">
-            <button className="button" type="submit">
-              {editingMovieId ? t("editDetails") : t("saveMovie")}
+            <button className="button" type="submit" disabled={isBusy}>
+              {isBusy ? "Saving..." : movieSubmitLabel}
             </button>
           </div>
           <p className="muted">{t("movieFormHint")}</p>
@@ -288,17 +291,19 @@ export function AdminScheduleManagement({
               </h2>
             </div>
             {editingSessionId ? (
-              <button className="button--ghost" type="button" onClick={resetSessionForm}>
+              <button className="button--ghost" type="button" disabled={isBusy} onClick={resetSessionForm}>
                 {t("clearForm")}
               </button>
             ) : null}
           </div>
+          {busyActionLabel ? <p className="muted">{busyActionLabel}...</p> : null}
 
           <div className="form-grid">
             <label className="field">
               <span>{t("movie")}</span>
               <select
                 required
+                disabled={isBusy}
                 value={sessionForm.movie_id}
                 onChange={(event) =>
                   setSessionForm((current) => ({ ...current, movie_id: event.target.value }))
@@ -317,6 +322,7 @@ export function AdminScheduleManagement({
               <input
                 required
                 type="datetime-local"
+                disabled={isBusy}
                 value={sessionForm.start_time}
                 onChange={(event) =>
                   setSessionForm((current) => ({ ...current, start_time: event.target.value }))
@@ -328,6 +334,7 @@ export function AdminScheduleManagement({
               <input
                 required
                 type="datetime-local"
+                disabled={isBusy}
                 value={sessionForm.end_time}
                 onChange={(event) =>
                   setSessionForm((current) => ({ ...current, end_time: event.target.value }))
@@ -340,6 +347,7 @@ export function AdminScheduleManagement({
                 min={0}
                 required
                 type="number"
+                disabled={isBusy}
                 value={sessionForm.price}
                 onChange={(event) =>
                   setSessionForm((current) => ({
@@ -352,8 +360,8 @@ export function AdminScheduleManagement({
           </div>
 
           <div className="actions-row">
-            <button className="button" type="submit">
-              {editingSessionId ? t("editSessionAction") : t("saveSession")}
+            <button className="button" type="submit" disabled={isBusy}>
+              {isBusy ? "Saving..." : sessionSubmitLabel}
             </button>
           </div>
           <p className="muted">{t("sessionFormHint")}</p>
@@ -393,6 +401,7 @@ export function AdminScheduleManagement({
                   <button
                     className="button--ghost"
                     type="button"
+                    disabled={isBusy}
                     onClick={() => {
                       setEditingMovieId(movie.id);
                       setMovieForm({
@@ -407,31 +416,41 @@ export function AdminScheduleManagement({
                       setGenresInput(movie.genres.join(", "));
                     }}
                   >
-                    {t("editDetails")}
+                    Edit movie
                   </button>
                   <button
                     className="button--ghost"
-                    disabled={!movie.is_active}
+                    disabled={!movie.is_active || isBusy}
                     type="button"
                     onClick={() => {
-                      void onDeactivateMovie(movie.id);
+                      if (window.confirm(`Deactivate "${movie.title}"? Existing history will be preserved.`)) {
+                        void onDeactivateMovie(movie.id);
+                      }
                     }}
                   >
-                    {t("deactivateAction")}
+                    Deactivate
                   </button>
                   <button
                     className="button--danger"
                     type="button"
+                    disabled={isBusy}
                     onClick={() => {
-                      void onDeleteMovie(movie.id);
+                      if (window.confirm(`Delete "${movie.title}"? This only works when no sessions reference it.`)) {
+                        void onDeleteMovie(movie.id);
+                      }
                     }}
                   >
-                    {t("deleteAction")}
+                    Delete movie
                   </button>
                 </div>
               </article>
             ))}
-            {sortedMovies.length === 0 ? <p className="empty-state">{t("noMoviesYet")}</p> : null}
+            {sortedMovies.length === 0 ? (
+              <section className="empty-state empty-state--panel">
+                <h2>No movies yet</h2>
+                <p>Create the first movie to start building the cinema schedule.</p>
+              </section>
+            ) : null}
           </div>
         </section>
 
@@ -451,7 +470,7 @@ export function AdminScheduleManagement({
                   <div>
                     <strong>{session.movie.title}</strong>
                     <p className="muted">
-                      {new Date(session.start_time).toLocaleString()} | {new Date(session.end_time).toLocaleString()}
+                      {formatDateTime(session.start_time)} | {formatDateTime(session.end_time)}
                     </p>
                   </div>
                   <div className="stats-row">
@@ -459,13 +478,14 @@ export function AdminScheduleManagement({
                     <span className="badge">
                       {session.available_seats}/{session.total_seats}
                     </span>
-                    <span className="badge">{formatState(session.status)}</span>
+                    <span className="badge">{formatStateLabel(session.status)}</span>
                   </div>
                 </div>
                 <div className="actions-row">
                   <button
                     className="button--ghost"
                     type="button"
+                    disabled={isBusy}
                     onClick={() => {
                       setEditingSessionId(session.id);
                       setSessionForm({
@@ -476,31 +496,41 @@ export function AdminScheduleManagement({
                       });
                     }}
                   >
-                    {t("editSessionAction")}
+                    Edit session
                   </button>
                   <button
                     className="button--ghost"
-                    disabled={session.status !== "scheduled"}
+                    disabled={session.status !== "scheduled" || isBusy}
                     type="button"
                     onClick={() => {
-                      void onCancelSession(session.id);
+                      if (window.confirm(`Cancel the session for "${session.movie.title}"?`)) {
+                        void onCancelSession(session.id);
+                      }
                     }}
                   >
-                    {t("cancelSessionAction")}
+                    Cancel session
                   </button>
                   <button
                     className="button--danger"
                     type="button"
+                    disabled={isBusy}
                     onClick={() => {
-                      void onDeleteSession(session.id);
+                      if (window.confirm(`Delete the session for "${session.movie.title}"?`)) {
+                        void onDeleteSession(session.id);
+                      }
                     }}
                   >
-                    {t("deleteSessionAction")}
+                    Delete session
                   </button>
                 </div>
               </article>
             ))}
-            {sortedSessions.length === 0 ? <p className="empty-state">{t("noSessionsYet")}</p> : null}
+            {sortedSessions.length === 0 ? (
+              <section className="empty-state empty-state--panel">
+                <h2>No sessions yet</h2>
+                <p>Create a movie first, then add the first session slot.</p>
+              </section>
+            ) : null}
           </div>
         </section>
       </section>
@@ -516,17 +546,22 @@ export function AdminScheduleManagement({
               <article key={ticket.id} className="card admin-card">
                 <strong>{ticket.movie_title}</strong>
                 <p className="muted">
-                  {new Date(ticket.session_start_time).toLocaleString()} | {t("seatLabel")} {ticket.seat_row}-{ticket.seat_number}
+                  {formatDateTime(ticket.session_start_time)} | {t("seatLabel")} {ticket.seat_row}-{ticket.seat_number}
                 </p>
                 <div className="stats-row">
-                  <span className="badge">{formatState(ticket.status)}</span>
-                  <span className="badge">{formatState(ticket.session_status)}</span>
+                  <span className="badge">{formatStateLabel(ticket.status)}</span>
+                  <span className="badge">{formatStateLabel(ticket.session_status)}</span>
                   <span className="badge">{formatCurrency(ticket.price)}</span>
                   {ticket.user_name ? <span className="badge">{ticket.user_name}</span> : null}
                 </div>
               </article>
             ))}
-            {sortedTickets.length === 0 ? <p className="empty-state">{t("noTicketsFound")}</p> : null}
+            {sortedTickets.length === 0 ? (
+              <section className="empty-state empty-state--panel">
+                <h2>No tickets yet</h2>
+                <p>Ticket purchases will appear here once customers start booking seats.</p>
+              </section>
+            ) : null}
           </div>
         </section>
 
@@ -541,15 +576,20 @@ export function AdminScheduleManagement({
                 <strong>{user.name}</strong>
                 <p className="muted">{user.email}</p>
                 <div className="stats-row">
-                  <span className="badge">{user.role}</span>
+                  <span className="badge">{formatStateLabel(user.role)}</span>
                   <span className="badge">
                     {user.is_active ? t("activeLabel") : t("inactiveLabel")}
                   </span>
-                  <span className="badge">{new Date(user.created_at).toLocaleDateString()}</span>
+                  <span className="badge">{formatDateTime(user.created_at)}</span>
                 </div>
               </article>
             ))}
-            {sortedUsers.length === 0 ? <p className="empty-state">{t("noUsersFound")}</p> : null}
+            {sortedUsers.length === 0 ? (
+              <section className="empty-state empty-state--panel">
+                <h2>No users yet</h2>
+                <p>Registered users will appear here after they create accounts.</p>
+              </section>
+            ) : null}
           </div>
         </section>
       </section>

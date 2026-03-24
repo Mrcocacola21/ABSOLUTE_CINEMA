@@ -21,6 +21,8 @@ import {
   updateSessionRequest,
 } from "@/api/admin";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { StatePanel } from "@/shared/ui/StatePanel";
+import { StatusBanner } from "@/shared/ui/StatusBanner";
 import type { AttendanceReport, Movie, SessionDetails, TicketListItem, User } from "@/types/domain";
 import { AttendancePanel } from "@/widgets/admin/AttendancePanel";
 import { AdminScheduleManagement } from "@/widgets/admin/AdminScheduleManagement";
@@ -32,10 +34,24 @@ export function AdminDashboardPage() {
   const [tickets, setTickets] = useState<TicketListItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [report, setReport] = useState<AttendanceReport | null>(null);
-  const [statusMessage, setStatusMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingActionLabel, setPendingActionLabel] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [feedback, setFeedback] = useState<{
+    tone: "success" | "error";
+    title: string;
+    message: string;
+  } | null>(null);
 
-  async function refreshDashboard() {
+  async function refreshDashboard(options?: { background?: boolean }) {
+    const background = options?.background ?? false;
+    if (background) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+
     try {
       const [moviesResponse, sessionsResponse, ticketsResponse, usersResponse, attendanceResponse] =
         await Promise.all([
@@ -53,7 +69,22 @@ export function AdminDashboardPage() {
       setReport(attendanceResponse.data);
       setErrorMessage("");
     } catch (error) {
-      setErrorMessage(extractApiErrorMessage(error, t("attendanceUnavailable")));
+      const message = extractApiErrorMessage(error, "Admin data is currently unavailable.");
+      if (background) {
+        setFeedback({
+          tone: "error",
+          title: "Unable to refresh dashboard data",
+          message,
+        });
+      } else {
+        setErrorMessage(message);
+      }
+    } finally {
+      if (background) {
+        setIsRefreshing(false);
+      } else {
+        setIsLoading(false);
+      }
     }
   }
 
@@ -63,48 +94,61 @@ export function AdminDashboardPage() {
 
   async function runAdminAction(
     action: () => Promise<{ message: string }>,
+    actionLabel: string,
+    successTitle: string,
     fallbackMessage: string,
   ) {
+    setPendingActionLabel(actionLabel);
+    setFeedback(null);
     try {
       const response = await action();
-      setStatusMessage(response.message);
-      setErrorMessage("");
-      await refreshDashboard();
+      await refreshDashboard({ background: true });
+      setFeedback({
+        tone: "success",
+        title: successTitle,
+        message: response.message,
+      });
     } catch (error) {
-      setErrorMessage(extractApiErrorMessage(error, fallbackMessage));
+      setFeedback({
+        tone: "error",
+        title: `${successTitle} failed`,
+        message: extractApiErrorMessage(error, fallbackMessage),
+      });
+    } finally {
+      setPendingActionLabel("");
     }
   }
 
   async function handleCreateMovie(payload: MovieCreatePayload) {
-    await runAdminAction(() => createMovieRequest(payload), "Movie creation failed.");
+    await runAdminAction(() => createMovieRequest(payload), "Creating movie", "Movie created", "Movie creation failed.");
   }
 
   async function handleUpdateMovie(movieId: string, payload: MovieUpdatePayload) {
-    await runAdminAction(() => updateMovieRequest(movieId, payload), "Movie update failed.");
+    await runAdminAction(() => updateMovieRequest(movieId, payload), "Updating movie", "Movie updated", "Movie update failed.");
   }
 
   async function handleDeactivateMovie(movieId: string) {
-    await runAdminAction(() => deactivateMovieRequest(movieId), "Movie deactivation failed.");
+    await runAdminAction(() => deactivateMovieRequest(movieId), "Deactivating movie", "Movie deactivated", "Movie deactivation failed.");
   }
 
   async function handleDeleteMovie(movieId: string) {
-    await runAdminAction(() => deleteMovieRequest(movieId), "Movie deletion failed.");
+    await runAdminAction(() => deleteMovieRequest(movieId), "Deleting movie", "Movie deleted", "Movie deletion failed.");
   }
 
   async function handleCreateSession(payload: SessionCreatePayload) {
-    await runAdminAction(() => createSessionRequest(payload), "Session creation failed.");
+    await runAdminAction(() => createSessionRequest(payload), "Creating session", "Session created", "Session creation failed.");
   }
 
   async function handleUpdateSession(sessionId: string, payload: SessionUpdatePayload) {
-    await runAdminAction(() => updateSessionRequest(sessionId, payload), "Session update failed.");
+    await runAdminAction(() => updateSessionRequest(sessionId, payload), "Updating session", "Session updated", "Session update failed.");
   }
 
   async function handleCancelSession(sessionId: string) {
-    await runAdminAction(() => cancelSessionRequest(sessionId), "Session cancellation failed.");
+    await runAdminAction(() => cancelSessionRequest(sessionId), "Cancelling session", "Session cancelled", "Session cancellation failed.");
   }
 
   async function handleDeleteSession(sessionId: string) {
-    await runAdminAction(() => deleteSessionRequest(sessionId), "Session deletion failed.");
+    await runAdminAction(() => deleteSessionRequest(sessionId), "Deleting session", "Session deleted", "Session deletion failed.");
   }
 
   const activeMoviesCount = movies.filter((movie) => movie.is_active).length;
@@ -147,26 +191,64 @@ export function AdminDashboardPage() {
         </article>
       </section>
 
-      <section className="panel panel--compact">
-        {statusMessage ? <p className="badge">{statusMessage}</p> : null}
-        {errorMessage ? <p className="badge badge--danger">{errorMessage}</p> : null}
-      </section>
+      {pendingActionLabel || isRefreshing ? (
+        <StatusBanner
+          tone="info"
+          title="Refreshing dashboard"
+          message={pendingActionLabel ? `${pendingActionLabel}...` : "Refreshing the latest dashboard data."}
+        />
+      ) : null}
 
-      <AdminScheduleManagement
-        movies={movies}
-        sessions={sessions}
-        tickets={tickets}
-        users={users}
-        onCreateMovie={handleCreateMovie}
-        onUpdateMovie={handleUpdateMovie}
-        onDeactivateMovie={handleDeactivateMovie}
-        onDeleteMovie={handleDeleteMovie}
-        onCreateSession={handleCreateSession}
-        onUpdateSession={handleUpdateSession}
-        onCancelSession={handleCancelSession}
-        onDeleteSession={handleDeleteSession}
-      />
-      <AttendancePanel report={report} />
+      {feedback ? (
+        <StatusBanner
+          tone={feedback.tone}
+          title={feedback.title}
+          message={feedback.message}
+        />
+      ) : null}
+
+      {isLoading ? (
+        <StatePanel
+          tone="loading"
+          title="Loading the admin dashboard"
+          message="Fetching movies, sessions, tickets, users, and attendance."
+        />
+      ) : null}
+
+      {!isLoading && errorMessage ? (
+        <StatePanel
+          tone="error"
+          title="Unable to load the admin dashboard"
+          message={errorMessage}
+          action={
+            <button className="button--ghost" type="button" onClick={() => void refreshDashboard()}>
+              Try again
+            </button>
+          }
+        />
+      ) : null}
+
+      {!isLoading && !errorMessage ? (
+        <>
+          <AdminScheduleManagement
+            movies={movies}
+            sessions={sessions}
+            tickets={tickets}
+            users={users}
+            isBusy={Boolean(pendingActionLabel)}
+            busyActionLabel={pendingActionLabel}
+            onCreateMovie={handleCreateMovie}
+            onUpdateMovie={handleUpdateMovie}
+            onDeactivateMovie={handleDeactivateMovie}
+            onDeleteMovie={handleDeleteMovie}
+            onCreateSession={handleCreateSession}
+            onUpdateSession={handleUpdateSession}
+            onCancelSession={handleCancelSession}
+            onDeleteSession={handleDeleteSession}
+          />
+          <AttendancePanel report={report} />
+        </>
+      ) : null}
     </>
   );
 }

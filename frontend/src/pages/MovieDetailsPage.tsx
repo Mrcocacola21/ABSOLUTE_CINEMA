@@ -4,24 +4,9 @@ import { useTranslation } from "react-i18next";
 
 import { getMovieRequest, getScheduleRequest } from "@/api/schedule";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { formatCurrency, formatDateTime, formatTime } from "@/shared/presentation";
+import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, ScheduleItem } from "@/types/domain";
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString([], {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "UAH",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 function getMovieMonogram(title: string): string {
   return title
@@ -37,29 +22,36 @@ export function MovieDetailsPage() {
   const { movieId = "" } = useParams();
   const [movie, setMovie] = useState<Movie | null>(null);
   const [sessions, setSessions] = useState<ScheduleItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
+  async function loadMovieDetails() {
+    setIsLoading(true);
+    try {
+      const [movieResponse, scheduleResponse] = await Promise.all([
+        getMovieRequest(movieId, { includeInactive: true }),
+        getScheduleRequest({
+          sortBy: "start_time",
+          sortOrder: "asc",
+          movieId,
+          limit: "100",
+          offset: "0",
+        }),
+      ]);
+      setMovie(movieResponse.data);
+      setSessions(scheduleResponse.data);
+      setErrorMessage("");
+    } catch (error) {
+      setMovie(null);
+      setSessions([]);
+      setErrorMessage(extractApiErrorMessage(error, t("movieDetailsUnavailable")));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   useEffect(() => {
-    void Promise.all([
-      getMovieRequest(movieId, { includeInactive: true }),
-      getScheduleRequest({
-        sortBy: "start_time",
-        sortOrder: "asc",
-        movieId,
-        limit: "100",
-        offset: "0",
-      }),
-    ])
-      .then(([movieResponse, scheduleResponse]) => {
-        setMovie(movieResponse.data);
-        setSessions(scheduleResponse.data);
-        setErrorMessage("");
-      })
-      .catch((error) => {
-        setMovie(null);
-        setSessions([]);
-        setErrorMessage(extractApiErrorMessage(error, t("movieDetailsUnavailable")));
-      });
+    void loadMovieDetails();
   }, [movieId, t]);
 
   const sessionWindow = useMemo(() => {
@@ -99,9 +91,28 @@ export function MovieDetailsPage() {
         </div>
       </section>
 
-      {errorMessage ? <section className="empty-state empty-state--panel">{errorMessage}</section> : null}
+      {isLoading ? (
+        <StatePanel
+          tone="loading"
+          title="Loading movie details"
+          message="Fetching the movie card and its available sessions."
+        />
+      ) : null}
 
-      {movie ? (
+      {!isLoading && errorMessage ? (
+        <StatePanel
+          tone="error"
+          title="Unable to load movie details"
+          message={errorMessage}
+          action={
+            <button className="button--ghost" type="button" onClick={() => void loadMovieDetails()}>
+              Try again
+            </button>
+          }
+        />
+      ) : null}
+
+      {!isLoading && !errorMessage && movie ? (
         <section className="movie-detail-grid">
           <article className="panel movie-detail-card movie-detail-card--poster">
             <div className="movie-detail-poster media-tile" aria-hidden="true">
@@ -123,13 +134,13 @@ export function MovieDetailsPage() {
               <div className="movie-card__schedule">
                 <div className="schedule-range">
                   <div>
-                    <span className="muted">{t("nextSession")}</span>
-                    <strong>{formatDateTime(sessionWindow.first.start_time)}</strong>
-                  </div>
-                  <div>
-                    <span className="muted">{t("lastUpcomingSession")}</span>
-                    <strong>{formatDateTime(sessionWindow.last.start_time)}</strong>
-                  </div>
+                        <span className="muted">{t("nextSession")}</span>
+                        <strong>{formatDateTime(sessionWindow.first.start_time)}</strong>
+                      </div>
+                      <div>
+                        <span className="muted">{t("lastUpcomingSession")}</span>
+                        <strong>{formatDateTime(sessionWindow.last.start_time)}</strong>
+                      </div>
                 </div>
               </div>
             ) : null}
@@ -151,18 +162,10 @@ export function MovieDetailsPage() {
                 {sessions.map((session) => (
                   <article key={session.id} className="card timeline-card">
                     <div className="timeline-card__time">
-                      <strong>
-                        {new Date(session.start_time).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </strong>
-                      <span>
-                        {new Date(session.end_time).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
+                        <strong>
+                          {formatTime(session.start_time)}
+                        </strong>
+                        <span>{formatTime(session.end_time)}</span>
                     </div>
                     <div className="timeline-card__body">
                       <div className="meta-row">

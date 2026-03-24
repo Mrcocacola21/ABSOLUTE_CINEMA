@@ -362,3 +362,21 @@ async def test_ticket_cancellation_reconciles_counter_without_exceeding_total_se
     assert stored_session is not None
     assert stored_session["available_seats"] == stored_session["total_seats"]
 
+
+@pytest.mark.asyncio
+async def test_ticket_cancellation_returns_404_for_missing_ticket(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+) -> None:
+    missing_ticket_id = str(ObjectId())
+
+    response = await client.patch(
+        f"{API_PREFIX}/tickets/{missing_ticket_id}/cancel",
+        headers=user_auth["headers"],
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "not_found"
+    assert body["error"]["message"] == "Ticket was not found."

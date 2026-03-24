@@ -543,6 +543,74 @@ img {
   color: #ffe1df;
 }
 
+.status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: var(--shadow);
+}
+
+.status-banner__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.status-banner__copy strong {
+  color: #fff;
+}
+
+.status-banner__copy span {
+  color: var(--text-muted);
+}
+
+.status-banner--info {
+  border-color: rgba(244, 166, 98, 0.22);
+  background: rgba(244, 166, 98, 0.08);
+}
+
+.status-banner--success {
+  border-color: rgba(119, 194, 157, 0.24);
+  background: rgba(119, 194, 157, 0.12);
+}
+
+.status-banner--error {
+  border-color: rgba(227, 123, 118, 0.26);
+  background: rgba(227, 123, 118, 0.12);
+}
+
+.status-banner--warning {
+  border-color: rgba(244, 166, 98, 0.28);
+  background: rgba(244, 166, 98, 0.12);
+}
+
+.state-panel {
+  display: grid;
+  gap: 16px;
+  place-items: start;
+}
+
+.state-panel__copy {
+  display: grid;
+  gap: 8px;
+}
+
+.state-panel__copy p {
+  margin: 0;
+}
+
+.state-panel--loading {
+  border-color: rgba(244, 166, 98, 0.22);
+}
+
+.state-panel--error {
+  border-color: rgba(227, 123, 118, 0.24);
+}
+
 .day-panel {
   display: grid;
   gap: 18px;
@@ -722,12 +790,25 @@ img {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.seat-map__legend .badge:first-child {
+  background: rgba(119, 194, 157, 0.18);
+}
+
+.seat-map__legend .badge:nth-child(2) {
+  background: rgba(227, 123, 118, 0.18);
+}
+
 .seat--free {
   background: rgba(119, 194, 157, 0.18);
 }
 
 .seat--taken {
   background: rgba(227, 123, 118, 0.18);
+}
+
+.seat--selected {
+  border-color: rgba(255, 209, 143, 0.5);
+  outline: 2px solid rgba(255, 209, 143, 0.8);
 }
 
 .footer {
@@ -792,7 +873,8 @@ img {
   .panel,
   .card,
   .form-card,
-  .empty-state--panel {
+  .empty-state--panel,
+  .status-banner {
     padding: 20px;
     border-radius: 22px;
   }
@@ -837,5 +919,10 @@ img {
 
   .user-pill {
     width: fit-content;
+  }
+
+  .status-banner {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

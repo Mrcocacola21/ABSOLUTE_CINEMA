@@ -107,4 +107,7 @@ async def test_users_me_requires_authentication(client: httpx.AsyncClient) -> No
     response = await client.get(f"{API_PREFIX}/users/me")
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Not authenticated"
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "authentication_error"
+    assert body["error"]["message"] == "Authentication is required to access this resource."

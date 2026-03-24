@@ -9,6 +9,9 @@ import {
 } from "@/api/schedule";
 import { useAuth } from "@/features/auth/useAuth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
+import { StatePanel } from "@/shared/ui/StatePanel";
+import { StatusBanner } from "@/shared/ui/StatusBanner";
 import type { SeatAvailability, SessionDetails, SessionSeats } from "@/types/domain";
 import { SeatMap } from "@/widgets/session/SeatMap";
 import { PurchaseTicketCard } from "@/widgets/tickets/PurchaseTicketCard";
@@ -20,21 +23,71 @@ export function SessionDetailsPage() {
   const [details, setDetails] = useState<SessionDetails | null>(null);
   const [seats, setSeats] = useState<SessionSeats | null>(null);
   const [selectedSeat, setSelectedSeat] = useState<SeatAvailability | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [feedback, setFeedback] = useState<{
+    tone: "success" | "error" | "info";
+    title: string;
+    message: string;
+  } | null>(null);
+
+  async function loadSessionData(options?: { background?: boolean }) {
+    const background = options?.background ?? false;
+    if (background) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+      setErrorMessage("");
+    }
+
+    try {
+      const [detailsResponse, seatsResponse] = await Promise.all([
+        getSessionDetailsRequest(sessionId),
+        getSessionSeatsRequest(sessionId),
+      ]);
+      setDetails(detailsResponse.data);
+      setSeats(seatsResponse.data);
+      setErrorMessage("");
+      setSelectedSeat((currentSeat) => {
+        if (!currentSeat) {
+          return null;
+        }
+        const stillAvailable = seatsResponse.data.seats.some(
+          (seat) =>
+            seat.row === currentSeat.row &&
+            seat.number === currentSeat.number &&
+            seat.is_available,
+        );
+        return stillAvailable ? currentSeat : null;
+      });
+    } catch (error) {
+      const message = extractApiErrorMessage(error, t("sessionDataUnavailable"));
+      if (background) {
+        setFeedback({
+          tone: "error",
+          title: "Unable to refresh session data",
+          message,
+        });
+      } else {
+        setDetails(null);
+        setSeats(null);
+        setSelectedSeat(null);
+        setErrorMessage(message);
+      }
+    } finally {
+      if (background) {
+        setIsRefreshing(false);
+      } else {
+        setIsLoading(false);
+      }
+    }
+  }
 
   useEffect(() => {
-    void Promise.all([
-      getSessionDetailsRequest(sessionId),
-      getSessionSeatsRequest(sessionId),
-    ])
-      .then(([detailsResponse, seatsResponse]) => {
-        setDetails(detailsResponse.data);
-        setSeats(seatsResponse.data);
-      })
-      .catch(() => {
-        setStatusMessage(t("sessionDataUnavailable"));
-      });
+    setFeedback(null);
+    void loadSessionData();
   }, [sessionId, t]);
 
   async function handlePurchase() {
@@ -42,18 +95,22 @@ export function SessionDetailsPage() {
       return;
     }
     setIsSubmitting(true);
+    setFeedback(null);
     try {
       await purchaseTicketRequest(sessionId, selectedSeat.row, selectedSeat.number);
-      const [detailsResponse, seatsResponse] = await Promise.all([
-        getSessionDetailsRequest(sessionId),
-        getSessionSeatsRequest(sessionId),
-      ]);
-      setDetails(detailsResponse.data);
-      setSeats(seatsResponse.data);
-      setStatusMessage(t("ticketPurchaseSubmitted"));
+      await loadSessionData({ background: true });
+      setFeedback({
+        tone: "success",
+        title: "Ticket purchased",
+        message: `Seat ${selectedSeat.row}-${selectedSeat.number} is now reserved for you.`,
+      });
       setSelectedSeat(null);
     } catch (error) {
-      setStatusMessage(extractApiErrorMessage(error, t("ticketPurchaseFailed")));
+      setFeedback({
+        tone: "error",
+        title: "Ticket purchase failed",
+        message: extractApiErrorMessage(error, t("ticketPurchaseFailed")),
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -62,52 +119,116 @@ export function SessionDetailsPage() {
   const isSessionPurchasable = Boolean(
     isAuthenticated &&
       details &&
+      seats &&
       details.status === "scheduled" &&
-      new Date(details.start_time).getTime() > Date.now(),
+      new Date(details.start_time).getTime() > Date.now() &&
+      seats.available_seats > 0,
   );
 
   const purchaseHint = !isAuthenticated
-    ? "Sign in to buy tickets."
-    : details && !isSessionPurchasable
-      ? "This session is not available for ticket purchase."
+    ? "Sign in to purchase a ticket for this session."
+    : seats && seats.available_seats === 0
+      ? "This session is sold out."
+      : details && !isSessionPurchasable
+        ? "This session is not available for purchase."
       : undefined;
 
   return (
     <>
       <section className="panel">
-        <h1 className="page-title">
-          {details ? details.movie.title : t("viewSession")}
-        </h1>
-        <p className="muted">
-          {details
-            ? `${new Date(details.start_time).toLocaleString()} | ${t("price")}: ${details.price}`
-            : t("sessionInfoLoading")}
-        </p>
-        {details?.movie.genres.length ? <p className="badge">{details.movie.genres.join(", ")}</p> : null}
-        {statusMessage ? <p className="badge">{statusMessage}</p> : null}
+        <div className="toolbar-panel__header">
+          <div>
+            <h1 className="page-title">
+              {details ? details.movie.title : t("viewSession")}
+            </h1>
+            <p className="muted">
+              {details
+                ? `${formatDateTime(details.start_time)} | ${t("price")}: ${formatCurrency(details.price)}`
+                : t("sessionInfoLoading")}
+            </p>
+          </div>
+          <div className="actions-row">
+            <button
+              className="button--ghost"
+              type="button"
+              disabled={isLoading || isRefreshing || isSubmitting}
+              onClick={() => void loadSessionData({ background: Boolean(details || seats) })}
+            >
+              {isRefreshing ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
+        </div>
+        <div className="stats-row">
+          {details ? <span className="badge">{formatStateLabel(details.status)}</span> : null}
+          {details?.movie.genres.length ? <span className="badge">{details.movie.genres.join(", ")}</span> : null}
+          {details ? (
+            <span className="badge">
+              {details.available_seats}/{details.total_seats}
+            </span>
+          ) : null}
+        </div>
       </section>
-      <section className="split-grid">
-        <SeatMap
-          seats={seats?.seats ?? []}
-          selectedSeat={selectedSeat}
-          onSelect={setSelectedSeat}
+
+      {feedback ? (
+        <StatusBanner
+          tone={feedback.tone}
+          title={feedback.title}
+          message={feedback.message}
         />
-        <PurchaseTicketCard
-          canPurchase={isSessionPurchasable}
-          selectedSeat={selectedSeat}
-          price={details?.price}
-          isSubmitting={isSubmitting}
-          statusHint={purchaseHint}
-          onPurchase={() => void handlePurchase()}
+      ) : null}
+
+      {isLoading ? (
+        <StatePanel
+          tone="loading"
+          title="Loading session details"
+          message="Fetching session info, seat availability, and ticket options."
         />
-      </section>
-      {details ? (
+      ) : null}
+
+      {!isLoading && errorMessage ? (
+        <StatePanel
+          tone="error"
+          title="Unable to load this session"
+          message={errorMessage}
+          action={
+            <button className="button--ghost" type="button" onClick={() => void loadSessionData()}>
+              Try again
+            </button>
+          }
+        />
+      ) : null}
+
+      {!isLoading && !errorMessage ? (
+        <section className="split-grid">
+          <SeatMap
+            seats={seats?.seats ?? []}
+            selectedSeat={selectedSeat}
+            availableSeats={seats?.available_seats}
+            totalSeats={seats?.total_seats}
+            isLoading={isRefreshing}
+            isDisabled={!isSessionPurchasable || isSubmitting}
+            onSelect={setSelectedSeat}
+          />
+          <PurchaseTicketCard
+            canPurchase={isSessionPurchasable}
+            selectedSeat={selectedSeat}
+            price={details?.price}
+            availableSeats={details?.available_seats}
+            isSubmitting={isSubmitting}
+            statusHint={purchaseHint}
+            onPurchase={() => void handlePurchase()}
+          />
+        </section>
+      ) : null}
+
+      {!isLoading && !errorMessage && details ? (
         <section className="panel">
           <h3>{details.movie.title}</h3>
           <p className="muted">{details.movie.description}</p>
           <div className="stats-row">
             <span className="badge">{t("duration")}: {details.movie.duration_minutes}</span>
             {details.movie.age_rating ? <span className="badge">{details.movie.age_rating}</span> : null}
+            <span className="badge">{formatStateLabel(details.status)}</span>
             <span className="badge">{details.available_seats}/{details.total_seats}</span>
           </div>
         </section>

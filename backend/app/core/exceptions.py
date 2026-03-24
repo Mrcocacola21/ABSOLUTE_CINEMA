@@ -8,6 +8,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pymongo.errors import PyMongoError
 
 from app.core.logging import get_logger
 from app.core.responses import ErrorResponse
@@ -130,6 +131,16 @@ async def unexpected_exception_handler(_: Request, exc: Exception) -> JSONRespon
     )
 
 
+async def pymongo_exception_handler(_: Request, exc: PyMongoError) -> JSONResponse:
+    """Convert raw MongoDB driver errors into the shared infrastructure error envelope."""
+    logger.exception("Unhandled MongoDB exception", exc_info=exc)
+    response = ErrorResponse.from_exception(DatabaseException())
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=response.model_dump(mode="json"),
+    )
+
+
 def register_exception_handlers(application: FastAPI) -> None:
     """Register all global exception handlers on the FastAPI application."""
     application.add_exception_handler(AppException, app_exception_handler)
@@ -137,4 +148,5 @@ def register_exception_handlers(application: FastAPI) -> None:
         RequestValidationError,
         request_validation_exception_handler,
     )
+    application.add_exception_handler(PyMongoError, pymongo_exception_handler)
     application.add_exception_handler(Exception, unexpected_exception_handler)

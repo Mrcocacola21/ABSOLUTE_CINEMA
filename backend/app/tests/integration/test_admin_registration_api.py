@@ -143,4 +143,7 @@ async def test_admin_endpoint_requires_admin_role_and_authentication(
     anonymous_response = await client.get(f"{API_PREFIX}/admin/users")
 
     assert anonymous_response.status_code == 401
-    assert anonymous_response.json()["detail"] == "Not authenticated"
+    anonymous_body = anonymous_response.json()
+    assert anonymous_body["success"] is False
+    assert anonymous_body["error"]["code"] == "authentication_error"
+    assert anonymous_body["error"]["message"] == "Authentication is required to access this resource."

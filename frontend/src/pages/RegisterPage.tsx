@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { registerRequest } from "@/api/auth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { StatusBanner } from "@/shared/ui/StatusBanner";
 
 export function RegisterPage() {
   const { t } = useTranslation();
@@ -13,11 +14,13 @@ export function RegisterPage() {
   const [password, setPassword] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatusMessage("");
     setErrorMessage("");
+    setIsSubmitting(true);
 
     try {
       await registerRequest({
@@ -32,6 +35,8 @@ export function RegisterPage() {
       });
     } catch (error) {
       setErrorMessage(extractApiErrorMessage(error, t("registrationFailed")));
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -56,6 +61,7 @@ export function RegisterPage() {
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
+              disabled={isSubmitting}
               required
               minLength={2}
               maxLength={255}
@@ -67,6 +73,7 @@ export function RegisterPage() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               type="email"
+              disabled={isSubmitting}
               required
             />
           </label>
@@ -76,17 +83,18 @@ export function RegisterPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               type="password"
+              disabled={isSubmitting}
               required
               minLength={8}
               maxLength={128}
             />
           </label>
         </div>
-        {statusMessage ? <p className="badge">{statusMessage}</p> : null}
-        {errorMessage ? <p className="badge badge--danger">{errorMessage}</p> : null}
+        {statusMessage ? <StatusBanner tone="info" message={statusMessage} /> : null}
+        {errorMessage ? <StatusBanner tone="error" title="Unable to create the account" message={errorMessage} /> : null}
         <div className="actions-row">
-          <button className="button" type="submit">
-            {t("register")}
+          <button className="button" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Creating account..." : t("register")}
           </button>
           <Link to="/login" className="button--ghost">
             {t("loginInstead")}

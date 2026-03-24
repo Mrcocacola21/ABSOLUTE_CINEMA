@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
+from bson import ObjectId
 
 from app.db.collections import DatabaseCollections
 
@@ -128,3 +129,49 @@ async def test_past_scheduled_sessions_are_not_returned_in_public_schedule_after
     details_response = await client.get(f"{API_PREFIX}/schedule/{session_id}")
     assert details_response.status_code == 200
     assert details_response.json()["data"]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("params", "expected_message"),
+    [
+        ({"sort_by": "unsupported"}, "Unsupported sort field."),
+        ({"sort_order": "sideways"}, "Unsupported sort order."),
+    ],
+)
+async def test_schedule_rejects_invalid_query_parameters(
+    client: httpx.AsyncClient,
+    params: dict[str, str],
+    expected_message: str,
+) -> None:
+    response = await client.get(
+        f"{API_PREFIX}/schedule",
+        params={**params, "limit": 20, "offset": 0},
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "validation_error"
+    assert body["error"]["message"] == expected_message
+
+
+@pytest.mark.asyncio
+async def test_session_detail_routes_return_404_for_missing_session(
+    client: httpx.AsyncClient,
+) -> None:
+    missing_session_id = str(ObjectId())
+
+    details_response = await client.get(f"{API_PREFIX}/schedule/{missing_session_id}")
+    assert details_response.status_code == 404
+    details_body = details_response.json()
+    assert details_body["success"] is False
+    assert details_body["error"]["code"] == "not_found"
+    assert details_body["error"]["message"] == "Session was not found."
+
+    seats_response = await client.get(f"{API_PREFIX}/sessions/{missing_session_id}/seats")
+    assert seats_response.status_code == 404
+    seats_body = seats_response.json()
+    assert seats_body["success"] is False
+    assert seats_body["error"]["code"] == "not_found"
+    assert seats_body["error"]["message"] == "Session was not found."

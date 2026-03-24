@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/features/auth/useAuth";
@@ -6,12 +6,18 @@ import { STORAGE_KEYS } from "@/shared/constants";
 
 export function AppLayout() {
   const { t, i18n } = useTranslation();
-  const { currentUser, logout, role } = useAuth();
+  const navigate = useNavigate();
+  const { currentUser, isAuthLoading, logout, role } = useAuth();
   const activeLanguage = i18n.resolvedLanguage ?? i18n.language;
 
   function handleLanguageChange(language: "uk" | "en") {
     window.localStorage.setItem(STORAGE_KEYS.language, language);
     void i18n.changeLanguage(language);
+  }
+
+  function handleLogout() {
+    logout();
+    navigate("/", { replace: true });
   }
 
   return (
@@ -61,7 +67,7 @@ export function AppLayout() {
             </div>
 
             <div className="nav nav--actions">
-              {!currentUser ? (
+              {!currentUser && !isAuthLoading ? (
                 <>
                   <NavLink
                     to="/login"
@@ -76,8 +82,15 @@ export function AppLayout() {
                     {t("register")}
                   </NavLink>
                 </>
+              ) : null}
+              {isAuthLoading ? (
+                <span className="user-pill">
+                  <strong>Account</strong>
+                  <span>Checking session...</span>
+                </span>
               ) : (
-                <>
+                currentUser ? (
+                  <>
                   <span className="user-pill">
                     <strong>{currentUser.name}</strong>
                     <span>{role === "admin" ? t("admin") : t("profile")}</span>
@@ -96,10 +109,11 @@ export function AppLayout() {
                       {t("admin")}
                     </NavLink>
                   ) : null}
-                  <button type="button" className="nav-link nav-link--ghost" onClick={logout}>
+                  <button type="button" className="nav-link nav-link--ghost" onClick={handleLogout}>
                     {t("logout")}
                   </button>
-                </>
+                  </>
+                ) : null
               )}
             </div>
           </div>

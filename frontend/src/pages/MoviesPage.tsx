@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { getMoviesRequest, getScheduleRequest } from "@/api/schedule";
+import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, ScheduleItem } from "@/types/domain";
 
 type StatusFilter = "all" | "active" | "inactive";
@@ -29,31 +31,38 @@ export function MoviesPage() {
   const { t } = useTranslation();
   const [movies, setMovies] = useState<Movie[]>([]);
   const [items, setItems] = useState<ScheduleItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [genre, setGenre] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [errorMessage, setErrorMessage] = useState("");
 
+  async function loadMoviesCatalog() {
+    setIsLoading(true);
+    try {
+      const [moviesResponse, scheduleResponse] = await Promise.all([
+        getMoviesRequest({ includeInactive: true }),
+        getScheduleRequest({
+          sortBy: "start_time",
+          sortOrder: "asc",
+          limit: "100",
+          offset: "0",
+        }),
+      ]);
+      setMovies(moviesResponse.data);
+      setItems(scheduleResponse.data);
+      setErrorMessage("");
+    } catch (error) {
+      setMovies([]);
+      setItems([]);
+      setErrorMessage(extractApiErrorMessage(error, t("movieCatalogUnavailable")));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   useEffect(() => {
-    void Promise.all([
-      getMoviesRequest({ includeInactive: true }),
-      getScheduleRequest({
-        sortBy: "start_time",
-        sortOrder: "asc",
-        limit: "100",
-        offset: "0",
-      }),
-    ])
-      .then(([moviesResponse, scheduleResponse]) => {
-        setMovies(moviesResponse.data);
-        setItems(scheduleResponse.data);
-        setErrorMessage("");
-      })
-      .catch(() => {
-        setMovies([]);
-        setItems([]);
-        setErrorMessage(t("movieCatalogUnavailable"));
-      });
+    void loadMoviesCatalog();
   }, [t]);
 
   const sessionsByMovieId = useMemo(() => {
@@ -140,62 +149,83 @@ export function MoviesPage() {
         </div>
       </section>
 
-      <section className="panel toolbar-panel">
-        <div className="toolbar-panel__header">
-          <div>
-            <p className="page-eyebrow">{t("filters")}</p>
-            <h2 className="section-title">{t("browseControls")}</h2>
+      {!isLoading ? (
+        <section className="panel toolbar-panel">
+          <div className="toolbar-panel__header">
+            <div>
+              <p className="page-eyebrow">{t("filters")}</p>
+              <h2 className="section-title">{t("browseControls")}</h2>
+            </div>
+            <p className="toolbar-panel__summary">
+              {t("catalogResultsLabel", {
+                movies: filteredMovies.length,
+                genres: genreOptions.length,
+              })}
+            </p>
           </div>
-          <p className="toolbar-panel__summary">
-            {t("catalogResultsLabel", {
-              movies: filteredMovies.length,
-              genres: genreOptions.length,
-            })}
-          </p>
-        </div>
 
-        <div className="toolbar toolbar--catalog">
-          <label className="field field--search">
-            <span>{t("searchByTitle")}</span>
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t("searchPlaceholder")}
-            />
-          </label>
-          <label className="field">
-            <span>{t("genre")}</span>
-            <select value={genre} onChange={(event) => setGenre(event.target.value)}>
-              <option value="">{t("allGenres")}</option>
-              {genreOptions.map((currentGenre) => (
-                <option key={currentGenre} value={currentGenre}>
-                  {currentGenre}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>{t("status")}</span>
-            <select
-              value={status}
-              onChange={(event) => setStatus(event.target.value as StatusFilter)}
-            >
-              <option value="all">{t("allStatuses")}</option>
-              <option value="active">{t("activeOnly")}</option>
-              <option value="inactive">{t("inactiveOnly")}</option>
-            </select>
-          </label>
-          <div className="toolbar__actions">
-            <button className="button--ghost" type="button" onClick={resetFilters}>
-              {t("resetFilters")}
+          <div className="toolbar toolbar--catalog">
+            <label className="field field--search">
+              <span>{t("searchByTitle")}</span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("searchPlaceholder")}
+              />
+            </label>
+            <label className="field">
+              <span>{t("genre")}</span>
+              <select value={genre} onChange={(event) => setGenre(event.target.value)}>
+                <option value="">{t("allGenres")}</option>
+                {genreOptions.map((currentGenre) => (
+                  <option key={currentGenre} value={currentGenre}>
+                    {currentGenre}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>{t("status")}</span>
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value as StatusFilter)}
+              >
+                <option value="all">{t("allStatuses")}</option>
+                <option value="active">{t("activeOnly")}</option>
+                <option value="inactive">{t("inactiveOnly")}</option>
+              </select>
+            </label>
+            <div className="toolbar__actions">
+              <button className="button--ghost" type="button" onClick={resetFilters}>
+                {t("resetFilters")}
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {isLoading ? (
+        <StatePanel
+          tone="loading"
+          title="Loading the movie catalog"
+          message="Fetching movies and upcoming sessions."
+        />
+      ) : null}
+
+      {!isLoading && errorMessage ? (
+        <StatePanel
+          tone="error"
+          title="Unable to load the movie catalog"
+          message={errorMessage}
+          action={
+            <button className="button--ghost" type="button" onClick={() => void loadMoviesCatalog()}>
+              Try again
             </button>
-          </div>
-        </div>
-      </section>
+          }
+        />
+      ) : null}
 
-      {errorMessage ? <section className="empty-state">{errorMessage}</section> : null}
-
-      {!errorMessage && filteredMovies.length === 0 ? (
+      {!isLoading && !errorMessage && filteredMovies.length === 0 ? (
         <section className="empty-state empty-state--panel">
           <h2>{t("catalogEmptyTitle")}</h2>
           <p>{t("catalogEmptyText")}</p>
@@ -205,7 +235,7 @@ export function MoviesPage() {
         </section>
       ) : null}
 
-      {!errorMessage && filteredMovies.length > 0 ? (
+      {!isLoading && !errorMessage && filteredMovies.length > 0 ? (
         <section className="cards-grid">
           {filteredMovies.map((movie) => {
             const sessions = sessionsByMovieId.get(movie.id) ?? [];

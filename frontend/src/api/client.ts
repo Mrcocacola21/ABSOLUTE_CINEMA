@@ -1,6 +1,6 @@
 import axios from "axios";
 
-import { getStoredAccessToken } from "@/shared/storage";
+import { clearAccessToken, clearRole, getStoredAccessToken } from "@/shared/storage";
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1",
@@ -16,5 +16,16 @@ apiClient.interceptors.request.use((config) => {
   }
   return config;
 });
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (axios.isAxiosError(error) && error.response?.status === 401 && getStoredAccessToken()) {
+      clearAccessToken();
+      clearRole();
+    }
+    return Promise.reject(error);
+  },
+);
 
 export { apiClient };

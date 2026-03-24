@@ -1,20 +1,20 @@
 # Cinema Showcase
 
-Cinema Showcase is an academic monorepo for a one-hall cinema schedule and ticketing system. It keeps the project split into a FastAPI backend and a React frontend so the API, data model, and UI can evolve independently while staying aligned to one shared domain model.
+Cinema Showcase is an academic monorepo for a one-hall cinema schedule and ticketing system. The project keeps the backend and frontend separated while sharing one MongoDB-backed domain.
 
-This version is intentionally centered on only four core entities:
+Core entities:
 
 - `Movie`
 - `Session`
 - `User`
 - `Ticket`
 
-There is no `Hall` entity in MongoDB and no cinema settings collection. Hall dimensions come from application config.
+The project intentionally keeps the one-hall cinema model. There is no separate `Hall` collection; hall size is defined by backend configuration.
 
 ## Technology stack
 
-- Backend: FastAPI, Pydantic v2, Pydantic Settings, Motor, PyMongo, passlib with bcrypt, python-jose, pytest
-- Frontend: React, TypeScript, Vite, React Router, axios, react-i18next
+- Backend: FastAPI, Pydantic v2, Motor, PyMongo
+- Frontend: React, Vite, TypeScript
 - Database: MongoDB
 - Infrastructure: Docker, Docker Compose
 
@@ -24,273 +24,53 @@ There is no `Hall` entity in MongoDB and no cinema settings collection. Hall dim
 cinema-showcase/
   backend/
     app/
-      adapters/
-      api/
-      builders/
-      commands/
-      core/
-      db/
-      factories/
-      middleware/
-      models/
-      observers/
-      repositories/
-      schemas/
-      security/
-      services/
-      strategies/
-      tests/
-      utils/
-      main.py
+    .dockerignore
     .env.example
     Dockerfile
-    pyproject.toml
     requirements.txt
   frontend/
     public/
     src/
-      api/
-      app/
-      entities/
-      features/
-      hooks/
-      i18n/
-      pages/
-      router/
-      shared/
-      types/
-      widgets/
-      main.tsx
+    .dockerignore
     .env.example
     Dockerfile
     package.json
-    tsconfig.json
-    vite.config.ts
+    package-lock.json
   docker-compose.yml
-  .gitignore
   README.md
 ```
 
-## Domain model
+## Dockerized services
 
-### Movie
+Docker Compose starts three services:
 
-- `id`
-- `title`
-- `description`
-- `duration_minutes`
-- `poster_url`
-- `age_rating`
-- `genres`
-- `is_active`
-- `created_at`
-- `updated_at`
+- `mongodb`: MongoDB 7 with a persistent named volume `mongo_data`
+- `backend`: FastAPI application on port `8000`
+- `frontend`: Vite development server on port `5173`
 
-Movies store reusable film information that admins manage before placing films into the schedule.
-
-### Session
-
-- `id`
-- `movie_id`
-- `start_time`
-- `end_time`
-- `price`
-- `status`
-- `total_seats`
-- `available_seats`
-- `created_at`
-- `updated_at`
-
-Sessions represent screenings in the single cinema hall. They do not embed hall data. `total_seats` comes from config, while `available_seats` is stored as an optimization for schedule reads.
-
-### User
-
-- `id`
-- `name`
-- `email`
-- `password_hash`
-- `role`
-- `is_active`
-- `created_at`
-- `updated_at`
-
-Emails are unique. Roles are string-based and use `user` / `admin`.
-
-### Ticket
-
-- `id`
-- `user_id`
-- `session_id`
-- `seat_row`
-- `seat_number`
-- `price`
-- `status`
-- `purchased_at`
-
-Tickets are the source of truth for occupied seats. The unique MongoDB index on `(session_id, seat_row, seat_number)` prevents double booking.
-
-## Backend architecture
-
-The backend keeps a layered structure:
-
-- API layer: route definitions, dependencies, FastAPI wiring
-- Service layer: business orchestration
-- Repository layer: MongoDB access through Motor
-- Schemas/models: request, response, and document typing
-
-Patterns retained because they still fit the project:
-
-- Front Controller: `app/main.py`
-- Strategy: schedule sorting
-- Command: ticket purchase and session cancellation
-- Factory: response shaping and schedule DTO creation
-- Builder: attendance report assembly
-- Observer: event publishing for ticket/session actions
-- Adapter: Mongo `_id` normalization
-
-## Backend API
-
-Public routes:
-
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `GET /api/v1/health`
-- `GET /api/v1/movies`
-- `GET /api/v1/movies/{movie_id}`
-- `GET /api/v1/schedule`
-- `GET /api/v1/schedule/{session_id}`
-- `GET /api/v1/sessions/{session_id}/seats`
-
-Authenticated user routes:
-
-- `POST /api/v1/tickets/purchase`
-- `GET /api/v1/tickets/me`
-- `PATCH /api/v1/tickets/{ticket_id}/cancel`
-- `GET /api/v1/users/me`
-- `PATCH /api/v1/users/me`
-- `DELETE /api/v1/users/me`
-
-Admin routes:
-
-- `GET /api/v1/admin/movies`
-- `GET /api/v1/admin/movies/{movie_id}`
-- `POST /api/v1/admin/movies`
-- `PATCH /api/v1/admin/movies/{movie_id}`
-- `PATCH /api/v1/admin/movies/{movie_id}/deactivate`
-- `DELETE /api/v1/admin/movies/{movie_id}`
-- `GET /api/v1/admin/sessions`
-- `GET /api/v1/admin/sessions/{session_id}`
-- `POST /api/v1/admin/sessions`
-- `PATCH /api/v1/admin/sessions/{session_id}`
-- `PATCH /api/v1/admin/sessions/{session_id}/cancel`
-- `DELETE /api/v1/admin/sessions/{session_id}`
-- `GET /api/v1/admin/tickets`
-- `GET /api/v1/admin/users`
-- `GET /api/v1/admin/attendance`
-
-The API uses a standardized success/error envelope and exposes Swagger UI at `http://localhost:8000/docs`.
-
-## Implemented backend rules
-
-Already implemented:
-
-- unique email validation
-- JWT registration/login flow
-- role-based access for `user` and `admin`
-- current user profile update and self-deactivation
-- public schedule browsing with pagination
-- schedule filtering by movie
-- schedule sorting by start time, movie title, and available seats
-- public movie list + read-one for active movies
-- full admin movie CRUD with safe delete/deactivate behavior
-- full admin session CRUD with cancel/edit/delete behavior
-- seat availability derived from active tickets
-- authenticated ticket purchase, list, and cancellation
-- admin ticket and user lists
-- unique seat per session
-- session overlap validation for the one-hall cinema
-- session start time validation between `09:00` and `22:00`
-- validation that `end_time > start_time`
-- validation that a session slot is at least as long as the linked movie duration
-- prevention of ticket purchase for cancelled, completed, or past sessions
-- seat coordinate validation against configured hall dimensions
-- automatic session transition to `completed` once `end_time` has passed
-- `available_seats` restoration on valid ticket cancellation
-
-Still intentionally simple:
-
-- no MongoDB transaction around ticket purchase yet
-- no refresh tokens or password reset flow
-- admin bootstrap is controlled through `ADMIN_EMAILS`
-
-Management rules documented in code and README:
-
-- Movie deletion: hard delete is allowed only if the movie has never been used in any session. If at least one session references the movie, admins must deactivate it instead so schedule and ticket history keep a valid movie record.
-- Session deletion: hard delete is allowed only if the session has no stored tickets at all. If tickets exist, admins should cancel the session instead so historical ticket data is preserved.
-- Ticket cancellation: cancelled tickets stay stored with `status = cancelled`, restore one `available_seat`, and are allowed only before the session start time. The unique seat index now applies only to active purchased tickets, so a cancelled seat can be bought again.
-- User deletion/deactivation: self-service account removal is implemented as soft deactivation (`is_active = false`) instead of hard delete so ticket ownership and audit history remain intact.
-
-## MongoDB collections and indexes
-
-Collections:
-
-- `users`
-- `movies`
-- `sessions`
-- `tickets`
-
-Indexes created on startup:
-
-- `users.email` unique
-- `users.role`
-- `movies.title`
-- `movies.is_active`
-- `sessions.movie_id`
-- `sessions.start_time`
-- `sessions.status`
-- `tickets.user_id`
-- `tickets.session_id`
-- `tickets(session_id, seat_row, seat_number)` unique for active purchased tickets only
-
-## Frontend
-
-The frontend is a React + Vite SPA with these pages:
-
-- home
-- schedule
-- session details
-- login
-- register
-- profile
-- admin dashboard
-
-Implemented frontend behavior:
-
-- login and registration
-- protected profile/admin routing
-- schedule sorting/filtering synced with URL query params
-- separate movie list for schedule filtering
-- session details with fixed-size seat map
-- ticket purchase request flow with client-side purchasable-state feedback
-- profile edit form and self-deactivation
-- current user ticket list with cancellation
-- admin movie create/read/update/delete/deactivate
-- admin session create/read/update/cancel/delete
-- admin ticket and user overview panels
-- attendance overview
-
-The admin dashboard is intentionally aligned with a timeline/chronoboard direction: movies are managed first, then scheduled into time slots. Drag-and-drop is not implemented yet, but the data model and forms are prepared for that workflow.
+The backend connects to MongoDB through the Docker service name `mongodb`. The frontend keeps using `VITE_API_BASE_URL=http://localhost:8000/api/v1` because API requests are sent by the browser on the host machine, not from inside the container network.
 
 ## Environment variables
 
-Copy the example files before running:
+Create real `.env` files from the examples before building containers.
+
+PowerShell:
+
+```powershell
+Copy-Item backend\.env.example backend\.env -Force
+Copy-Item frontend\.env.example frontend\.env -Force
+```
+
+Bash:
 
 ```bash
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 ```
 
-Backend variables in `backend/.env`:
+### Backend variables
+
+`backend/.env` includes:
 
 - `PROJECT_NAME`
 - `PROJECT_VERSION`
@@ -311,20 +91,87 @@ Backend variables in `backend/.env`:
 - `LAST_SESSION_START_HOUR`
 - `ADMIN_EMAILS`
 
-Optional test-only overrides:
+For direct local backend runs, the default MongoDB URI is `mongodb://localhost:27017`.
 
-- `TEST_MONGODB_URI`
-- `TEST_MONGODB_DB_NAME`
+For Docker Compose runs, `docker-compose.yml` overrides it to `mongodb://mongodb:27017`, so the same `.env` file works in both modes.
 
-Frontend variables in `frontend/.env`:
+### Frontend variables
 
-- `VITE_API_BASE_URL`, usually `http://localhost:8000/api/v1`
+`frontend/.env` currently needs:
 
-## Local startup
+- `VITE_API_BASE_URL=http://localhost:8000/api/v1`
+
+## Docker build and run
+
+### 1. Build images
+
+```powershell
+docker compose build
+```
+
+### 2. Start the full stack
+
+```powershell
+docker compose up
+```
+
+To rebuild and start in one command:
+
+```powershell
+docker compose up --build
+```
+
+To run in detached mode:
+
+```powershell
+docker compose up --build -d
+```
+
+### 3. Open the application
+
+After startup:
+
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8000`
+- Swagger UI: `http://localhost:8000/docs`
+- Backend health endpoint: `http://localhost:8000/api/v1/health`
+- MongoDB host port: `localhost:27017`
+
+## Docker Compose behavior
+
+The Compose setup is aimed at reliable local coursework demonstration:
+
+- MongoDB has a healthcheck before the backend is started
+- Backend has a healthcheck before the frontend is started
+- MongoDB data is stored in the named volume `mongo_data`
+- Frontend dependencies are stored in the named volume `frontend_node_modules`
+- Backend source is bind-mounted into the container for local development
+- Frontend source is bind-mounted into the container for local development
+- Polling-based file watching is enabled for Docker Desktop compatibility on Windows and macOS
+
+## Stopping containers
+
+Stop the running stack:
+
+```powershell
+docker compose down
+```
+
+Stop the stack and remove MongoDB data:
+
+```powershell
+docker compose down -v
+```
+
+Use `down -v` only when you intentionally want to reset the database.
+
+## Local non-Docker startup
+
+If you want to run the project without Docker:
 
 Backend:
 
-```bash
+```powershell
 cd backend
 python -m venv .venv
 .venv\Scripts\activate
@@ -334,7 +181,7 @@ uvicorn app.main:app --reload
 
 Frontend:
 
-```bash
+```powershell
 cd frontend
 npm install
 npm run dev
@@ -342,91 +189,44 @@ npm run dev
 
 MongoDB:
 
-Run MongoDB separately and point `MONGODB_URI` to it.
-The default local value is `mongodb://localhost:27017`.
-The integration test suite defaults to `mongodb://127.0.0.1:27017` and uses the dedicated database `cinema_showcase_test`.
+- run MongoDB separately on `localhost:27017`
+- keep `MONGODB_URI=mongodb://localhost:27017` in `backend/.env`
 
-## Docker Compose startup
+## Validation notes
 
-```bash
-copy backend\.env.example backend\.env
-copy frontend\.env.example frontend\.env
-docker compose up --build
-```
+The Docker setup is designed so that these checks should succeed in a normal local Docker Desktop environment:
 
-Docker Compose overrides the backend container's `MONGODB_URI` to `mongodb://mongodb:27017`, so the same `backend/.env` file can be used for both direct local runs and containerized runs.
+- `docker compose build`
+- `docker compose up`
+- backend startup after MongoDB becomes healthy
+- frontend startup after backend becomes healthy
+- backend connection to MongoDB through `mongodb:27017`
+- frontend requests to backend through `http://localhost:8000/api/v1`
 
-Services:
+## Limitations
 
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:8000`
-- Swagger UI: `http://localhost:8000/docs`
-- MongoDB: `mongodb://localhost:27017`
+- The frontend container runs the Vite development server, not a production Nginx build. This is intentional for local coursework demonstration and faster iteration.
+- Live reload depends on bind mounts and polling, so file watching can be slower than a fully native run.
+- Docker Desktop or another compatible Docker engine must be running before using `docker compose`.
 
 ## Useful commands
 
-Backend:
-
-```bash
-cd backend
-uvicorn app.main:app --reload
-pytest
-pytest app/tests/integration -o addopts=
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-npm run build
+```powershell
+docker compose logs -f
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f mongodb
+docker compose ps
 ```
 
 ## Testing
 
-The backend now has both unit tests and API-level integration tests.
-
-Unit tests cover focused utility and service behavior such as password hashing, pagination metadata, and schedule sorting strategy selection.
-
-Integration tests run against a dedicated MongoDB test database instead of the main working database. By default the test harness connects to `mongodb://127.0.0.1:27017` and uses `cinema_showcase_test`. The test setup explicitly refuses to run against the development database name `cinema_showcase`.
-
-Integration test isolation is handled in two layers:
-
-- the dedicated test database is dropped before and after the full test session
-- the `users`, `movies`, `sessions`, and `tickets` collections are cleared before and after each individual test
-
-The integration suite exercises real end-to-end backend flows through FastAPI routes, dependency wiring, services, repositories, and MongoDB. Covered scenarios include:
-
-- user registration, duplicate email rejection, login, and authenticated `/users/me`
-- admin movie create/list/read/update/deactivate/delete flows
-- admin session create/list/read/update/cancel/delete flows
-- overlap rejection and invalid session time validation
-- public schedule listing, sorting, filtering, session details, and seat availability
-- ticket purchase, duplicate seat rejection, out-of-bounds seat rejection, and purchase blocking for cancelled/completed/past sessions
-- current-user ticket listing and cancellation
-- admin ticket/user access and non-admin access denial
-
-Run the integration tests locally with:
+Backend tests can still be run outside Docker:
 
 ```powershell
 cd backend
+pytest
 pytest app/tests/integration -o addopts=
 ```
 
-To override the MongoDB target explicitly:
-
-```powershell
-cd backend
-$env:TEST_MONGODB_URI="mongodb://127.0.0.1:27017"
-$env:TEST_MONGODB_DB_NAME="cinema_showcase_test"
-pytest app/tests/integration -o addopts=
-```
-
-Coverage reporting is configured in `backend/pyproject.toml`.
-
-## Notes for further development
-
-- Ticket purchase should later use MongoDB transactions for stronger consistency.
-- The admin session board can later be upgraded into a drag-and-drop timeline editor without changing the session model.
-- Frontend automated tests and richer error handling are still minimal.
+The integration suite uses a dedicated MongoDB test database and does not need any change to the one-hall cinema domain model.

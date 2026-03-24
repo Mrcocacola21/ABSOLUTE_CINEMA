@@ -5,6 +5,8 @@ import { ProtectedRoute } from "@/router/ProtectedRoute";
 import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
 import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
+import { MovieDetailsPage } from "@/pages/MovieDetailsPage";
+import { MoviesPage } from "@/pages/MoviesPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { RegisterPage } from "@/pages/RegisterPage";
@@ -17,6 +19,8 @@ export function AppRouter() {
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<HomePage />} />
+          <Route path="/movies" element={<MoviesPage />} />
+          <Route path="/movies/:movieId" element={<MovieDetailsPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/schedule/:sessionId" element={<SessionDetailsPage />} />
           <Route path="/login" element={<LoginPage />} />

@@ -101,6 +101,44 @@ For Docker Compose runs, `docker-compose.yml` overrides it to `mongodb://mongodb
 
 - `VITE_API_BASE_URL=http://localhost:8000/api/v1`
 
+## Admin login for local development and demo
+
+Admin access is determined during registration by the backend setting `ADMIN_EMAILS`.
+
+Actual implementation:
+
+- `backend/app/services/auth.py` assigns role `admin` only when the registering email is present in `settings.admin_emails`
+- `backend/app/core/config.py` loads that list from `ADMIN_EMAILS`
+- the default template in `backend/.env.example` already contains `ADMIN_EMAILS=["admin@example.com"]`
+
+To create an admin account:
+
+1. Copy `backend/.env.example` to `backend/.env` if you have not done it yet.
+2. Open `backend/.env` and set `ADMIN_EMAILS` to the email or emails that should receive admin role on registration.
+3. Start the backend or restart the Docker Compose stack after changing the env file.
+4. Register a new user with one of those emails from the frontend registration page.
+5. Log in with that account.
+6. Open `http://localhost:5173/admin` or use the `Admin` action in the header.
+
+Important behavior:
+
+- Existing users are not auto-upgraded when you later add their email to `ADMIN_EMAILS`.
+- If you already registered that email as a normal user, use a new admin email, delete that user from MongoDB, or reset the demo database.
+- For Docker demo reset, use `docker compose down -v` and then start the stack again. This removes the MongoDB volume and all stored data.
+
+## Frontend browsing flow
+
+The public frontend now has three main browsing entry points:
+
+- Home: `http://localhost:5173/`
+  Shows only active movies that currently have at least one upcoming public session. Each card highlights the nearest session and links to movie details or the session page.
+- Movies catalog: `http://localhost:5173/movies`
+  Shows all stored movies, including inactive titles and movies without scheduled sessions. The page supports search by title, genre filtering, and active/inactive filtering.
+- Movie details: `http://localhost:5173/movies/<movie_id>`
+  Shows full movie information and all currently available upcoming sessions for that movie, if any exist.
+- Schedule: `http://localhost:5173/schedule`
+  Shows the public session board as a day-based chronoboard. Pick a day first, then browse sessions for that date with title search, movie filter, and free-seat sorting.
+
 ## Docker build and run
 
 ### 1. Build images

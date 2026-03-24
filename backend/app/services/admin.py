@@ -54,7 +54,7 @@ class AdminService:
         """Create a new movie available for future scheduling."""
         _ = created_by
         now = datetime.now(tz=timezone.utc)
-        document = payload.model_dump(mode="python")
+        document = self._normalize_movie_document(payload.model_dump(mode="python"))
         document["created_at"] = now
         document["updated_at"] = None
         movie = await self.movie_repository.create_movie(document)
@@ -68,7 +68,7 @@ class AdminService:
     ) -> MovieRead:
         """Update editable movie information."""
         _ = updated_by
-        updates = payload.model_dump(mode="python", exclude_unset=True)
+        updates = self._normalize_movie_document(payload.model_dump(mode="python", exclude_unset=True))
         if not updates:
             raise ValidationException("At least one movie field must be provided for update.")
 
@@ -348,3 +348,10 @@ class AdminService:
         minimum_duration_minutes = (end_time - start_time).total_seconds() / 60
         if minimum_duration_minutes < movie.duration_minutes:
             raise ValidationException("Session slot must be at least as long as the selected movie duration.")
+
+    def _normalize_movie_document(self, document: dict[str, object]) -> dict[str, object]:
+        """Convert Pydantic URL values into plain strings before sending them to MongoDB."""
+        normalized = dict(document)
+        if normalized.get("poster_url") is not None:
+            normalized["poster_url"] = str(normalized["poster_url"])
+        return normalized

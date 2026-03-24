@@ -18,10 +18,17 @@ export function useScheduleQueryParams() {
     setSearchParams(next, { replace: true });
   }
 
+  function resetParams() {
+    setSearchParams(new URLSearchParams(DEFAULT_SCHEDULE_PARAMS), { replace: true });
+  }
+
   return {
     searchParams,
     updateParam,
+    resetParams,
     values: {
+      day: searchParams.get("day") ?? DEFAULT_SCHEDULE_PARAMS.day,
+      query: searchParams.get("query") ?? DEFAULT_SCHEDULE_PARAMS.query,
       sortBy: searchParams.get("sortBy") ?? DEFAULT_SCHEDULE_PARAMS.sortBy,
       sortOrder: searchParams.get("sortOrder") ?? DEFAULT_SCHEDULE_PARAMS.sortOrder,
       movieId: searchParams.get("movieId") ?? "",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.dependencies.services import get_movie_service
 from app.core.responses import ApiResponse
@@ -15,18 +15,20 @@ router = APIRouter(prefix="/movies", tags=["movies"])
 
 @router.get("", response_model=ApiResponse[list[MovieRead]])
 async def list_movies(
+    include_inactive: bool = Query(default=False),
     movie_service: MovieService = Depends(get_movie_service),
 ) -> ApiResponse[list[MovieRead]]:
-    """Return active movies that can appear in the public schedule."""
-    movies = await movie_service.list_available_movies()
+    """Return movies for public browsing."""
+    movies = await movie_service.list_movies(include_inactive=include_inactive)
     return ApiResponseFactory.success(data=movies, message="Movies loaded.")
 
 
 @router.get("/{movie_id}", response_model=ApiResponse[MovieRead])
 async def get_movie(
     movie_id: str,
+    include_inactive: bool = Query(default=False),
     movie_service: MovieService = Depends(get_movie_service),
 ) -> ApiResponse[MovieRead]:
-    """Return a single active movie."""
-    movie = await movie_service.get_available_movie(movie_id)
+    """Return a single movie for public browsing."""
+    movie = await movie_service.get_movie(movie_id, include_inactive=include_inactive)
     return ApiResponseFactory.success(data=movie, message="Movie loaded.")

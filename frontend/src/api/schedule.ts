@@ -23,8 +23,21 @@ export async function getScheduleRequest(query: ScheduleQuery) {
   return data;
 }
 
-export async function getMoviesRequest() {
-  const { data } = await apiClient.get<ApiResponse<Movie[]>>("/movies");
+export async function getMoviesRequest(options?: { includeInactive?: boolean }) {
+  const { data } = await apiClient.get<ApiResponse<Movie[]>>("/movies", {
+    params: {
+      include_inactive: options?.includeInactive || undefined,
+    },
+  });
+  return data;
+}
+
+export async function getMovieRequest(movieId: string, options?: { includeInactive?: boolean }) {
+  const { data } = await apiClient.get<ApiResponse<Movie>>(`/movies/${movieId}`, {
+    params: {
+      include_inactive: options?.includeInactive || undefined,
+    },
+  });
   return data;
 }
 

@@ -107,14 +107,51 @@ export function AdminDashboardPage() {
     await runAdminAction(() => deleteSessionRequest(sessionId), "Session deletion failed.");
   }
 
+  const activeMoviesCount = movies.filter((movie) => movie.is_active).length;
+  const scheduledSessionsCount = sessions.filter((session) => session.status === "scheduled").length;
+
   return (
     <>
-      <section className="panel">
-        <h1 className="page-title">{t("dashboard")}</h1>
-        <p className="muted">{t("adminIntro")}</p>
+      <section className="page-header">
+        <div>
+          <p className="page-eyebrow">{t("adminWorkspaceEyebrow")}</p>
+          <h1 className="page-title">{t("dashboard")}</h1>
+          <p className="page-subtitle">{t("adminIntro")}</p>
+        </div>
+        <div className="stats-row">
+          <span className="badge">
+            {activeMoviesCount}/{movies.length} {t("movieCatalogTitle")}
+          </span>
+          <span className="badge">
+            {scheduledSessionsCount}/{sessions.length} {t("sessionBoardTitle")}
+          </span>
+          <span className="badge">
+            {tickets.length} {t("ticketsPanelTitle")}
+          </span>
+          <span className="badge">
+            {users.length} {t("usersPanelTitle")}
+          </span>
+        </div>
+      </section>
+
+      <section className="cards-grid admin-workflow">
+        <article className="card admin-step">
+          <p className="page-eyebrow">1</p>
+          <h2 className="section-title">{t("adminWorkflowMoviesTitle")}</h2>
+          <p className="muted">{t("adminWorkflowMoviesText")}</p>
+        </article>
+        <article className="card admin-step">
+          <p className="page-eyebrow">2</p>
+          <h2 className="section-title">{t("adminWorkflowSessionsTitle")}</h2>
+          <p className="muted">{t("adminWorkflowSessionsText")}</p>
+        </article>
+      </section>
+
+      <section className="panel panel--compact">
         {statusMessage ? <p className="badge">{statusMessage}</p> : null}
         {errorMessage ? <p className="badge badge--danger">{errorMessage}</p> : null}
       </section>
+
       <AdminScheduleManagement
         movies={movies}
         sessions={sessions}

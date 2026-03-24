@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 
 from app.commands.ticket_purchase import TicketPurchaseCommand
 from app.core.constants import Roles, SessionStatuses, TicketStatuses
-from app.core.exceptions import ConflictException, NotFoundException, AuthorizationException
+from app.core.exceptions import AuthorizationException, ConflictException, NotFoundException
+from app.core.logging import get_logger
 from app.observers.events import build_default_event_publisher
 from app.repositories.movies import MovieRepository
 from app.repositories.sessions import SessionRepository
@@ -16,6 +17,8 @@ from app.schemas.movie import MovieRead
 from app.schemas.session import SessionRead
 from app.schemas.ticket import TicketListRead, TicketPurchaseRequest, TicketRead
 from app.schemas.user import UserRead
+
+logger = get_logger(__name__)
 
 
 class TicketService:
@@ -51,38 +54,46 @@ class TicketService:
         ticket_document = await self.ticket_repository.get_by_id(ticket_id)
         if ticket_document is None:
             raise NotFoundException("Ticket was not found.")
-        if ticket_document["status"] != TicketStatuses.PURCHASED:
-            raise ConflictException("Only purchased tickets can be cancelled.")
         if current_user.role != Roles.ADMIN and ticket_document["user_id"] != current_user.id:
             raise AuthorizationException("You can only cancel your own tickets.")
 
         session_document = await self.session_repository.get_by_id(ticket_document["session_id"])
         if session_document is None:
             raise NotFoundException("Session for this ticket was not found.")
-        if not self._is_ticket_cancellable(ticket_document, session_document, now):
-            raise ConflictException("Tickets can only be cancelled before the session starts.")
+        cancellation_blocker = self._get_ticket_cancellation_blocker(
+            ticket_document=ticket_document,
+            session_document=session_document,
+            now=now,
+        )
+        if cancellation_blocker is not None:
+            raise ConflictException(cancellation_blocker)
 
         updated_ticket = await self.ticket_repository.update_status(
             ticket_id,
             status=TicketStatuses.CANCELLED,
             updated_at=now,
             cancelled_at=now,
+            current_status=TicketStatuses.PURCHASED,
         )
         if updated_ticket is None:
-            raise NotFoundException("Ticket was not found.")
+            latest_ticket = await self.ticket_repository.get_by_id(ticket_id)
+            if latest_ticket is None:
+                raise NotFoundException("Ticket was not found.")
+            latest_blocker = self._get_ticket_cancellation_blocker(
+                ticket_document=latest_ticket,
+                session_document=session_document,
+                now=now,
+            )
+            raise ConflictException(latest_blocker or "Ticket can no longer be cancelled.")
 
         seats_restored = await self.session_repository.increment_available_seats(
             ticket_document["session_id"],
             updated_at=now,
         )
         if not seats_restored:
-            await self.ticket_repository.update_status(
-                ticket_id,
-                status=TicketStatuses.PURCHASED,
-                updated_at=now,
-                cancelled_at=None,
-            )
-            raise ConflictException("Ticket cancellation could not restore the session seat counter.")
+            reconciled = await self._reconcile_available_seats(ticket_document["session_id"], updated_at=now)
+            if not reconciled:
+                raise ConflictException("Ticket was cancelled but the session seat counter could not be reconciled.")
 
         return TicketRead.model_validate(updated_ticket)
 
@@ -166,3 +177,42 @@ class TicketService:
             and session_document["status"] == SessionStatuses.SCHEDULED
             and session_document["start_time"] > now
         )
+
+    def _get_ticket_cancellation_blocker(
+        self,
+        *,
+        ticket_document: dict[str, object],
+        session_document: dict[str, object],
+        now: datetime,
+    ) -> str | None:
+        if ticket_document["status"] == TicketStatuses.CANCELLED:
+            return "Ticket has already been cancelled."
+        if ticket_document["status"] != TicketStatuses.PURCHASED:
+            return "Only purchased tickets can be cancelled."
+        if session_document["status"] == SessionStatuses.CANCELLED:
+            return "Tickets for cancelled sessions cannot be cancelled."
+        if session_document["status"] == SessionStatuses.COMPLETED:
+            return "Tickets for completed sessions cannot be cancelled."
+        if session_document["status"] != SessionStatuses.SCHEDULED:
+            return "Only tickets for scheduled sessions can be cancelled."
+        if session_document["start_time"] <= now:
+            return "Tickets can only be cancelled before the session starts."
+        return None
+
+    async def _reconcile_available_seats(self, session_id: str, *, updated_at: datetime) -> bool:
+        session_document = await self.session_repository.get_by_id(session_id)
+        if session_document is None:
+            logger.error("Unable to reconcile seats for missing session %s", session_id)
+            return False
+
+        active_ticket_count = await self.ticket_repository.count_by_session(session_id, active_only=True)
+        expected_available_seats = session_document["total_seats"] - active_ticket_count
+        repaired_session = await self.session_repository.set_available_seats(
+            session_id,
+            available_seats=max(expected_available_seats, 0),
+            updated_at=updated_at,
+        )
+        if repaired_session is None:
+            logger.error("Unable to reconcile available seats for session %s", session_id)
+            return False
+        return True

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
+from bson import ObjectId
 
 from app.db.collections import DatabaseCollections
 
@@ -121,63 +122,140 @@ async def test_invalid_session_time_windows_are_rejected(
 
 
 @pytest.mark.asyncio
-async def test_admin_can_update_cancel_and_delete_sessions_according_to_rules(
+async def test_session_update_is_rejected_when_it_creates_overlap(
     client: httpx.AsyncClient,
     admin_auth: dict[str, object],
     create_movie,
     create_session,
-    user_auth: dict[str, object],
 ) -> None:
-    movie = await create_movie(title="Session Update Movie", duration_minutes=100)
-    session = await create_session(movie_id=movie["id"], start_hour=10, duration_minutes=140)
+    movie = await create_movie(title="Update Overlap Movie", duration_minutes=120)
+    protected_session = await create_session(movie_id=movie["id"], start_hour=10, duration_minutes=150)
+    editable_session = await create_session(movie_id=movie["id"], start_hour=14, duration_minutes=150)
+    overlap_start, overlap_end = build_session_window(start_hour=11, duration_minutes=160)
 
-    updated_start, updated_end = build_session_window(start_hour=14, duration_minutes=150)
-    update_response = await client.patch(
+    response = await client.patch(
+        f"{API_PREFIX}/admin/sessions/{editable_session['id']}",
+        headers=admin_auth["headers"],
+        json={
+            "start_time": overlap_start.isoformat(),
+            "end_time": overlap_end.isoformat(),
+        },
+    )
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error"]["code"] == "conflict"
+    assert body["error"]["message"] == "Session overlaps with an existing session in the only hall."
+
+    read_response = await client.get(
+        f"{API_PREFIX}/admin/sessions/{editable_session['id']}",
+        headers=admin_auth["headers"],
+    )
+    assert read_response.status_code == 200
+    assert read_response.json()["data"]["id"] == editable_session["id"]
+    assert protected_session["id"] != editable_session["id"]
+
+
+@pytest.mark.asyncio
+async def test_session_update_is_rejected_after_session_has_started(
+    client: httpx.AsyncClient,
+    database,
+    admin_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Started Session Update Movie", duration_minutes=120)
+    session = await create_session(movie_id=movie["id"], start_hour=15, duration_minutes=150)
+    now = datetime.now(tz=timezone.utc)
+    await database[DatabaseCollections.SESSIONS].update_one(
+        {"_id": ObjectId(session["id"])},
+        {
+            "$set": {
+                "status": "scheduled",
+                "start_time": now - timedelta(minutes=30),
+                "end_time": now + timedelta(minutes=90),
+            }
+        },
+    )
+
+    new_start, new_end = build_session_window(start_hour=18, duration_minutes=150)
+    response = await client.patch(
         f"{API_PREFIX}/admin/sessions/{session['id']}",
         headers=admin_auth["headers"],
         json={
-            "start_time": updated_start.isoformat(),
-            "end_time": updated_end.isoformat(),
-            "price": 330,
+            "start_time": new_start.isoformat(),
+            "end_time": new_end.isoformat(),
+            "price": 310,
         },
     )
-    assert update_response.status_code == 200
-    updated_session = update_response.json()["data"]
-    assert updated_session["price"] == 330
-    assert datetime.fromisoformat(updated_session["start_time"]) == updated_start
 
-    delete_response = await client.delete(
-        f"{API_PREFIX}/admin/sessions/{session['id']}",
-        headers=admin_auth["headers"],
-    )
-    assert delete_response.status_code == 200
-    assert delete_response.json()["data"]["deleted"] is True
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error"]["code"] == "conflict"
+    assert body["error"]["message"] == "Only future scheduled sessions can be edited."
 
-    cancellable_session = await create_session(movie_id=movie["id"], start_hour=18, duration_minutes=140)
-    cancel_response = await client.patch(
-        f"{API_PREFIX}/admin/sessions/{cancellable_session['id']}/cancel",
-        headers=admin_auth["headers"],
-    )
-    assert cancel_response.status_code == 200
-    assert cancel_response.json()["data"]["status"] == "cancelled"
 
-    protected_session = await create_session(movie_id=movie["id"], start_hour=20, duration_minutes=140)
+@pytest.mark.asyncio
+async def test_session_update_is_rejected_when_purchased_tickets_exist(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Ticketed Session Update Movie", duration_minutes=120)
+    session = await create_session(movie_id=movie["id"], start_hour=16, duration_minutes=150)
+
     purchase_response = await client.post(
         f"{API_PREFIX}/tickets/purchase",
         headers=user_auth["headers"],
         json={
-            "session_id": protected_session["id"],
+            "session_id": session["id"],
             "seat_row": 1,
             "seat_number": 1,
         },
     )
     assert purchase_response.status_code == 201
 
-    protected_delete_response = await client.delete(
-        f"{API_PREFIX}/admin/sessions/{protected_session['id']}",
+    new_start, new_end = build_session_window(start_hour=20, duration_minutes=150)
+    response = await client.patch(
+        f"{API_PREFIX}/admin/sessions/{session['id']}",
+        headers=admin_auth["headers"],
+        json={
+            "start_time": new_start.isoformat(),
+            "end_time": new_end.isoformat(),
+        },
+    )
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error"]["code"] == "conflict"
+    assert body["error"]["message"] == "Sessions with purchased tickets cannot be edited. Cancel the session instead."
+
+
+@pytest.mark.asyncio
+async def test_session_cancellation_succeeds_and_repeated_cancellation_is_rejected(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Session Cancellation Movie", duration_minutes=100)
+    session = await create_session(movie_id=movie["id"], start_hour=18, duration_minutes=140)
+
+    cancel_response = await client.patch(
+        f"{API_PREFIX}/admin/sessions/{session['id']}/cancel",
         headers=admin_auth["headers"],
     )
-    assert protected_delete_response.status_code == 409
-    body = protected_delete_response.json()
+    assert cancel_response.status_code == 200
+    assert cancel_response.json()["data"]["status"] == "cancelled"
+
+    repeat_response = await client.patch(
+        f"{API_PREFIX}/admin/sessions/{session['id']}/cancel",
+        headers=admin_auth["headers"],
+    )
+    assert repeat_response.status_code == 409
+    body = repeat_response.json()
     assert body["error"]["code"] == "conflict"
-    assert body["error"]["message"] == "Sessions with stored tickets cannot be deleted. Cancel the session instead."
+    assert body["error"]["message"] == "Session has already been cancelled."
+

@@ -94,6 +94,58 @@ class FakeSessionRepository:
         self.available_seats += 1
         return True
 
+    async def set_available_seats(
+        self,
+        session_id: str,
+        *,
+        available_seats: int,
+        updated_at: datetime,
+    ) -> dict[str, object] | None:
+        _ = (updated_at,)
+        if self.session is None or self.session["id"] != session_id:
+            return None
+        self.available_seats = available_seats
+        self.session = {
+            **self.session,
+            "available_seats": available_seats,
+        }
+        return self.session
+
+    async def cancel_future_scheduled_session(
+        self,
+        session_id: str,
+        *,
+        current_time: datetime,
+        updated_at: datetime,
+    ) -> dict[str, object] | None:
+        _ = (current_time, updated_at)
+        if self.session is None or self.session["id"] != session_id:
+            return None
+        self.session = {
+            **self.session,
+            "status": SessionStatuses.CANCELLED,
+            "updated_at": updated_at,
+        }
+        return self.session
+
+    async def update_session_if_editable(
+        self,
+        session_id: str,
+        *,
+        updates: dict[str, object],
+        current_time: datetime,
+        updated_at: datetime,
+    ) -> dict[str, object] | None:
+        _ = (current_time,)
+        if self.session is None or self.session["id"] != session_id:
+            return None
+        self.session = {
+            **self.session,
+            **updates,
+            "updated_at": updated_at,
+        }
+        return self.session
+
 
 class FakeTicketRepository:
     def __init__(self, ticket: dict[str, object] | None = None) -> None:
@@ -115,9 +167,12 @@ class FakeTicketRepository:
         status: str,
         updated_at: datetime,
         cancelled_at: datetime | None = None,
+        current_status: str | None = None,
     ) -> dict[str, object] | None:
         _ = updated_at
         if self.ticket is None or self.ticket["id"] != ticket_id:
+            return None
+        if current_status is not None and self.ticket["status"] != current_status:
             return None
         self.ticket = {
             **self.ticket,

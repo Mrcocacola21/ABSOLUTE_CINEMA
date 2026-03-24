@@ -25,21 +25,27 @@ class SessionCancellationCommand:
 
     async def execute(self, session_id: str, cancelled_by: UserRead) -> SessionRead:
         """Cancel the given session and emit a domain event."""
+        now = datetime.now(tz=timezone.utc)
+        await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
+
         existing_session = await self.session_repository.get_by_id(session_id)
         if existing_session is None:
             raise NotFoundException("Session was not found.")
-        if existing_session["status"] != SessionStatuses.SCHEDULED:
-            raise ConflictException("Only scheduled sessions can be cancelled.")
-        if existing_session["start_time"] <= datetime.now(tz=timezone.utc):
-            raise ConflictException("Only future scheduled sessions can be cancelled.")
+        cancellation_blocker = self._get_cancellation_blocker(existing_session, now=now)
+        if cancellation_blocker is not None:
+            raise ConflictException(cancellation_blocker)
 
-        updated_session = await self.session_repository.update_status(
+        updated_session = await self.session_repository.cancel_future_scheduled_session(
             session_id=session_id,
-            status=SessionStatuses.CANCELLED,
-            updated_at=datetime.now(tz=timezone.utc),
+            current_time=now,
+            updated_at=now,
         )
         if updated_session is None:
-            raise NotFoundException("Session was not found.")
+            latest_session = await self.session_repository.get_by_id(session_id)
+            if latest_session is None:
+                raise NotFoundException("Session was not found.")
+            latest_blocker = self._get_cancellation_blocker(latest_session, now=now)
+            raise ConflictException(latest_blocker or "Session can no longer be cancelled.")
 
         await self.event_publisher.publish(
             new_session_cancelled_event(
@@ -50,3 +56,14 @@ class SessionCancellationCommand:
             )
         )
         return SessionRead.model_validate(updated_session)
+
+    def _get_cancellation_blocker(self, session_document: dict[str, object], *, now: datetime) -> str | None:
+        if session_document["status"] == SessionStatuses.CANCELLED:
+            return "Session has already been cancelled."
+        if session_document["status"] == SessionStatuses.COMPLETED:
+            return "Completed sessions cannot be cancelled."
+        if session_document["status"] != SessionStatuses.SCHEDULED:
+            return "Only scheduled sessions can be cancelled."
+        if session_document["start_time"] <= now:
+            return "Only future scheduled sessions can be cancelled."
+        return None

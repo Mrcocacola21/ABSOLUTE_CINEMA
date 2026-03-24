@@ -104,56 +104,68 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
     },
     DatabaseCollections.SESSIONS: {
         "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": [
-                    "movie_id",
-                    "start_time",
-                    "end_time",
-                    "price",
-                    "status",
-                    "total_seats",
-                    "available_seats",
-                    "created_at",
-                ],
-                "properties": {
-                    "movie_id": {
-                        "bsonType": "string",
-                        "minLength": 1,
-                    },
-                    "start_time": {
-                        "bsonType": "date",
-                    },
-                    "end_time": {
-                        "bsonType": "date",
-                    },
-                    "price": {
-                        "bsonType": ["int", "long", "double", "decimal"],
-                        "minimum": 0,
-                    },
-                    "status": {
-                        "enum": [
-                            SessionStatuses.SCHEDULED,
-                            SessionStatuses.CANCELLED,
-                            SessionStatuses.COMPLETED,
+            "$and": [
+                {
+                    "$jsonSchema": {
+                        "bsonType": "object",
+                        "required": [
+                            "movie_id",
+                            "start_time",
+                            "end_time",
+                            "price",
+                            "status",
+                            "total_seats",
+                            "available_seats",
+                            "created_at",
                         ],
-                    },
-                    "total_seats": {
-                        "bsonType": ["int", "long"],
-                        "minimum": 0,
-                    },
-                    "available_seats": {
-                        "bsonType": ["int", "long"],
-                        "minimum": 0,
-                    },
-                    "created_at": {
-                        "bsonType": "date",
-                    },
-                    "updated_at": {
-                        "bsonType": ["date", "null"],
-                    },
+                        "properties": {
+                            "movie_id": {
+                                "bsonType": "string",
+                                "minLength": 1,
+                            },
+                            "start_time": {
+                                "bsonType": "date",
+                            },
+                            "end_time": {
+                                "bsonType": "date",
+                            },
+                            "price": {
+                                "bsonType": ["int", "long", "double", "decimal"],
+                                "minimum": 0,
+                            },
+                            "status": {
+                                "enum": [
+                                    SessionStatuses.SCHEDULED,
+                                    SessionStatuses.CANCELLED,
+                                    SessionStatuses.COMPLETED,
+                                ],
+                            },
+                            "total_seats": {
+                                "bsonType": ["int", "long"],
+                                "minimum": 0,
+                            },
+                            "available_seats": {
+                                "bsonType": ["int", "long"],
+                                "minimum": 0,
+                            },
+                            "created_at": {
+                                "bsonType": "date",
+                            },
+                            "updated_at": {
+                                "bsonType": ["date", "null"],
+                            },
+                        },
+                    }
                 },
-            }
+                {
+                    "$expr": {
+                        "$and": [
+                            {"$gt": ["$end_time", "$start_time"]},
+                            {"$lte": ["$available_seats", "$total_seats"]},
+                        ]
+                    }
+                },
+            ]
         },
         "validationLevel": "strict",
         "validationAction": "error",

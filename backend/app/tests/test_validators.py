@@ -70,10 +70,14 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
         command for command in database.commands if command["collMod"] == DatabaseCollections.TICKETS
     )
 
-    session_properties = sessions_command["validator"]["$jsonSchema"]["properties"]
+    session_validator_clauses = sessions_command["validator"]["$and"]
+    session_properties = session_validator_clauses[0]["$jsonSchema"]["properties"]
+    session_expr = session_validator_clauses[1]["$expr"]["$and"]
     ticket_properties = tickets_command["validator"]["$jsonSchema"]["properties"]
 
     assert session_properties["movie_id"]["bsonType"] == "string"
     assert session_properties["updated_at"]["bsonType"] == ["date", "null"]
+    assert {"$gt": ["$end_time", "$start_time"]} in session_expr
+    assert {"$lte": ["$available_seats", "$total_seats"]} in session_expr
     assert ticket_properties["user_id"]["bsonType"] == "string"
     assert ticket_properties["session_id"]["bsonType"] == "string"

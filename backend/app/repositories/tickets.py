@@ -97,6 +97,7 @@ class TicketRepository(BaseRepository):
         status: str,
         updated_at: datetime,
         cancelled_at: datetime | None = None,
+        current_status: str | None = None,
     ) -> dict[str, Any] | None:
         """Update the status of a ticket and return the updated document."""
         set_payload: dict[str, Any] = {
@@ -109,8 +110,12 @@ class TicketRepository(BaseRepository):
         else:
             update_payload["$unset"] = {"cancelled_at": ""}
 
+        query: dict[str, Any] = {"_id": to_object_id(ticket_id)}
+        if current_status is not None:
+            query["status"] = current_status
+
         updated = await self.collection.find_one_and_update(
-            {"_id": to_object_id(ticket_id)},
+            query,
             update_payload,
             return_document=ReturnDocument.AFTER,
         )

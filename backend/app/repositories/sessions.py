@@ -101,6 +101,27 @@ class SessionRepository(BaseRepository):
         )
         return MongoDocumentAdapter.normalize(updated)
 
+    async def update_session_if_editable(
+        self,
+        session_id: str,
+        *,
+        updates: dict[str, Any],
+        current_time: datetime,
+        updated_at: datetime,
+    ) -> dict[str, Any] | None:
+        """Update a session only while it is still a future scheduled session without sold seats."""
+        updated = await self.collection.find_one_and_update(
+            {
+                "_id": to_object_id(session_id),
+                "status": SessionStatuses.SCHEDULED,
+                "start_time": {"$gt": current_time},
+                "$expr": {"$eq": ["$available_seats", "$total_seats"]},
+            },
+            {"$set": {**updates, "updated_at": updated_at}},
+            return_document=ReturnDocument.AFTER,
+        )
+        return MongoDocumentAdapter.normalize(updated)
+
     async def update_status(
         self,
         session_id: str,
@@ -112,6 +133,30 @@ class SessionRepository(BaseRepository):
         updated = await self.collection.find_one_and_update(
             {"_id": to_object_id(session_id)},
             {"$set": {"status": status, "updated_at": updated_at}},
+            return_document=ReturnDocument.AFTER,
+        )
+        return MongoDocumentAdapter.normalize(updated)
+
+    async def cancel_future_scheduled_session(
+        self,
+        session_id: str,
+        *,
+        current_time: datetime,
+        updated_at: datetime,
+    ) -> dict[str, Any] | None:
+        """Cancel a session only while it remains a future scheduled session."""
+        updated = await self.collection.find_one_and_update(
+            {
+                "_id": to_object_id(session_id),
+                "status": SessionStatuses.SCHEDULED,
+                "start_time": {"$gt": current_time},
+            },
+            {
+                "$set": {
+                    "status": SessionStatuses.CANCELLED,
+                    "updated_at": updated_at,
+                }
+            },
             return_document=ReturnDocument.AFTER,
         )
         return MongoDocumentAdapter.normalize(updated)
@@ -181,3 +226,26 @@ class SessionRepository(BaseRepository):
             },
         )
         return result.modified_count == 1
+
+    async def set_available_seats(
+        self,
+        session_id: str,
+        *,
+        available_seats: int,
+        updated_at: datetime,
+    ) -> dict[str, Any] | None:
+        """Set the exact available seats value when repairing denormalized counters."""
+        updated = await self.collection.find_one_and_update(
+            {
+                "_id": to_object_id(session_id),
+                "total_seats": {"$gte": available_seats},
+            },
+            {
+                "$set": {
+                    "available_seats": available_seats,
+                    "updated_at": updated_at,
+                }
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+        return MongoDocumentAdapter.normalize(updated)

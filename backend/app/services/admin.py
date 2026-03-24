@@ -211,8 +211,9 @@ class AdminService:
         existing_session = await self.session_repository.get_by_id(session_id)
         if existing_session is None:
             raise NotFoundException("Session was not found.")
-        if existing_session["status"] != SessionStatuses.SCHEDULED:
-            raise ConflictException("Only scheduled sessions can be edited.")
+        update_blocker = self._get_session_update_blocker(existing_session, now=now)
+        if update_blocker is not None:
+            raise ConflictException(update_blocker)
 
         purchased_tickets = await self.ticket_repository.count_by_session(session_id, active_only=True)
         if purchased_tickets > 0:
@@ -240,7 +241,7 @@ class AdminService:
         if overlapping is not None:
             raise ConflictException("Session overlaps with an existing session in the only hall.")
 
-        updated_document = await self.session_repository.update_session(
+        updated_document = await self.session_repository.update_session_if_editable(
             session_id,
             updates={
                 "movie_id": movie_id,
@@ -248,10 +249,19 @@ class AdminService:
                 "end_time": end_time,
                 "price": updates.get("price", existing_session["price"]),
             },
+            current_time=now,
             updated_at=now,
         )
         if updated_document is None:
-            raise NotFoundException("Session was not found.")
+            latest_session = await self.session_repository.get_by_id(session_id)
+            if latest_session is None:
+                raise NotFoundException("Session was not found.")
+            latest_update_blocker = self._get_session_update_blocker(latest_session, now=now)
+            if latest_update_blocker is not None:
+                raise ConflictException(latest_update_blocker)
+            if latest_session["available_seats"] < latest_session["total_seats"]:
+                raise ConflictException("Sessions with purchased tickets cannot be edited. Cancel the session instead.")
+            raise ConflictException("Session can no longer be edited.")
 
         return SessionDetailsFactory.build(
             session=SessionRead.model_validate(updated_document),
@@ -355,3 +365,16 @@ class AdminService:
         if normalized.get("poster_url") is not None:
             normalized["poster_url"] = str(normalized["poster_url"])
         return normalized
+
+    def _get_session_update_blocker(self, session_document: dict[str, object], *, now: datetime) -> str | None:
+        if session_document["status"] == SessionStatuses.CANCELLED:
+            return "Cancelled sessions cannot be edited."
+        if session_document["status"] == SessionStatuses.COMPLETED:
+            return "Completed sessions cannot be edited."
+        if session_document["status"] != SessionStatuses.SCHEDULED:
+            return "Only scheduled sessions can be edited."
+        if session_document["start_time"] <= now:
+            return "Only future scheduled sessions can be edited."
+        if session_document["available_seats"] < session_document["total_seats"]:
+            return "Sessions with purchased tickets cannot be edited. Cancel the session instead."
+        return None

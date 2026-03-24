@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.core.exceptions import DatabaseException
 from app.core.logging import get_logger
 from app.db.indexes import ensure_indexes
+from app.db.validators import ensure_collection_validators
 
 logger = get_logger(__name__)
 
@@ -29,6 +30,7 @@ class MongoDBManager:
             self._client = AsyncIOMotorClient(settings.mongodb_uri, tz_aware=True)
             self._database = self._client[settings.mongodb_db_name]
             await self._client.admin.command("ping")
+            await ensure_collection_validators(self._database)
             await ensure_indexes(self._database)
             logger.info("Connected to MongoDB database '%s'.", settings.mongodb_db_name)
         except Exception as exc:  # pragma: no cover - defensive infrastructure path

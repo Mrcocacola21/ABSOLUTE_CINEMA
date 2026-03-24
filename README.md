@@ -343,6 +343,7 @@ npm run dev
 MongoDB:
 
 Run MongoDB separately and point `MONGODB_URI` to it.
+The default local value is `mongodb://localhost:27017`.
 The integration test suite defaults to `mongodb://127.0.0.1:27017` and uses the dedicated database `cinema_showcase_test`.
 
 ## Docker Compose startup
@@ -352,6 +353,8 @@ copy backend\.env.example backend\.env
 copy frontend\.env.example frontend\.env
 docker compose up --build
 ```
+
+Docker Compose overrides the backend container's `MONGODB_URI` to `mongodb://mongodb:27017`, so the same `backend/.env` file can be used for both direct local runs and containerized runs.
 
 Services:
 

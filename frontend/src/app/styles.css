@@ -1081,6 +1081,17 @@ img {
 
 .chrono-session--draft {
   border-style: dashed;
+  cursor: grab;
+}
+
+.chrono-session--draft:active {
+  cursor: grabbing;
+}
+
+.chrono-session.is-drag-lifted {
+  opacity: 0.36;
+  transform: scale(0.98);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
 }
 
 .chrono-session__header {

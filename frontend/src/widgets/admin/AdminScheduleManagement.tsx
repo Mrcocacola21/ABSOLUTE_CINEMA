@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import type {
   MovieCreatePayload,
@@ -52,6 +52,7 @@ interface PlannerNotice {
 }
 
 type InspectorView = "none" | "draft" | "session" | "edit";
+type DragOrigin = "shelf" | "draft";
 
 const DRAG_MOVIE_MIME = "text/cinema-showcase-movie-id";
 const BOARD_START_HOUR = 9;
@@ -149,6 +150,17 @@ function getSessionCardStyle(startTime: string, endTime: string): { left: string
   };
 }
 
+function getDraftDurationMinutes(draft: Pick<SessionDraft, "start_time" | "end_time">): number {
+  const startDate = new Date(draft.start_time);
+  const endDate = new Date(draft.end_time);
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return SLOT_MINUTES;
+  }
+
+  return Math.max(Math.round((endDate.getTime() - startDate.getTime()) / 60000), SLOT_MINUTES);
+}
+
 export function AdminScheduleManagement({
   movies,
   sessions,
@@ -163,6 +175,8 @@ export function AdminScheduleManagement({
   onCancelSession,
   onDeleteSession,
 }: AdminScheduleManagementProps) {
+  const dragActivationFrameRef = useRef<number | null>(null);
+  const dragMetaRef = useRef<{ movieId: string; origin: DragOrigin } | null>(null);
   const [movieForm, setMovieForm] = useState<MovieCreatePayload>(emptyMovieForm);
   const [genresInput, setGenresInput] = useState("");
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
@@ -171,6 +185,7 @@ export function AdminScheduleManagement({
   const [selectedDay, setSelectedDay] = useState(() => toDateKey(new Date()));
   const [pinnedMovieId, setPinnedMovieId] = useState<string | null>(null);
   const [draggedMovieId, setDraggedMovieId] = useState<string | null>(null);
+  const [dragOrigin, setDragOrigin] = useState<DragOrigin | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
   const [draftPlacement, setDraftPlacement] = useState<SessionDraft | null>(null);
   const [editingDraft, setEditingDraft] = useState<SessionEditDraft | null>(null);
@@ -261,6 +276,14 @@ export function AdminScheduleManagement({
   const previewMovie = dragPreview ? moviesById[dragPreview.movieId] ?? null : null;
   const draftMovie = draftPlacement ? moviesById[draftPlacement.movie_id] ?? null : null;
   const editingMovie = editingDraft ? moviesById[editingDraft.movie_id] ?? null : null;
+  const isDraggingDraft =
+    dragOrigin === "draft" &&
+    !!draftPlacement &&
+    draggedMovieId === draftPlacement.movie_id;
+  const candidateDurationMinutes =
+    candidateMovie && draftPlacement && candidateMovie.id === draftPlacement.movie_id
+      ? getDraftDurationMinutes(draftPlacement)
+      : null;
 
   const movieOptionsForSessionForms = useMemo(
     () =>
@@ -344,7 +367,12 @@ export function AdminScheduleManagement({
     return sessionsByMoviePrice.get(movieId) ?? 200;
   }
 
-  function getSlotBlockedReason(startTime: string, movieId: string, sessionIdToIgnore?: string): string | null {
+  function getSlotBlockedReason(
+    startTime: string,
+    movieId: string,
+    sessionIdToIgnore?: string,
+    durationMinutesOverride?: number,
+  ): string | null {
     const movie = moviesById[movieId];
     if (!movie) {
       return "Choose a valid movie before scheduling.";
@@ -364,7 +392,8 @@ export function AdminScheduleManagement({
       return "New sessions can start no later than 22:00.";
     }
 
-    const proposedEnd = new Date(startDate.getTime() + movie.duration_minutes * 60_000);
+    const proposedDurationMinutes = durationMinutesOverride ?? movie.duration_minutes;
+    const proposedEnd = new Date(startDate.getTime() + proposedDurationMinutes * 60_000);
     const blockingSession = selectedDaySessions.find((session) => {
       if (session.id === sessionIdToIgnore || session.status === "cancelled") {
         return false;
@@ -398,7 +427,9 @@ export function AdminScheduleManagement({
       const hour = Math.floor(absoluteMinutes / 60);
       const minute = absoluteMinutes % 60;
       const startTime = buildDayDate(selectedDay, hour, minute);
-      const blockedReason = candidateMovie ? getSlotBlockedReason(startTime, candidateMovie.id) : null;
+      const blockedReason = candidateMovie
+        ? getSlotBlockedReason(startTime, candidateMovie.id, undefined, candidateDurationMinutes ?? undefined)
+        : null;
 
       slots.push({
         key: `${selectedDay}-${hour}-${minute}`,
@@ -411,7 +442,7 @@ export function AdminScheduleManagement({
     }
 
     return slots;
-  }, [candidateMovie, selectedDay, selectedDaySessions]);
+  }, [candidateDurationMinutes, candidateMovie, selectedDay, selectedDaySessions]);
 
   useEffect(() => {
     if (pinnedMovieId && !moviesById[pinnedMovieId]) {
@@ -441,10 +472,44 @@ export function AdminScheduleManagement({
     }
   }, [draftPlacement, editingDraft, moviesById, selectedSession]);
 
+  useEffect(
+    () => () => {
+      if (dragActivationFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragActivationFrameRef.current);
+      }
+    },
+    [],
+  );
+
   function resetMovieForm() {
     setMovieForm(emptyMovieForm);
     setGenresInput("");
     setEditingMovieId(null);
+  }
+
+  function queueBoardDrag(movieId: string, origin: DragOrigin) {
+    dragMetaRef.current = { movieId, origin };
+    if (dragActivationFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragActivationFrameRef.current);
+    }
+
+    dragActivationFrameRef.current = window.requestAnimationFrame(() => {
+      setDraggedMovieId(movieId);
+      setDragOrigin(origin);
+      setDragPreview(null);
+      dragActivationFrameRef.current = null;
+    });
+  }
+
+  function clearBoardDragState() {
+    if (dragActivationFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragActivationFrameRef.current);
+      dragActivationFrameRef.current = null;
+    }
+    dragMetaRef.current = null;
+    setDraggedMovieId(null);
+    setDragOrigin(null);
+    setDragPreview(null);
   }
 
   function clearDraftPlacement() {
@@ -457,8 +522,7 @@ export function AdminScheduleManagement({
 
   function clearPlanningSelection() {
     setPinnedMovieId(null);
-    setDraggedMovieId(null);
-    setDragPreview(null);
+    clearBoardDragState();
   }
 
   function clearPlanningBanners() {
@@ -480,6 +544,54 @@ export function AdminScheduleManagement({
     setInspectorView("draft");
     setPinnedMovieId(movieId);
     setSelectedDay(toDateKey(startTime));
+  }
+
+  function moveDraftPlacement(startTime: string, sourceLabel: string) {
+    if (!draftPlacement) {
+      return;
+    }
+
+    const movie = moviesById[draftPlacement.movie_id];
+    if (!movie) {
+      setPlannerNotice({
+        scope: "planning",
+        tone: "error",
+        title: "Draft unavailable",
+        message: "The current draft can no longer be moved because its movie is unavailable.",
+      });
+      return;
+    }
+
+    const durationMinutes = getDraftDurationMinutes(draftPlacement);
+    const blockedReason = getSlotBlockedReason(startTime, draftPlacement.movie_id, undefined, durationMinutes);
+    if (blockedReason) {
+      setPlannerNotice({
+        scope: "planning",
+        tone: "warning",
+        title: "Slot unavailable",
+        message: blockedReason,
+      });
+      return;
+    }
+
+    setDraftPlacement({
+      ...draftPlacement,
+      start_time: startTime,
+      end_time: addMinutesToDateTimeLocal(startTime, durationMinutes),
+      sourceLabel,
+    });
+    setEditingDraft(null);
+    setSelectedSessionId(null);
+    setInspectorView("draft");
+    setPinnedMovieId(draftPlacement.movie_id);
+    setSelectedDay(toDateKey(startTime));
+    setDragPreview(null);
+    setPlannerNotice({
+      scope: "planning",
+      tone: "success",
+      title: "Draft moved on the board",
+      message: `${movie.title} is now staged at ${formatLocalDateTime(startTime)}. It is still only saved after you press Create Session.`,
+    });
   }
 
   function openEditSessionDraft(session: SessionDetails) {
@@ -552,6 +664,14 @@ export function AdminScheduleManagement({
       title: "Draft placed on the board",
       message: `${movie.title} is now staged at ${formatLocalDateTime(startTime)}. It will only be saved after you press Create Session.`,
     });
+  }
+
+  function getDragPreviewEndTime(movieId: string, startTime: string): string {
+    if (dragOrigin === "draft" && draftPlacement && draftPlacement.movie_id === movieId) {
+      return addMinutesToDateTimeLocal(startTime, getDraftDurationMinutes(draftPlacement));
+    }
+
+    return getSuggestedEndTime(movieId, startTime);
   }
 
   async function handleMovieSubmit(event: FormEvent<HTMLFormElement>) {
@@ -773,7 +893,11 @@ export function AdminScheduleManagement({
   }
 
   const visibleDraft = draftPlacement && toDateKey(draftPlacement.start_time) === selectedDay ? draftPlacement : null;
-  const previewEndTime = dragPreview ? getSuggestedEndTime(dragPreview.movieId, dragPreview.startTime) : null;
+  const previewEndTime = dragPreview ? getDragPreviewEndTime(dragPreview.movieId, dragPreview.startTime) : null;
+  const previewDurationMinutes =
+    dragPreview && dragOrigin === "draft" && draftPlacement && draftPlacement.movie_id === dragPreview.movieId
+      ? getDraftDurationMinutes(draftPlacement)
+      : previewMovie?.duration_minutes ?? null;
 
   return (
     <section className="admin-stack">
@@ -1012,23 +1136,39 @@ export function AdminScheduleManagement({
                         });
                         return;
                       }
+                      if (draftPlacement && draftPlacement.movie_id === selectedMovie.id) {
+                        moveDraftPlacement(slot.startTime, "Draft moved from a board click");
+                        return;
+                      }
                       handleSlotPlacement(selectedMovie.id, slot.startTime, "Draft placed from a board click");
                     }}
                     onDragOver={(event) => {
-                      if (!draggedMovieId) {
+                      const activeDraggedMovieId = draggedMovieId ?? dragMetaRef.current?.movieId ?? null;
+                      const activeDragOrigin = dragOrigin ?? dragMetaRef.current?.origin ?? null;
+                      if (!activeDraggedMovieId) {
                         return;
                       }
                       event.preventDefault();
-                      event.dataTransfer.dropEffect = slot.blockedReason ? "none" : "copy";
-                      setDragPreview(slot.blockedReason ? null : { movieId: draggedMovieId, startTime: slot.startTime });
+                      event.dataTransfer.dropEffect = slot.blockedReason ? "none" : activeDragOrigin === "draft" ? "move" : "copy";
+                      setDragPreview(slot.blockedReason ? null : { movieId: activeDraggedMovieId, startTime: slot.startTime });
                     }}
                     onDrop={(event) => {
                       event.preventDefault();
-                      const movieId = event.dataTransfer.getData(DRAG_MOVIE_MIME) || draggedMovieId;
+                      const activeDrag = dragMetaRef.current
+                        ?? (draggedMovieId && dragOrigin ? { movieId: draggedMovieId, origin: dragOrigin } : null);
+                      const movieId =
+                        event.dataTransfer.getData(DRAG_MOVIE_MIME)
+                        || event.dataTransfer.getData("text/plain")
+                        || activeDrag?.movieId;
                       if (!movieId) {
                         return;
                       }
-                      setDraggedMovieId(null);
+                      const currentDragOrigin = activeDrag?.origin ?? null;
+                      clearBoardDragState();
+                      if (currentDragOrigin === "draft" && draftPlacement?.movie_id === movieId) {
+                        moveDraftPlacement(slot.startTime, "Draft moved from drag and drop");
+                        return;
+                      }
                       handleSlotPlacement(movieId, slot.startTime, "Draft placed from drag and drop");
                     }}
                     aria-label={`Plan a movie at ${slot.label}`}
@@ -1052,8 +1192,10 @@ export function AdminScheduleManagement({
                     </div>
                     <p className="chrono-session__time">{formatTime(dragPreview.startTime)} - {formatTime(previewEndTime)}</p>
                     <div className="chrono-session__footer">
-                      <span className="badge">{previewMovie.duration_minutes} min</span>
-                      <p className="chrono-session__meta">Drop to stage a draft</p>
+                      {previewDurationMinutes ? <span className="badge">{previewDurationMinutes} min</span> : null}
+                      <p className="chrono-session__meta">
+                        {dragOrigin === "draft" ? "Drop to move draft" : "Drop to stage a draft"}
+                      </p>
                     </div>
                   </div>
                 ) : null}
@@ -1061,8 +1203,21 @@ export function AdminScheduleManagement({
                 {visibleDraft && draftMovie ? (
                   <button
                     type="button"
-                    className={`chrono-session chrono-session--draft${inspectorView === "draft" ? " is-selected" : ""}`}
+                    className={[
+                      "chrono-session",
+                      "chrono-session--draft",
+                      inspectorView === "draft" ? "is-selected" : "",
+                      isDraggingDraft ? "is-drag-lifted" : "",
+                    ].filter(Boolean).join(" ")}
                     style={getSessionCardStyle(visibleDraft.start_time, visibleDraft.end_time)}
+                    draggable={!isBusy}
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData(DRAG_MOVIE_MIME, visibleDraft.movie_id);
+                      event.dataTransfer.setData("text/plain", visibleDraft.movie_id);
+                      event.dataTransfer.effectAllowed = "move";
+                      queueBoardDrag(visibleDraft.movie_id, "draft");
+                    }}
+                    onDragEnd={clearBoardDragState}
                     onClick={() => {
                       setSelectedSessionId(null);
                       setEditingDraft(null);
@@ -1161,14 +1316,11 @@ export function AdminScheduleManagement({
                     draggable={!isBusy}
                     onDragStart={(event) => {
                       event.dataTransfer.setData(DRAG_MOVIE_MIME, movie.id);
+                      event.dataTransfer.setData("text/plain", movie.id);
                       event.dataTransfer.effectAllowed = "copy";
-                      setDraggedMovieId(movie.id);
-                      setDragPreview(null);
+                      queueBoardDrag(movie.id, "shelf");
                     }}
-                    onDragEnd={() => {
-                      setDraggedMovieId(null);
-                      setDragPreview(null);
-                    }}
+                    onDragEnd={clearBoardDragState}
                   >
                     <div className="admin-source-card__header">
                       <div className="media-tile admin-source-card__media" aria-hidden="true">

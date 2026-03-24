@@ -45,6 +45,7 @@ interface DragPreview {
 }
 
 interface PlannerNotice {
+  scope: "planning" | "session";
   tone: "info" | "success" | "warning" | "error";
   title: string;
   message: string;
@@ -448,9 +449,21 @@ export function AdminScheduleManagement({
 
   function clearDraftPlacement() {
     setDraftPlacement(null);
+    clearPlanningBanners();
     if (inspectorView === "draft") {
       setInspectorView(selectedSession ? "session" : "none");
     }
+  }
+
+  function clearPlanningSelection() {
+    setPinnedMovieId(null);
+    setDraggedMovieId(null);
+    setDragPreview(null);
+  }
+
+  function clearPlanningBanners() {
+    clearPlanningSelection();
+    setPlannerNotice((currentNotice) => (currentNotice?.scope === "planning" ? null : currentNotice));
   }
 
   function openDraftPlacement(movieId: string, startTime: string, sourceLabel: string) {
@@ -501,6 +514,7 @@ export function AdminScheduleManagement({
   function handlePlanningMovieSelect(movie: Movie) {
     setPinnedMovieId(movie.id);
     setPlannerNotice({
+      scope: "planning",
       tone: "info",
       title: "Movie ready for planning",
       message: `Drag "${movie.title}" onto the timeline, or click a free slot to start a draft.`,
@@ -511,6 +525,7 @@ export function AdminScheduleManagement({
     const movie = moviesById[movieId];
     if (!movie) {
       setPlannerNotice({
+        scope: "planning",
         tone: "error",
         title: "Movie unavailable",
         message: "The selected movie is no longer available for scheduling.",
@@ -521,6 +536,7 @@ export function AdminScheduleManagement({
     const blockedReason = getSlotBlockedReason(startTime, movieId);
     if (blockedReason) {
       setPlannerNotice({
+        scope: "planning",
         tone: "warning",
         title: "Slot unavailable",
         message: blockedReason,
@@ -531,6 +547,7 @@ export function AdminScheduleManagement({
     openDraftPlacement(movieId, startTime, sourceLabel);
     setDragPreview(null);
     setPlannerNotice({
+      scope: "planning",
       tone: "success",
       title: "Draft placed on the board",
       message: `${movie.title} is now staged at ${formatLocalDateTime(startTime)}. It will only be saved after you press Create Session.`,
@@ -665,10 +682,12 @@ export function AdminScheduleManagement({
     }
 
     setDraftPlacement(null);
+    clearPlanningBanners();
     setSelectedSessionId(createdSession.id);
     setInspectorView("session");
     setSelectedDay(toDateKey(createdSession.start_time));
     setPlannerNotice({
+      scope: "session",
       tone: "success",
       title: "Session created",
       message: `${createdSession.movie.title} is now confirmed on the board at ${formatTime(createdSession.start_time)}-${formatTime(createdSession.end_time)}.`,
@@ -696,6 +715,7 @@ export function AdminScheduleManagement({
     setInspectorView("session");
     setSelectedDay(toDateKey(updatedSession.start_time));
     setPlannerNotice({
+      scope: "session",
       tone: "success",
       title: "Session updated",
       message: `${updatedSession.movie.title} now runs at ${formatTime(updatedSession.start_time)}-${formatTime(updatedSession.end_time)}.`,
@@ -719,6 +739,7 @@ export function AdminScheduleManagement({
 
     setInspectorView("session");
     setPlannerNotice({
+      scope: "session",
       tone: "success",
       title: "Session cancelled",
       message: `The session remains on the board for ${formatDayLabel(selectedDay)} with a cancelled status.`,
@@ -744,6 +765,7 @@ export function AdminScheduleManagement({
     setEditingDraft(null);
     setInspectorView(draftPlacement ? "draft" : "none");
     setPlannerNotice({
+      scope: "session",
       tone: "success",
       title: "Session deleted",
       message: "The time slot is open again and ready for a new draft placement.",
@@ -983,6 +1005,7 @@ export function AdminScheduleManagement({
                     onClick={() => {
                       if (!selectedMovie) {
                         setPlannerNotice({
+                          scope: "planning",
                           tone: "info",
                           title: "Select a movie first",
                           message: "Choose a movie from the Planning Shelf, then click a free slot on the board.",
@@ -1024,13 +1047,13 @@ export function AdminScheduleManagement({
                     style={getSessionCardStyle(dragPreview.startTime, previewEndTime)}
                   >
                     <div className="chrono-session__header">
-                      <strong>{previewMovie.title}</strong>
+                      <strong title={previewMovie.title}>{previewMovie.title}</strong>
                       <span className="badge">Preview</span>
                     </div>
-                    <p>{formatTime(dragPreview.startTime)} - {formatTime(previewEndTime)}</p>
-                    <div className="stats-row">
+                    <p className="chrono-session__time">{formatTime(dragPreview.startTime)} - {formatTime(previewEndTime)}</p>
+                    <div className="chrono-session__footer">
                       <span className="badge">{previewMovie.duration_minutes} min</span>
-                      <span className="badge">Drop to stage a draft</span>
+                      <p className="chrono-session__meta">Drop to stage a draft</p>
                     </div>
                   </div>
                 ) : null}
@@ -1047,13 +1070,13 @@ export function AdminScheduleManagement({
                     }}
                   >
                     <div className="chrono-session__header">
-                      <strong>{draftMovie.title}</strong>
+                      <strong title={draftMovie.title}>{draftMovie.title}</strong>
                       <span className="badge">Draft</span>
                     </div>
-                    <p>{formatTime(visibleDraft.start_time)} - {formatTime(visibleDraft.end_time)}</p>
-                    <div className="stats-row">
-                      <span className="badge">{formatCurrency(visibleDraft.price)}</span>
-                      <span className="badge">Pending confirmation</span>
+                    <p className="chrono-session__time">{formatTime(visibleDraft.start_time)} - {formatTime(visibleDraft.end_time)}</p>
+                    <div className="chrono-session__footer">
+                      <span className="badge chrono-session__price">{formatCurrency(visibleDraft.price)}</span>
+                      <p className="chrono-session__meta">Pending confirmation</p>
                     </div>
                   </button>
                 ) : null}
@@ -1077,14 +1100,15 @@ export function AdminScheduleManagement({
                       }}
                     >
                       <div className="chrono-session__header">
-                        <strong>{session.movie.title}</strong>
+                        <strong title={session.movie.title}>{session.movie.title}</strong>
                         <span className="badge">{formatStateLabel(session.status)}</span>
                       </div>
-                      <p>{formatTime(session.start_time)} - {formatTime(session.end_time)}</p>
-                      <div className="stats-row">
-                        <span className="badge">{formatCurrency(session.price)}</span>
-                        <span className="badge">{soldTickets} sold</span>
-                        <span className="badge">{session.available_seats}/{session.total_seats} left</span>
+                      <p className="chrono-session__time">{formatTime(session.start_time)} - {formatTime(session.end_time)}</p>
+                      <div className="chrono-session__footer">
+                        <span className="badge chrono-session__price">{formatCurrency(session.price)}</span>
+                        <p className="chrono-session__meta">
+                          {soldTickets} sold / {session.available_seats}/{session.total_seats} left
+                        </p>
                       </div>
                     </button>
                   );
@@ -1122,7 +1146,7 @@ export function AdminScheduleManagement({
                 tone="info"
                 title="Selected movie"
                 message={`${selectedMovie.title} is queued for board placement. Drag it or click a free slot on the timeline.`}
-                action={<button className="button--ghost" type="button" onClick={() => setPinnedMovieId(null)}>Clear</button>}
+                action={<button className="button--ghost" type="button" onClick={clearPlanningSelection}>Clear</button>}
               />
             ) : null}
 

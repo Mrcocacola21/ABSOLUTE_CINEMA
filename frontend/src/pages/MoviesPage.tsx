@@ -1,31 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { getMoviesRequest, getScheduleRequest } from "@/api/schedule";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, ScheduleItem } from "@/types/domain";
+import { MovieCatalogCard } from "@/widgets/movies/MovieCatalogCard";
 
 type StatusFilter = "all" | "active" | "inactive";
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString([], {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function getMovieMonogram(title: string): string {
-  return title
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
 
 export function MoviesPage() {
   const { t } = useTranslation();
@@ -236,70 +218,20 @@ export function MoviesPage() {
       ) : null}
 
       {!isLoading && !errorMessage && filteredMovies.length > 0 ? (
-        <section className="cards-grid">
+        <section className="cards-grid movie-catalog-grid">
           {filteredMovies.map((movie) => {
             const sessions = sessionsByMovieId.get(movie.id) ?? [];
             const nextSession = sessions[0];
             const lastSession = sessions[sessions.length - 1];
 
             return (
-              <article key={movie.id} className="card movie-card">
-                <div className="showing-card__header">
-                  <Link to={`/movies/${movie.id}`} className="media-tile showing-card__media" aria-hidden="true">
-                    {movie.poster_url ? (
-                      <img src={movie.poster_url} alt="" className="media-tile__image" />
-                    ) : (
-                      <span>{getMovieMonogram(movie.title)}</span>
-                    )}
-                  </Link>
-                  <div className="showing-card__copy">
-                    <div className="meta-row">
-                      <span className="badge">{movie.is_active ? t("activeLabel") : t("inactiveLabel")}</span>
-                      {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
-                    </div>
-                    <h3>{movie.title}</h3>
-                    <p className="muted">{movie.description}</p>
-                  </div>
-                </div>
-
-                <div className="stats-row">
-                  <span className="badge">
-                    {t("duration")}: {movie.duration_minutes} min
-                  </span>
-                  {movie.genres.length > 0 ? <span className="badge">{movie.genres.join(", ")}</span> : null}
-                  <span className="badge">
-                    {t("sessionsCount")}: {sessions.length}
-                  </span>
-                </div>
-
-                <div className="movie-card__schedule">
-                  {nextSession ? (
-                    <div className="schedule-range">
-                      <div>
-                        <span className="muted">{t("nextSession")}</span>
-                        <strong>{formatDateTime(nextSession.start_time)}</strong>
-                      </div>
-                      <div>
-                        <span className="muted">{t("lastUpcomingSession")}</span>
-                        <strong>{formatDateTime(lastSession.start_time)}</strong>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="muted">{t("noUpcomingSessionsShort")}</p>
-                  )}
-                </div>
-
-                <div className="actions-row">
-                  <Link to={`/movies/${movie.id}`} className="button">
-                    {t("movieDetailsAction")}
-                  </Link>
-                  {nextSession ? (
-                    <Link to={`/schedule?movieId=${movie.id}`} className="button--ghost">
-                      {t("browseMovieSessions")}
-                    </Link>
-                  ) : null}
-                </div>
-              </article>
+              <MovieCatalogCard
+                key={movie.id}
+                movie={movie}
+                sessionsCount={sessions.length}
+                nextSession={nextSession}
+                lastSession={lastSession}
+              />
             );
           })}
         </section>

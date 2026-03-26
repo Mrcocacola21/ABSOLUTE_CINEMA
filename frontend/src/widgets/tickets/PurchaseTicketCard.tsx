@@ -23,34 +23,64 @@ export function PurchaseTicketCard({
   onPurchase,
 }: PurchaseTicketCardProps) {
   const { t } = useTranslation();
+  const purchaseLabel = isSubmitting
+    ? "Purchasing..."
+    : selectedSeat
+      ? t("purchaseTicketAction")
+      : "Select a seat first";
 
   return (
-    <aside className="form-card">
-      <h3>{t("ticketPurchase")}</h3>
-      <p className="muted">
-        {selectedSeat
-          ? `${t("selectedSeat")}: ${selectedSeat.row}-${selectedSeat.number}`
-          : t("chooseSeatPrompt")}
-      </p>
-      {availableSeats !== undefined ? (
-        <p className="muted">
-          {availableSeats} {t("seatsLeft")}
-        </p>
-      ) : null}
-      {statusHint ? <p className="muted">{statusHint}</p> : null}
-      {price !== undefined ? <p className="badge">{t("price")}: {formatCurrency(price)}</p> : null}
-      <button
-        type="button"
-        className="button"
-        disabled={!canPurchase || !selectedSeat || isSubmitting}
-        onClick={onPurchase}
-      >
-        {isSubmitting
-          ? "Purchasing..."
-          : selectedSeat
-            ? t("purchaseTicketAction")
-            : "Select a seat first"}
-      </button>
+    <aside className="booking-module__summary" aria-live="polite">
+      <div className="booking-module__summary-main">
+        <div className="booking-module__summary-header">
+          <h3>{t("ticketPurchase")}</h3>
+          <p className="muted">
+            {selectedSeat
+              ? "Your seat is ready to reserve."
+              : "Select a seat from the map to unlock checkout."}
+          </p>
+        </div>
+
+        <div className={`booking-module__selection-card${selectedSeat ? " is-active" : ""}`}>
+          <span className="booking-module__selection-label">
+            {selectedSeat ? t("selectedSeat") : "Selection"}
+          </span>
+          <strong>{selectedSeat ? `${selectedSeat.row}-${selectedSeat.number}` : "--"}</strong>
+          <p>
+            {selectedSeat
+              ? "This exact seat will be reserved when you confirm the purchase."
+              : t("chooseSeatPrompt")}
+          </p>
+        </div>
+      </div>
+
+      <div className="booking-module__metric-grid">
+        {availableSeats !== undefined ? (
+          <div className="booking-module__metric">
+            <span>{t("availableSeats")}</span>
+            <strong>{availableSeats}</strong>
+          </div>
+        ) : null}
+        {price !== undefined ? (
+          <div className="booking-module__metric">
+            <span>{t("price")}</span>
+            <strong>{formatCurrency(price)}</strong>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="booking-module__summary-actions">
+        {statusHint ? <p className="booking-module__status-hint">{statusHint}</p> : null}
+
+        <button
+          type="button"
+          className="button booking-module__button"
+          disabled={!canPurchase || !selectedSeat || isSubmitting}
+          onClick={onPurchase}
+        >
+          {purchaseLabel}
+        </button>
+      </div>
     </aside>
   );
 }

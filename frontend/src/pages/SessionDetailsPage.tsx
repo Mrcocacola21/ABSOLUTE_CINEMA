@@ -199,25 +199,55 @@ export function SessionDetailsPage() {
       ) : null}
 
       {!isLoading && !errorMessage ? (
-        <section className="split-grid">
-          <SeatMap
-            seats={seats?.seats ?? []}
-            selectedSeat={selectedSeat}
-            availableSeats={seats?.available_seats}
-            totalSeats={seats?.total_seats}
-            isLoading={isRefreshing}
-            isDisabled={!isSessionPurchasable || isSubmitting}
-            onSelect={setSelectedSeat}
-          />
-          <PurchaseTicketCard
-            canPurchase={isSessionPurchasable}
-            selectedSeat={selectedSeat}
-            price={details?.price}
-            availableSeats={details?.available_seats}
-            isSubmitting={isSubmitting}
-            statusHint={purchaseHint}
-            onPurchase={() => void handlePurchase()}
-          />
+        <section className="panel booking-module">
+          <div className="booking-module__header">
+            <div className="booking-module__copy">
+              <h2 className="section-title">
+                {t("seatMap")} | {t("ticketPurchase")}
+              </h2>
+              <p className="muted">
+                {selectedSeat
+                  ? `Seat ${selectedSeat.row}-${selectedSeat.number} is selected. Review the summary and confirm the booking in the same flow.`
+                  : "Choose a seat from the map, review the ticket summary, and complete the purchase without leaving this booking module."}
+              </p>
+            </div>
+            <div className="booking-module__stats">
+              {seats ? (
+                <span className="badge">
+                  {seats.available_seats}/{seats.total_seats} {t("availableSeats")}
+                </span>
+              ) : null}
+              {details?.price !== undefined ? (
+                <span className="badge">
+                  {t("price")}: {formatCurrency(details.price)}
+                </span>
+              ) : null}
+              {selectedSeat ? (
+                <span className="badge">
+                  {t("selectedSeat")}: {selectedSeat.row}-{selectedSeat.number}
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="booking-module__body">
+            <SeatMap
+              seats={seats?.seats ?? []}
+              selectedSeat={selectedSeat}
+              isLoading={isRefreshing}
+              isDisabled={!isSessionPurchasable || isSubmitting}
+              onSelect={setSelectedSeat}
+            />
+            <PurchaseTicketCard
+              canPurchase={isSessionPurchasable}
+              selectedSeat={selectedSeat}
+              price={details?.price}
+              availableSeats={seats?.available_seats}
+              isSubmitting={isSubmitting}
+              statusHint={purchaseHint}
+              onPurchase={() => void handlePurchase()}
+            />
+          </div>
         </section>
       ) : null}
 

@@ -162,6 +162,7 @@ export const resources = {
       ticketsSold: "Tickets sold",
       upcomingSessions: "Upcoming sessions",
       usersPanelTitle: "Users",
+      viewNextSession: "View next session",
       viewSession: "View session",
       allGenres: "All genres",
       allStatuses: "All statuses",
@@ -354,6 +355,8 @@ export const resources = {
       ticketsSold: "\u041f\u0440\u043e\u0434\u0430\u043d\u043e \u043a\u0432\u0438\u0442\u043a\u0456\u0432",
       upcomingSessions: "\u041c\u0430\u0439\u0431\u0443\u0442\u043d\u0456 \u0441\u0435\u0430\u043d\u0441\u0438",
       usersPanelTitle: "\u041a\u043e\u0440\u0438\u0441\u0442\u0443\u0432\u0430\u0447\u0456",
+      viewNextSession:
+        "\u041f\u0435\u0440\u0435\u0433\u043b\u044f\u043d\u0443\u0442\u0438 \u043d\u0430\u0439\u0431\u043b\u0438\u0436\u0447\u0438\u0439 \u0441\u0435\u0430\u043d\u0441",
       viewSession: "\u041f\u0435\u0440\u0435\u0433\u043b\u044f\u043d\u0443\u0442\u0438 \u0441\u0435\u0430\u043d\u0441",
       allGenres: "Усі жанри",
       allStatuses: "Усі статуси",

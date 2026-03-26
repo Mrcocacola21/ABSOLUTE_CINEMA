@@ -13,33 +13,8 @@ import {
 } from "@/shared/scheduleBrowse";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, ScheduleItem } from "@/types/domain";
+import { HomeShowingCard } from "@/widgets/movies/HomeShowingCard";
 import { ScheduleToolbar } from "@/widgets/schedule/ScheduleToolbar";
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "UAH",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatDateTime(value: string): string {
-  return new Date(value).toLocaleString([], {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function getMovieMonogram(title: string): string {
-  return title
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
 
 export function HomePage() {
   const { t } = useTranslation();
@@ -210,65 +185,7 @@ export function HomePage() {
       {!isLoading && !errorMessage && rotationMovies.length > 0 ? (
         <section className="cards-grid showing-grid">
           {rotationMovies.map((movie) => (
-            <article key={movie.id} className="card showing-card movie-card">
-              <div className="showing-card__header">
-                <Link to={`/movies/${movie.id}`} className="media-tile showing-card__media" aria-hidden="true">
-                  {movie.poster_url ? (
-                    <img src={movie.poster_url} alt="" className="media-tile__image" />
-                  ) : (
-                    <span>{getMovieMonogram(movie.title)}</span>
-                  )}
-                </Link>
-                <div className="showing-card__copy">
-                  <div className="meta-row">
-                    <span className="badge">{movie.is_active ? t("activeLabel") : t("inactiveLabel")}</span>
-                    <span className="badge">{t("nextSession")}</span>
-                    {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
-                  </div>
-                  <h3>{movie.title}</h3>
-                  <p className="muted">
-                    {movie.description ?? t("homeMovieFallback")}
-                  </p>
-                </div>
-              </div>
-
-              <div className="stats-row">
-                <span className="badge">
-                  {t("upcomingSessions")}: {movie.upcomingSessions}
-                </span>
-                <span className="badge">
-                  {t("availableSeats")}: {movie.maxAvailableSeats}
-                </span>
-                <span className="badge">
-                  {t("fromPrice")}: {formatCurrency(movie.minPrice)}
-                </span>
-              </div>
-
-              <div className="showing-card__schedule">
-                <div className="schedule-range">
-                  <div>
-                    <span className="muted">{t("nextSession")}</span>
-                    <strong>{formatDateTime(movie.nextSession.start_time)}</strong>
-                  </div>
-                  <div>
-                    <span className="muted">{t("lastUpcomingSession")}</span>
-                    <strong>{formatDateTime(movie.lastSession.start_time)}</strong>
-                  </div>
-                </div>
-                <p className="muted">
-                  {movie.genres.length > 0 ? movie.genres.join(", ") : t("currentlyShowing")}
-                </p>
-              </div>
-
-              <div className="actions-row">
-                <Link to={`/schedule/${movie.nextSession.id}`} className="button">
-                  {t("viewSession")}
-                </Link>
-                <Link to={`/movies/${movie.id}`} className="button--ghost">
-                  {t("movieDetailsAction")}
-                </Link>
-              </div>
-            </article>
+            <HomeShowingCard key={movie.id} movie={movie} />
           ))}
         </section>
       ) : null}

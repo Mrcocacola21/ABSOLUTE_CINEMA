@@ -453,6 +453,10 @@ img {
   gap: 8px;
 }
 
+.field input[type="datetime-local"] {
+  width: 90%;
+}
+
 .field--search {
   grid-column: span 2;
 }

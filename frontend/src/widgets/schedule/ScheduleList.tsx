@@ -15,7 +15,7 @@ export function ScheduleList({ items }: ScheduleListProps) {
   }
 
   return (
-    <section className="list">
+    <section className="list schedule-list">
       {items.map((item) => (
         <ScheduleCard key={item.id} item={item} />
       ))}

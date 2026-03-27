@@ -400,6 +400,10 @@ img {
   gap: 18px;
 }
 
+.toolbar-panel--schedule {
+  gap: 20px;
+}
+
 .toolbar-panel__header,
 .admin-section__header,
 .admin-card__header {
@@ -409,9 +413,49 @@ img {
   gap: 16px;
 }
 
+.toolbar-panel__header--schedule {
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.toolbar-panel__intro {
+  flex: 1 1 520px;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
 .toolbar-panel__summary {
   margin: 0;
   color: var(--text-muted);
+}
+
+.toolbar-panel__summary--schedule {
+  max-width: 62ch;
+}
+
+.toolbar-panel__results {
+  flex: 0 0 min(280px, 100%);
+  display: grid;
+  align-content: start;
+  justify-items: end;
+  text-align: right;
+}
+
+.toolbar-panel__results-value {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.35;
+  font-weight: 500;
+}
+
+.toolbar-panel__note,
+.field__hint {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.78rem;
 }
 
 .toolbar,
@@ -438,6 +482,15 @@ img {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.toolbar--schedule-list {
+  grid-template-columns: minmax(0, 2.15fr) repeat(3, minmax(148px, 1fr)) auto;
+  gap: 14px 16px;
+}
+
+.toolbar--schedule-board {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .toolbar__actions {
   display: flex;
   align-items: end;
@@ -453,12 +506,34 @@ img {
   gap: 8px;
 }
 
+.toolbar-panel--schedule .field {
+  align-content: start;
+}
+
+.toolbar-panel--schedule .field > span:first-child {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
 .field input[type="datetime-local"] {
   width: 90%;
 }
 
 .field--search {
   grid-column: span 2;
+}
+
+.field--schedule-search {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.field--schedule-compact {
+  min-width: 0;
 }
 
 .field--wide {
@@ -488,6 +563,44 @@ img {
 .field textarea {
   min-height: 120px;
   resize: vertical;
+}
+
+.toolbar-panel--schedule .field input,
+.toolbar-panel--schedule .field select {
+  min-height: 48px;
+  border-radius: 16px;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: none;
+}
+
+.toolbar-panel--schedule .field input::placeholder {
+  color: rgba(247, 243, 235, 0.4);
+}
+
+.toolbar-panel--schedule .field__hint {
+  padding-left: 2px;
+}
+
+.toolbar__actions--schedule {
+  align-self: start;
+  align-items: start;
+  padding-top: 29px;
+}
+
+.toolbar__actions--schedule .button--ghost {
+  min-height: 48px;
+  padding-inline: 14px;
+  border-radius: 16px;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+}
+
+.toolbar__actions--schedule .button--ghost:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .field--checkbox {
@@ -537,22 +650,85 @@ img {
   gap: 14px;
 }
 
+.schedule-card {
+  gap: 18px;
+  align-content: start;
+}
+
 .schedule-card__header {
   display: grid;
-  grid-template-columns: 78px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(112px, 124px) minmax(0, 1fr);
+  gap: 20px;
   align-items: start;
 }
 
-.schedule-card__copy {
+.media-tile.schedule-card__media {
+  width: min(124px, 100%);
+  max-width: 124px;
+  height: auto;
+  min-height: 178px;
+  aspect-ratio: 47 / 68;
+  border-radius: 24px;
+  justify-self: start;
+  align-self: start;
+  box-shadow: 0 20px 34px rgba(0, 0, 0, 0.24);
+}
+
+.schedule-card__body {
   display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.schedule-card__topline {
+  display: grid;
+  gap: 10px;
+}
+
+.schedule-card__title,
+.admin-card strong {
+  margin: 0;
+  font-size: 1.28rem;
+  line-height: 1.08;
+}
+
+.schedule-card__taxonomy {
   gap: 8px;
 }
 
-.schedule-card__copy h3,
-.admin-card strong {
-  margin: 0;
-  font-size: 1.22rem;
+.schedule-card__taxonomy .badge {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.schedule-card__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.schedule-card__fact {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.schedule-card__fact span {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.schedule-card__fact strong {
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1.3;
 }
 
 .movie-catalog-grid {
@@ -792,13 +968,25 @@ img {
 .schedule-card__footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 16px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.schedule-card__footer .muted {
-  margin: 0;
-  max-width: 34ch;
+.schedule-card__actions {
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.schedule-card__actions .button,
+.schedule-card__actions .button--ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  text-align: center;
 }
 
 .media-tile {
@@ -910,6 +1098,11 @@ img {
 }
 
 .day-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.schedule-section-stack {
   display: grid;
   gap: 18px;
 }
@@ -1188,6 +1381,326 @@ img {
 
 .timeline-card--movie-detail .timeline-card__actions {
   justify-content: flex-end;
+}
+
+.public-chrono {
+  display: grid;
+  gap: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(118, 166, 209, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+}
+
+.public-chrono__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.public-chrono__header .muted {
+  margin: 8px 0 0;
+  max-width: 50ch;
+}
+
+.public-chrono__stats {
+  justify-content: flex-end;
+}
+
+.public-chrono__frame {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 12px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(14, 18, 28, 0.78), rgba(18, 22, 30, 0.58));
+}
+
+.public-chrono__board {
+  position: relative;
+  display: grid;
+  grid-template-rows: 52px 172px;
+  gap: 12px;
+  min-width: 980px;
+}
+
+.public-chrono__scale,
+.public-chrono__lane {
+  position: relative;
+  width: 100%;
+}
+
+.public-chrono__hour-label {
+  position: absolute;
+  top: 16px;
+  transform: translateX(-50%);
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
+.public-chrono__lane {
+  min-height: 172px;
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
+    radial-gradient(circle at top left, rgba(119, 194, 157, 0.08), transparent 36%);
+}
+
+.public-chrono__hour-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.public-chrono__now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  border-left: 2px solid rgba(118, 166, 209, 0.95);
+}
+
+.public-chrono__now::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(118, 166, 209, 0.95);
+  box-shadow: 0 0 0 6px rgba(118, 166, 209, 0.18);
+}
+
+.public-chrono-session {
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  z-index: 3;
+  min-width: 126px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 8px;
+  align-content: start;
+  padding: 14px 15px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(145deg, rgba(118, 166, 209, 0.16), rgba(18, 21, 28, 0.95));
+  color: #fff;
+  text-align: left;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.public-chrono-session:hover,
+.public-chrono-session.is-active {
+  transform: translateY(-1px);
+  border-color: rgba(118, 166, 209, 0.42);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+.public-chrono-session--scheduled {
+  background:
+    linear-gradient(145deg, rgba(119, 194, 157, 0.16), rgba(21, 24, 32, 0.95));
+}
+
+.public-chrono-session--cancelled {
+  background:
+    linear-gradient(145deg, rgba(227, 123, 118, 0.2), rgba(28, 20, 20, 0.95));
+}
+
+.public-chrono-session--completed {
+  background:
+    linear-gradient(145deg, rgba(118, 166, 209, 0.2), rgba(20, 22, 28, 0.95));
+}
+
+.public-chrono-session::before,
+.public-chrono-session::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.public-chrono-session::before {
+  background-image: var(--public-chrono-poster, none);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  opacity: 0.22;
+  filter: saturate(1.08) contrast(1.04) brightness(0.88);
+  transform: scale(1.08);
+}
+
+.public-chrono-session::after {
+  background:
+    linear-gradient(180deg, rgba(10, 14, 20, 0.26), rgba(10, 14, 20, 0.8)),
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.14), transparent 38%);
+}
+
+.public-chrono-session > * {
+  position: relative;
+  z-index: 1;
+}
+
+.public-chrono-session__header {
+  display: block;
+}
+
+.public-chrono-session__header strong {
+  min-width: 0;
+  font-size: 1rem;
+  line-height: 1.16;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.public-chrono-session__time {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.public-chrono-session__time {
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.public-chrono-session__footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  margin-top: auto;
+}
+
+.public-chrono-session__stat {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.public-chrono-session__stat--muted {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.public-chrono-menu {
+  position: fixed;
+  z-index: 120;
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(320px, calc(100vh - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(180deg, rgba(12, 16, 24, 0.98), rgba(16, 20, 28, 0.94)),
+    radial-gradient(circle at top left, rgba(118, 166, 209, 0.12), transparent 34%);
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  will-change: top, left;
+}
+
+.public-chrono-menu::before {
+  content: none;
+}
+
+.public-chrono-menu__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.public-chrono-menu__header > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.public-chrono-menu__header strong,
+.public-schedule-list-panel .section-title {
+  color: #fff;
+}
+
+.public-chrono-menu__header p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.public-chrono-menu__summary {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.public-chrono-menu__dismiss {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.94rem;
+  line-height: 1;
+  transition:
+    background 0.18s ease,
+    transform 0.18s ease;
+}
+
+.public-chrono-menu__dismiss:hover {
+  background: rgba(255, 255, 255, 0.14);
+  transform: scale(1.04);
+}
+
+.public-chrono-menu__actions {
+  display: grid;
+  gap: 8px;
+}
+
+.public-chrono-menu__actions .button,
+.public-chrono-menu__actions .button--ghost {
+  width: 100%;
+  justify-content: center;
+  padding: 10px 14px;
+}
+
+.public-schedule-list-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.schedule-list {
+  gap: 16px;
 }
 
 .admin-stack {
@@ -2256,6 +2769,27 @@ img {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .toolbar--schedule-list,
+  .toolbar--schedule-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .toolbar-panel__results {
+    flex-basis: 100%;
+    width: 100%;
+    justify-items: start;
+    text-align: left;
+  }
+
+  .field--schedule-search {
+    grid-column: span 2;
+  }
+
+  .toolbar__actions--schedule {
+    justify-content: flex-start;
+    padding-top: 0;
+  }
+
   .field--search,
   .field--wide {
     grid-column: span 2;
@@ -2289,6 +2823,14 @@ img {
 
   .chrono-board {
     min-width: 0;
+  }
+
+  .public-chrono__header {
+    display: grid;
+  }
+
+  .public-chrono__stats {
+    justify-content: flex-start;
   }
 
   .movie-hero__facts {
@@ -2364,8 +2906,21 @@ img {
     grid-template-columns: 1fr;
   }
 
+  .toolbar--schedule-list,
+  .toolbar--schedule-board {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-card__actions {
+    grid-template-columns: 1fr;
+  }
+
   .field--search,
   .field--wide {
+    grid-column: span 1;
+  }
+
+  .field--schedule-search {
     grid-column: span 1;
   }
 
@@ -2397,6 +2952,12 @@ img {
     width: min(164px, 100%);
     max-width: 164px;
     min-height: 236px;
+  }
+
+  .media-tile.schedule-card__media {
+    width: min(122px, 100%);
+    max-width: 122px;
+    min-height: 174px;
   }
 
   .movie-hero__aside {
@@ -2453,6 +3014,20 @@ img {
 
   .timeline-card--movie-detail .timeline-card__actions {
     grid-column: auto;
+  }
+
+  .public-chrono__board {
+    grid-template-rows: 52px 188px;
+    min-width: 900px;
+  }
+
+  .public-chrono-session {
+    padding: 12px 13px;
+  }
+
+  .public-chrono-session__footer {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .chrono-board {

@@ -55,7 +55,7 @@ export function AppLayout() {
                 className={activeLanguage === "uk" ? "is-active" : ""}
                 onClick={() => handleLanguageChange("uk")}
               >
-                UK
+                UA
               </button>
               <button
                 type="button"

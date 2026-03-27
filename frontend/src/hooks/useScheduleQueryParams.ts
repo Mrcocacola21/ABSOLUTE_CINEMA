@@ -18,6 +18,29 @@ export function useScheduleQueryParams() {
     setSearchParams(next, { replace: true });
   }
 
+  function updateParams(updates: Record<string, string>) {
+    const next = new URLSearchParams(searchParams);
+    let shouldResetOffset = false;
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (!value) {
+        next.delete(key);
+      } else {
+        next.set(key, value);
+      }
+
+      if (key !== "offset") {
+        shouldResetOffset = true;
+      }
+    }
+
+    if (shouldResetOffset) {
+      next.set("offset", "0");
+    }
+
+    setSearchParams(next, { replace: true });
+  }
+
   function resetParams() {
     setSearchParams(new URLSearchParams(DEFAULT_SCHEDULE_PARAMS), { replace: true });
   }
@@ -25,12 +48,15 @@ export function useScheduleQueryParams() {
   return {
     searchParams,
     updateParam,
+    updateParams,
     resetParams,
     values: {
       day: searchParams.get("day") ?? DEFAULT_SCHEDULE_PARAMS.day,
+      genre: searchParams.get("genre") ?? DEFAULT_SCHEDULE_PARAMS.genre,
+      listDay: searchParams.get("listDay") ?? DEFAULT_SCHEDULE_PARAMS.listDay,
+      dateSort: searchParams.get("dateSort") ?? DEFAULT_SCHEDULE_PARAMS.dateSort,
+      seatSort: searchParams.get("seatSort") ?? DEFAULT_SCHEDULE_PARAMS.seatSort,
       query: searchParams.get("query") ?? DEFAULT_SCHEDULE_PARAMS.query,
-      sortBy: searchParams.get("sortBy") ?? DEFAULT_SCHEDULE_PARAMS.sortBy,
-      sortOrder: searchParams.get("sortOrder") ?? DEFAULT_SCHEDULE_PARAMS.sortOrder,
       movieId: searchParams.get("movieId") ?? "",
       limit: searchParams.get("limit") ?? DEFAULT_SCHEDULE_PARAMS.limit,
       offset: searchParams.get("offset") ?? DEFAULT_SCHEDULE_PARAMS.offset,

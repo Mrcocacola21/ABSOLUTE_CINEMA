@@ -17,9 +17,11 @@ export const LANGUAGES: Record<string, LanguageCode> = {
 };
 
 export const DEFAULT_SCHEDULE_PARAMS = {
-  sortBy: "start_time",
-  sortOrder: "asc",
   day: "",
+  genre: "",
+  listDay: "",
+  dateSort: "nearest",
+  seatSort: "",
   query: "",
   limit: "100",
   offset: "0",

@@ -1,66 +1,72 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-import { getScheduleRequest } from "@/api/schedule";
+import { getMoviesRequest, getScheduleRequest } from "@/api/schedule";
 import { useScheduleQueryParams } from "@/hooks/useScheduleQueryParams";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
-import { formatCurrency, formatStateLabel, formatTime } from "@/shared/presentation";
 import {
-  filterScheduleItems,
+  filterBoardScheduleItems,
+  filterScheduleListItems,
+  getAvailableGenreOptions,
   getAvailableMovieOptions,
+  getScheduleDayOptions,
+  getScheduleTitleSuggestions,
   sortScheduleItems,
+  sortPublicScheduleListItems,
 } from "@/shared/scheduleBrowse";
+import { formatScheduleDayLabel, toScheduleDayKey } from "@/shared/scheduleTimeline";
 import { StatePanel } from "@/shared/ui/StatePanel";
-import type { ScheduleItem } from "@/types/domain";
+import type { Movie, ScheduleItem } from "@/types/domain";
+import { ScheduleBoardControls } from "@/widgets/schedule/ScheduleBoardControls";
+import { ScheduleChronoboard } from "@/widgets/schedule/ScheduleChronoboard";
+import { ScheduleList } from "@/widgets/schedule/ScheduleList";
 import { ScheduleToolbar } from "@/widgets/schedule/ScheduleToolbar";
 
-function getDayKey(value: string): string {
-  const date = new Date(value);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function buildMoviesById(movies: Movie[]): Record<string, Movie> {
+  return movies.reduce<Record<string, Movie>>((accumulator, movie) => {
+    accumulator[movie.id] = movie;
+    return accumulator;
+  }, {});
 }
 
-function formatDayLabel(value: string): string {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString([], {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-  });
+function normalizeDateSort(value: string): "nearest" | "farthest" {
+  return value === "farthest" ? "farthest" : "nearest";
 }
 
-function getMovieMonogram(title: string): string {
-  return title
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
+function normalizeSeatSort(value: string): "" | "most_occupied" | "least_occupied" {
+  if (value === "most_occupied" || value === "least_occupied") {
+    return value;
+  }
+
+  return "";
 }
 
 export function SchedulePage() {
   const { t } = useTranslation();
-  const { values, updateParam, resetParams } = useScheduleQueryParams();
+  const { values, updateParam, updateParams } = useScheduleQueryParams();
   const [items, setItems] = useState<ScheduleItem[]>([]);
+  const [movies, setMovies] = useState<Movie[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
   async function loadSchedule() {
     setIsLoading(true);
     try {
-      const response = await getScheduleRequest({
-        sortBy: "start_time",
-        sortOrder: "asc",
-        limit: "100",
-        offset: "0",
-      });
-      setItems(response.data);
+      const [scheduleResponse, moviesResponse] = await Promise.all([
+        getScheduleRequest({
+          sortBy: "start_time",
+          sortOrder: "asc",
+          limit: "100",
+          offset: "0",
+        }),
+        getMoviesRequest({ includeInactive: true }),
+      ]);
+      setItems(scheduleResponse.data);
+      setMovies(moviesResponse.data);
       setErrorMessage("");
     } catch (error) {
       setItems([]);
+      setMovies([]);
       setErrorMessage(extractApiErrorMessage(error, t("backendScheduleUnavailable")));
     } finally {
       setIsLoading(false);
@@ -71,57 +77,128 @@ export function SchedulePage() {
     void loadSchedule();
   }, [t]);
 
-  const baseFilteredItems = useMemo(
-    () => filterScheduleItems(items, values.query, values.movieId),
-    [items, values.movieId, values.query],
+  const moviesById = useMemo(() => buildMoviesById(movies), [movies]);
+  const dateSort = normalizeDateSort(values.dateSort);
+  const seatSort = normalizeSeatSort(values.seatSort);
+  const allDayOptions = useMemo(() => getScheduleDayOptions(items), [items]);
+  const rotationMovieCount = useMemo(
+    () =>
+      new Set(
+        items
+          .filter((item) => {
+            const movie = moviesById[item.movie_id];
+            return movie ? movie.is_active : true;
+          })
+          .map((item) => item.movie_id),
+      ).size,
+    [items, moviesById],
   );
 
-  const movieOptions = useMemo(
-    () => getAvailableMovieOptions(baseFilteredItems),
-    [baseFilteredItems],
+  const boardMovieOptions = useMemo(() => getAvailableMovieOptions(items), [items]);
+  const boardGenreOptions = useMemo(() => getAvailableGenreOptions(items), [items]);
+
+  const boardBaseItems = useMemo(
+    () => filterBoardScheduleItems(items, values.movieId, values.genre),
+    [items, values.genre, values.movieId],
   );
 
-  const dayOptions = useMemo(() => {
-    const days = new Map<string, number>();
+  const boardDayOptions = useMemo(() => getScheduleDayOptions(boardBaseItems), [boardBaseItems]);
 
-    for (const item of sortScheduleItems(baseFilteredItems, "start_time", "asc")) {
-      const dayKey = getDayKey(item.start_time);
-      days.set(dayKey, (days.get(dayKey) ?? 0) + 1);
-    }
-
-    return [...days.entries()].map(([value, count]) => ({
-      value,
-      label: formatDayLabel(value),
-      count,
-    }));
-  }, [baseFilteredItems]);
-
-  const selectedDay = dayOptions.some((option) => option.value === values.day)
+  const selectedBoardDay = boardDayOptions.some((option) => option.value === values.day)
     ? values.day
-    : dayOptions[0]?.value ?? "";
+    : boardDayOptions[0]?.value ?? "";
 
   useEffect(() => {
-    if (dayOptions.length === 0) {
+    if (boardDayOptions.length === 0) {
       if (values.day) {
         updateParam("day", "");
       }
       return;
     }
 
-    if (!values.day || !dayOptions.some((option) => option.value === values.day)) {
-      updateParam("day", dayOptions[0].value);
+    if (!values.day || !boardDayOptions.some((option) => option.value === values.day)) {
+      updateParam("day", boardDayOptions[0].value);
     }
-  }, [dayOptions, updateParam, values.day]);
+  }, [boardDayOptions, updateParam, values.day]);
 
-  const dayItems = useMemo(
+  const boardItems = useMemo(
     () =>
       sortScheduleItems(
-        baseFilteredItems.filter((item) => getDayKey(item.start_time) === selectedDay),
-        values.sortBy,
-        values.sortOrder,
+        boardBaseItems.filter((item) => toScheduleDayKey(item.start_time) === selectedBoardDay),
+        "start_time",
+        "asc",
       ),
-    [baseFilteredItems, selectedDay, values.sortBy, values.sortOrder],
+    [boardBaseItems, selectedBoardDay],
   );
+
+  const listBaseItems = useMemo(
+    () => filterScheduleListItems(items, values.query, ""),
+    [items, values.query],
+  );
+
+  const listDayOptions = useMemo(() => getScheduleDayOptions(listBaseItems), [listBaseItems]);
+
+  useEffect(() => {
+    if (values.listDay && !listDayOptions.some((option) => option.value === values.listDay)) {
+      updateParam("listDay", "");
+    }
+  }, [listDayOptions, updateParam, values.listDay]);
+
+  const listFilteredItems = useMemo(
+    () => filterScheduleListItems(items, values.query, values.listDay),
+    [items, values.listDay, values.query],
+  );
+
+  const listSuggestionPool = useMemo(
+    () => filterScheduleListItems(items, "", values.listDay),
+    [items, values.listDay],
+  );
+
+  const listQuerySuggestions = useMemo(
+    () => getScheduleTitleSuggestions(listSuggestionPool, values.query),
+    [listSuggestionPool, values.query],
+  );
+
+  const listItems = useMemo(
+    () => sortPublicScheduleListItems(listFilteredItems, dateSort, seatSort),
+    [dateSort, listFilteredItems, seatSort],
+  );
+
+  const boardResultsLabel = t("scheduleDayResultsLabel", {
+    sessions: boardItems.length,
+    movies: new Set(boardItems.map((item) => item.movie_id)).size,
+    day: selectedBoardDay ? formatScheduleDayLabel(selectedBoardDay) : "-",
+  });
+
+  const listResultsLabel = t("scheduleResultsLabel", {
+    sessions: listItems.length,
+    movies: new Set(listItems.map((item) => item.movie_id)).size,
+  });
+
+  function resetBoardFilters() {
+    updateParams({
+      day: "",
+      genre: "",
+      movieId: "",
+    });
+  }
+
+  function resetListFilters() {
+    updateParams({
+      listDay: "",
+      query: "",
+      dateSort: "nearest",
+      seatSort: "",
+    });
+  }
+
+  function handleDateSortChange(nextDateSort: "nearest" | "farthest") {
+    updateParam("dateSort", nextDateSort);
+  }
+
+  function handleSeatSortChange(nextSeatSort: "" | "most_occupied" | "least_occupied") {
+    updateParam("seatSort", nextSeatSort);
+  }
 
   return (
     <>
@@ -133,7 +210,10 @@ export function SchedulePage() {
         </div>
         <div className="stats-row">
           <span className="badge">
-            {dayOptions.length} {t("chooseDay")}
+            {allDayOptions.length} {t("chooseDay")}
+          </span>
+          <span className="badge">
+            {rotationMovieCount} {t("currentlyShowing")}
           </span>
           <span className="badge">
             {items.length} {t("upcomingSessions")}
@@ -145,7 +225,7 @@ export function SchedulePage() {
         <StatePanel
           tone="loading"
           title="Loading the schedule"
-          message="Fetching upcoming sessions and available days."
+          message="Fetching upcoming sessions, available days, and public movie filters."
         />
       ) : null}
 
@@ -162,115 +242,77 @@ export function SchedulePage() {
         />
       ) : null}
 
-      {!isLoading && !errorMessage ? (
-        <section className="panel day-panel">
-          <div className="toolbar-panel__header">
-            <div>
-              <p className="page-eyebrow">{t("chooseDay")}</p>
-              <h2 className="section-title">{selectedDay ? formatDayLabel(selectedDay) : t("schedule")}</h2>
-            </div>
-            <p className="toolbar-panel__summary">{t("scheduleDayHint")}</p>
-          </div>
+      {!isLoading && !errorMessage && items.length === 0 ? (
+        <section className="empty-state empty-state--panel">
+          <h2>{t("noSessionsYet")}</h2>
+          <p>{t("scheduleQueryHint")}</p>
+        </section>
+      ) : null}
 
-          {dayOptions.length > 0 ? (
-            <div className="day-pills">
-              {dayOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`day-pill${option.value === selectedDay ? " is-active" : ""}`}
-                  onClick={() => updateParam("day", option.value)}
-                >
-                  <strong>{option.label}</strong>
-                  <span>{option.count}</span>
-                </button>
-              ))}
-            </div>
+      {!isLoading && !errorMessage && items.length > 0 ? (
+        <section className="schedule-section-stack">
+          <ScheduleBoardControls
+            selectedDay={selectedBoardDay}
+            dayOptions={boardDayOptions}
+            movieId={values.movieId}
+            genre={values.genre}
+            movies={boardMovieOptions}
+            genres={boardGenreOptions}
+            resultsLabel={boardResultsLabel}
+            onDayChange={(day) => updateParam("day", day)}
+            onFilterChange={updateParam}
+            onReset={resetBoardFilters}
+          />
+
+          {boardDayOptions.length === 0 || !selectedBoardDay || boardItems.length === 0 ? (
+            <section className="empty-state empty-state--panel">
+              <h2>{t("noMatchingSessions")}</h2>
+              <p>{t("scheduleDayHint")}</p>
+              <button className="button--ghost" type="button" onClick={resetBoardFilters}>
+                {t("resetFilters")}
+              </button>
+            </section>
           ) : (
-            <div className="empty-state">{t("scheduleEmptyDays")}</div>
+            <ScheduleChronoboard items={boardItems} selectedDay={selectedBoardDay} />
           )}
         </section>
       ) : null}
 
-      {!isLoading && !errorMessage ? (
-        <ScheduleToolbar
-          query={values.query}
-          sortBy={values.sortBy}
-          sortOrder={values.sortOrder}
-          movieId={values.movieId}
-          movies={movieOptions}
-          resultsLabel={t("scheduleDayResultsLabel", {
-            sessions: dayItems.length,
-            movies: new Set(dayItems.map((item) => item.movie_id)).size,
-            day: selectedDay ? formatDayLabel(selectedDay) : "-",
-          })}
-          onChange={updateParam}
-          onReset={resetParams}
-        />
-      ) : null}
+      {!isLoading && !errorMessage && items.length > 0 ? (
+        <section className="schedule-section-stack">
+          <ScheduleToolbar
+            query={values.query}
+            dateSort={dateSort}
+            seatSort={seatSort}
+            listDay={values.listDay}
+            dayOptions={listDayOptions}
+            querySuggestions={listQuerySuggestions}
+            resultsLabel={listResultsLabel}
+            onChange={updateParam}
+            onDateSortChange={handleDateSortChange}
+            onSeatSortChange={handleSeatSortChange}
+            onReset={resetListFilters}
+          />
 
-      {!isLoading && !errorMessage && dayOptions.length === 0 ? (
-        <section className="empty-state empty-state--panel">
-          <h2>{t("noMatchingSessions")}</h2>
-          <p>{t("scheduleQueryHint")}</p>
-          <button className="button--ghost" type="button" onClick={resetParams}>
-            {t("resetFilters")}
-          </button>
-        </section>
-      ) : null}
-
-      {!isLoading && !errorMessage && dayOptions.length > 0 && dayItems.length === 0 ? (
-        <section className="empty-state empty-state--panel">
-          <h2>{t("noMatchingSessions")}</h2>
-          <p>{t("scheduleQueryHint")}</p>
-          <button className="button--ghost" type="button" onClick={resetParams}>
-            {t("resetFilters")}
-          </button>
-        </section>
-      ) : null}
-
-      {!isLoading && !errorMessage && dayItems.length > 0 ? (
-        <section className="schedule-board">
-          {dayItems.map((item) => (
-            <article key={item.id} className="card timeline-card">
-              <div className="timeline-card__time">
-                <strong>{formatTime(item.start_time)}</strong>
-                <span>{formatTime(item.end_time)}</span>
+          <section className="panel public-schedule-list-panel">
+            <div className="toolbar-panel__header">
+              <div>
+                <p className="page-eyebrow">{t("browseSchedule")}</p>
+                <h2 className="section-title">{t("upcomingSessions")}</h2>
+                <p className="toolbar-panel__summary">{t("scheduleQueryHint")}</p>
               </div>
-
-              <div className="media-tile timeline-card__media" aria-hidden="true">
-                {item.poster_url ? (
-                  <img src={item.poster_url} alt="" className="media-tile__image" />
-                ) : (
-                  <span>{getMovieMonogram(item.movie_title)}</span>
-                )}
-              </div>
-
-              <div className="timeline-card__body">
-                <div className="meta-row">
-                  <span className="badge">{formatStateLabel(item.status)}</span>
-                  {item.age_rating ? <span className="badge">{item.age_rating}</span> : null}
-                  <span className="badge">
-                    {item.available_seats}/{item.total_seats}
-                  </span>
-                </div>
-                <h3>{item.movie_title}</h3>
-                <p className="muted">
-                  {item.genres.length > 0 ? item.genres.join(", ") : t("currentlyShowing")}
-                </p>
-              </div>
-
-              <div className="timeline-card__actions">
-                <span className="badge">{formatCurrency(item.price)}</span>
+              <div className="stats-row">
                 <span className="badge">
-                  {item.available_seats} {t("seatsLeft")}
+                  {listItems.length} {t("upcomingSessions")}
                 </span>
-                <Link to={`/schedule/${item.id}`} className="button">
-                  {t("viewSession")}
-                </Link>
+                <span className="badge">
+                  {new Set(listItems.map((item) => item.movie_id)).size} {t("movies")}
+                </span>
               </div>
-            </article>
-          ))}
+            </div>
+
+            <ScheduleList items={listItems} />
+          </section>
         </section>
       ) : null}
     </>

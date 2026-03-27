@@ -1,36 +1,20 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import { formatCurrency, formatTime } from "@/shared/presentation";
 import type { ScheduleItem } from "@/types/domain";
+import { formatScheduleDayLabel, getMovieMonogram, toScheduleDayKey } from "@/shared/scheduleTimeline";
 
 interface ScheduleCardProps {
   item: ScheduleItem;
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "UAH",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function getMovieMonogram(title: string): string {
-  return title
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
 export function ScheduleCard({ item }: ScheduleCardProps) {
-  const { t } = useTranslation();
-  const startDate = new Date(item.start_time).toLocaleString();
-  const endDate = new Date(item.end_time).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const { t, i18n } = useTranslation();
+  const dayLabel = formatScheduleDayLabel(toScheduleDayKey(item.start_time));
+  const timeRange = `${formatTime(item.start_time)} - ${formatTime(item.end_time)}`;
+  const dateLabel = i18n.language.startsWith("uk") ? "\u0414\u0430\u0442\u0430" : "Date";
+  const timeLabel = i18n.language.startsWith("uk") ? "\u0427\u0430\u0441" : "Time";
 
   return (
     <article className="card schedule-card">
@@ -42,36 +26,54 @@ export function ScheduleCard({ item }: ScheduleCardProps) {
             <span>{getMovieMonogram(item.movie_title)}</span>
           )}
         </div>
-        <div className="schedule-card__copy">
-          <div className="meta-row">
-            <span className="badge">{item.status}</span>
-            {item.age_rating ? <span className="badge">{item.age_rating}</span> : null}
-            <span className="badge">
-              {item.available_seats} {t("seatsLeft")}
-            </span>
+        <div className="schedule-card__body">
+          <div className="schedule-card__topline">
+            <h3 className="schedule-card__title">{item.movie_title}</h3>
+
+            {item.genres.length > 0 || item.age_rating ? (
+              <div className="meta-row schedule-card__taxonomy">
+                {item.genres.map((genre) => (
+                  <span key={`${item.id}-${genre}`} className="badge">
+                    {genre}
+                  </span>
+                ))}
+                {item.age_rating ? <span className="badge">{item.age_rating}</span> : null}
+              </div>
+            ) : null}
           </div>
-          <h3>{item.movie_title}</h3>
-          <p className="muted">
-            {startDate} | {t("endsAt")}: {endDate}
-          </p>
+
+          <div className="schedule-card__facts">
+            <div className="schedule-card__fact">
+              <span>{dateLabel}</span>
+              <strong>{dayLabel}</strong>
+            </div>
+            <div className="schedule-card__fact">
+              <span>{timeLabel}</span>
+              <strong>{timeRange}</strong>
+            </div>
+            <div className="schedule-card__fact">
+              <span>{t("availableSeats")}</span>
+              <strong>
+                {item.available_seats} / {item.total_seats}
+              </strong>
+            </div>
+            <div className="schedule-card__fact">
+              <span>{t("price")}</span>
+              <strong>{formatCurrency(item.price)}</strong>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="stats-row">
-        <span className="badge">
-          {t("price")}: {formatCurrency(item.price)}
-        </span>
-        <span className="badge">
-          {item.available_seats}/{item.total_seats}
-        </span>
-        {item.genres.length > 0 ? <span className="badge">{item.genres.join(", ")}</span> : null}
-      </div>
-
       <div className="schedule-card__footer">
-        <p className="muted">{t("sessionCardHint")}</p>
-        <Link to={`/schedule/${item.id}`} className="button">
-          {t("viewSession")}
-        </Link>
+        <div className="actions-row schedule-card__actions">
+          <Link to={`/schedule/${item.id}`} className="button">
+            {t("viewSession")}
+          </Link>
+          <Link to={`/movies/${item.movie_id}`} className="button--ghost">
+            {t("movieDetails")}
+          </Link>
+        </div>
       </div>
     </article>
   );

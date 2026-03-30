@@ -1,58 +1,288 @@
 # Cinema Showcase
 
-Cinema Showcase is an academic monorepo for a one-hall cinema schedule and ticketing system. The project keeps the backend and frontend separated while sharing one MongoDB-backed domain.
+> A fullstack one-hall cinema web application for movie browsing, session planning, seat booking, and admin scheduling.
 
-Core entities:
+Cinema Showcase is an academic/demo monorepo built around a deliberately focused cinema model: one hall, one schedule lane, four core domain entities, and a clear split between a FastAPI backend, a React frontend, and MongoDB persistence.
 
-- `Movie`
-- `Session`
-- `User`
-- `Ticket`
+It covers the full flow from public browsing to authenticated ticket booking and admin-side movie/session management, including a chronoboard-style planner for scheduling screenings in the single hall.
 
-The project intentionally keeps the one-hall cinema model. There is no separate `Hall` collection; hall size is defined by backend configuration.
+## At a Glance
 
-## Technology stack
+| Area | Current implementation |
+| --- | --- |
+| Architecture | `frontend/` + `backend/` monorepo |
+| Backend | FastAPI, Pydantic Settings, Motor, PyMongo |
+| Frontend | React, Vite, TypeScript, React Router, Axios, i18next |
+| Database | MongoDB with collection validators and indexes |
+| Cinema model | One hall, fixed seat grid from backend settings |
+| Public flows | Home, movie catalog, movie details, schedule, session details |
+| User flows | Registration, login, profile editing, ticket history, ticket cancellation |
+| Admin flows | Movie management, session planning, attendance, ticket/user overview |
+| API docs | Swagger UI at `/docs`, ReDoc at `/redoc` |
+| Infrastructure | Docker Compose for MongoDB + backend + frontend |
+| Automated tests | Backend unit and integration tests |
 
-- Backend: FastAPI, Pydantic v2, Motor, PyMongo
-- Frontend: React, Vite, TypeScript
-- Database: MongoDB
-- Infrastructure: Docker, Docker Compose
+## Contents
 
-## Repository structure
+- [What the System Does](#what-the-system-does)
+- [Key Features](#key-features)
+- [Technology Stack](#technology-stack)
+- [Architecture](#architecture)
+- [Backend Overview](#backend-overview)
+- [Frontend Overview](#frontend-overview)
+- [Core Domain Model](#core-domain-model)
+- [Roles and Main Flows](#roles-and-main-flows)
+- [Schedule, Booking, and Admin Planning](#schedule-booking-and-admin-planning)
+- [Project Structure](#project-structure)
+- [Environment Variables](#environment-variables)
+- [Run Locally](#run-locally)
+- [Run with Docker](#run-with-docker)
+- [Testing](#testing)
+- [Admin Access](#admin-access)
+- [API and Swagger](#api-and-swagger)
+- [Deployment Notes](#deployment-notes)
+- [Current Limitations and Future Work](#current-limitations-and-future-work)
+
+## What the System Does
+
+Cinema Showcase models a **single-hall cinema** where:
+
+- admins maintain a movie catalog;
+- admins schedule movie sessions into one shared hall timeline;
+- visitors browse the active lineup and public schedule;
+- authenticated users choose seats, purchase tickets, and cancel eligible bookings;
+- admins monitor attendance, tickets, sessions, and recent users from one dashboard.
+
+The one-hall constraint is intentional. There is **no separate `Hall` entity or collection** in the current model. Hall capacity comes from backend configuration:
+
+- default rows: `8`
+- default seats per row: `12`
+- default total seats: `96`
+
+## Key Features
+
+- **Movie catalog** with active/inactive titles, genres, age rating, poster URL, and description.
+- **Home page rotation** that shows only active movies that already have at least one upcoming session.
+- **Public schedule browsing** in two forms: a day-based chronoboard and a filterable session list.
+- **Movie details pages** with upcoming sessions for a selected title.
+- **Session details pages** with a live seat map and in-page ticket purchase flow.
+- **JWT-based authentication** with registration, login, protected profile access, and admin-only routes.
+- **Profile management** with editable user data, ticket history, ticket cancellation, and account deactivation.
+- **Admin movie management** for creating, editing, deactivating, and conditionally deleting movies.
+- **Admin session management** through a drag-and-drop chronoboard/planner for the single hall.
+- **Attendance reporting** plus recent tickets and recent users in the admin workspace.
+- **Seat integrity protections** through validation rules, unique ticket-seat indexing, per-session write locks, and seat-counter reconciliation.
+
+## Technology Stack
+
+| Layer | Tools |
+| --- | --- |
+| Backend API | FastAPI, Uvicorn |
+| Backend validation/config | Pydantic v2, `pydantic-settings` |
+| Database access | Motor, PyMongo |
+| Security | JWT (`python-jose`), Passlib + bcrypt |
+| Frontend | React 18, TypeScript, Vite |
+| Routing | React Router |
+| HTTP client | Axios |
+| Localization | i18next, react-i18next |
+| Database | MongoDB 7 |
+| Containers | Docker, Docker Compose |
+| Testing | Pytest, pytest-asyncio, pytest-cov, httpx |
+
+## Architecture
 
 ```text
-cinema-showcase/
-  backend/
-    app/
-    .dockerignore
-    .env.example
-    Dockerfile
-    requirements.txt
-  frontend/
-    public/
-    src/
-    .dockerignore
-    .env.example
-    Dockerfile
-    package.json
-    package-lock.json
-  docker-compose.yml
-  README.md
+Browser
+  -> React + Vite frontend
+  -> typed API clients + AuthContext + protected routes
+  -> FastAPI routers
+  -> service / command / builder layer
+  -> repository layer
+  -> MongoDB collections (users, movies, sessions, tickets)
 ```
 
-## Dockerized services
+### Architectural notes
 
-Docker Compose starts three services:
+- The repository is split into `backend/` and `frontend/`, but both halves operate on the same domain model.
+- The backend follows a clear layered structure: routers -> services/commands -> repositories -> MongoDB.
+- The frontend is organized by route pages, reusable widgets, typed API modules, and shared utilities.
+- MongoDB stores four main collections: `users`, `movies`, `sessions`, and `tickets`.
+- Hall geometry is configuration-driven, not data-driven. Seat maps are derived from hall settings and purchased tickets.
+- On backend startup, the app connects to MongoDB, applies collection validators, and ensures indexes.
 
-- `mongodb`: MongoDB 7 with a persistent named volume `mongo_data`
-- `backend`: FastAPI application on port `8000`
-- `frontend`: Vite development server on port `5173`
+## Backend Overview
 
-The backend connects to MongoDB through the Docker service name `mongodb`. The frontend keeps using `VITE_API_BASE_URL=http://localhost:8000/api/v1` because API requests are sent by the browser on the host machine, not from inside the container network.
+### Main backend layers
 
-## Environment variables
+- `app/api/routers`: HTTP endpoints for auth, movies, schedule, sessions, tickets, users, health, and admin.
+- `app/api/dependencies`: reusable auth, pagination, and service wiring.
+- `app/services`: business rules for auth, users, movies, schedule, tickets, and admin workflows.
+- `app/commands`: focused workflows such as ticket purchase and session cancellation.
+- `app/repositories`: MongoDB query layer for each collection.
+- `app/db`: connection management, collection validators, and indexes.
+- `app/security`: password hashing and JWT token creation/validation.
+- `app/tests`: unit and integration coverage.
 
-Create real `.env` files from the examples before building containers.
+### Important backend behaviors
+
+- **Mongo bootstrap**: the app pings MongoDB on startup and applies collection validators plus indexes automatically.
+- **Standardized responses**: successful endpoints return a common `ApiResponse` envelope with `success`, `message`, `data`, and optional `meta`.
+- **Standardized errors**: validation and application errors are returned in a consistent JSON structure.
+- **JWT auth**: login uses the OAuth2 password flow; bearer tokens include `sub`, `email`, `role`, and expiry.
+- **Automatic status sync**: scheduled sessions are marked `completed` once their end time passes.
+- **One-hall enforcement**: overlapping non-cancelled sessions are rejected.
+- **Seat uniqueness**: MongoDB keeps a unique partial index on `(session_id, seat_row, seat_number)` for active purchased tickets.
+
+## Frontend Overview
+
+The frontend is a React single-page application with route-level pages, reusable widgets, and typed API wrappers around the backend.
+
+### Main routes
+
+| Route | Purpose |
+| --- | --- |
+| `/` | Home page with the current active rotation |
+| `/movies` | Full movie catalog with title/genre/status filters |
+| `/movies/:movieId` | Movie details and upcoming sessions for one title |
+| `/schedule` | Public schedule with a day chronoboard and session list |
+| `/schedule/:sessionId` | Session details, seat map, and ticket purchase |
+| `/login` | Sign-in page |
+| `/register` | Registration page |
+| `/profile` | Protected user profile and ticket history |
+| `/admin` | Protected admin dashboard |
+
+### Frontend structure and behavior
+
+- `src/pages`: route-level screens.
+- `src/widgets`: UI building blocks for layout, schedule, admin, movies, tickets, and session booking.
+- `src/api`: typed Axios request modules for public and admin endpoints.
+- `src/features/auth`: auth context, current-user loading, login/logout, and role handling.
+- `src/router`: route definitions plus `ProtectedRoute` for user/admin pages.
+- `src/shared`: formatting helpers, query param handling, local storage helpers, and shared UI states.
+- `src/i18n`: English and Ukrainian UI resources with a header language switcher.
+
+Auth state is stored in `localStorage`. On app load, the frontend restores the access token, fetches `/users/me`, and clears local auth state automatically if the backend returns `401`.
+
+## Core Domain Model
+
+| Entity | Main fields | Notes |
+| --- | --- | --- |
+| `Movie` | `title`, `description`, `duration_minutes`, `poster_url`, `age_rating`, `genres`, `is_active` | Catalog entity managed by admins |
+| `Session` | `movie_id`, `start_time`, `end_time`, `price`, `status`, `total_seats`, `available_seats` | One scheduled screening in the single hall |
+| `Ticket` | `user_id`, `session_id`, `seat_row`, `seat_number`, `price`, `status`, timestamps | One reserved seat for one user and one session |
+| `User` | `name`, `email`, `role`, `is_active`, timestamps | Registered account with `user` or `admin` role |
+
+### Domain constraints
+
+- There is **no `Hall` collection** in the current backend.
+- `Session.status` can be `scheduled`, `cancelled`, or `completed`.
+- `Ticket.status` can be `purchased` or `cancelled`.
+- Session seat counters cannot exceed total hall capacity.
+- Ticket seat coordinates must stay within the configured hall dimensions.
+
+## Roles and Main Flows
+
+| Role | What this role can do |
+| --- | --- |
+| Guest | Browse the home page, movie catalog, movie details, schedule, and session details |
+| Authenticated user | Log in, buy tickets, view personal tickets, cancel eligible tickets, update profile, deactivate account |
+| Admin | Everything a user can do, plus access `/admin`, manage movies, manage sessions, and view attendance/ticket/user data |
+
+### Typical public flow
+
+1. Open the home page or movie catalog.
+2. Browse a movie and inspect its upcoming sessions.
+3. Open a specific session page.
+4. Sign in if needed.
+5. Choose a seat from the map and confirm the purchase.
+6. Review or cancel the ticket later from `/profile`.
+
+### Typical admin flow
+
+1. Register and log in with an email configured in `ADMIN_EMAILS`.
+2. Open `/admin`.
+3. Create or update movie records.
+4. Place active movies onto the chronoboard and confirm session drafts.
+5. Inspect attendance, recent bookings, and recent users from the same workspace.
+
+## Schedule, Booking, and Admin Planning
+
+### Public schedule
+
+- The public schedule is backed by `GET /api/v1/schedule`.
+- It returns **future scheduled sessions only**.
+- Supported query parameters include pagination (`limit`, `offset`) plus sorting/filtering (`sort_by`, `sort_order`, `movie_id`).
+- The frontend renders this data both as a **day chronoboard** and as a **session list** with title search, day filtering, date ordering, and free-seat ordering.
+
+### Seat booking
+
+- The seat map comes from `GET /api/v1/sessions/{session_id}/seats`.
+- Seat availability is derived from the configured hall grid and active tickets for that session.
+- Ticket purchase requires an authenticated user, a future `scheduled` session, and an available seat inside hall bounds.
+- Ticket cancellation is allowed only before the session starts.
+- Regular users can cancel their own eligible tickets from the profile page.
+- The backend also allows an admin to cancel any ticket through authorized API access, although the current admin dashboard focuses on monitoring rather than a dedicated ticket-cancel UI.
+
+### Admin scheduling and chronoboard behavior
+
+- Only **active movies** can be newly scheduled.
+- Admins can drag a movie from the planning shelf onto a free slot or select a movie and click a slot.
+- A draft session is created in the UI first and becomes persistent only after confirmation.
+- New sessions must start in the future, begin between `09:00` and `22:00`, cover at least the selected movie duration, and avoid overlap with another non-cancelled session in the only hall.
+- Existing sessions can be edited only while they are still future scheduled sessions with **no purchased tickets**.
+- Sessions with stored tickets cannot be deleted; they must be cancelled instead.
+- Movies referenced by sessions cannot be deleted; they should be deactivated instead.
+
+## Project Structure
+
+```text
+Cinema/
+|-- backend/
+|   |-- app/
+|   |   |-- api/
+|   |   |-- builders/
+|   |   |-- commands/
+|   |   |-- core/
+|   |   |-- db/
+|   |   |-- repositories/
+|   |   |-- schemas/
+|   |   |-- security/
+|   |   |-- services/
+|   |   |-- tests/
+|   |   `-- utils/
+|   |-- .env.example
+|   |-- Dockerfile
+|   |-- pyproject.toml
+|   `-- requirements.txt
+|-- frontend/
+|   |-- src/
+|   |   |-- api/
+|   |   |-- app/
+|   |   |-- entities/
+|   |   |-- features/
+|   |   |-- hooks/
+|   |   |-- i18n/
+|   |   |-- pages/
+|   |   |-- router/
+|   |   |-- shared/
+|   |   |-- types/
+|   |   `-- widgets/
+|   |-- .env.example
+|   |-- Dockerfile
+|   |-- package.json
+|   `-- vite.config.ts
+|-- docker-compose.yml
+`-- README.md
+```
+
+## Environment Variables
+
+Create local `.env` files from the examples before running the app:
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
 
 PowerShell:
 
@@ -61,237 +291,272 @@ Copy-Item backend\.env.example backend\.env -Force
 Copy-Item frontend\.env.example frontend\.env -Force
 ```
 
-Bash:
+### Backend variables
+
+| Variable | Example/default | Purpose |
+| --- | --- | --- |
+| `PROJECT_NAME` | `Cinema Showcase API` | FastAPI project title |
+| `PROJECT_VERSION` | `0.1.0` | API version shown in docs |
+| `ENVIRONMENT` | `development` | Runtime environment label |
+| `DEBUG` | `true` | Debug mode flag |
+| `API_V1_PREFIX` | `/api/v1` | Common API prefix |
+| `BACKEND_CORS_ORIGINS` | `["http://localhost:5173","http://127.0.0.1:5173"]` | Allowed frontend origins |
+| `MONGODB_URI` | `mongodb://localhost:27017` | MongoDB connection string |
+| `MONGODB_DB_NAME` | `cinema_showcase` | Main database name |
+| `JWT_SECRET_KEY` | `change-this-secret` | Secret used to sign JWTs |
+| `JWT_ALGORITHM` | `HS256` | JWT signing algorithm |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Access token lifetime |
+| `LOG_LEVEL` | `INFO` | Backend logging level |
+| `CINEMA_TIMEZONE` | `Europe/Kyiv` | Local cinema timezone |
+| `HALL_ROWS_COUNT` | `8` | Hall row count |
+| `HALL_SEATS_PER_ROW` | `12` | Seats per row |
+| `FIRST_SESSION_HOUR` | `9` | Earliest allowed session start |
+| `LAST_SESSION_START_HOUR` | `22` | Latest allowed session start |
+| `ADMIN_EMAILS` | `["admin@example.com"]` | Email whitelist for admin registration |
+
+### Frontend variables
+
+| Variable | Example/default | Purpose |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | `http://localhost:8000/api/v1` | Base URL for frontend API calls |
+
+### Test-only overrides
+
+The integration test suite also recognizes:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `TEST_MONGODB_URI` | `mongodb://127.0.0.1:27017` | MongoDB URI for integration tests |
+| `TEST_MONGODB_DB_NAME` | `cinema_showcase_test` | Dedicated test database name |
+
+## Run Locally
+
+### Prerequisites
+
+- Python `3.12+`
+- Node.js and npm
+- MongoDB running locally on `localhost:27017`
+
+### 1. Prepare environment files
 
 ```bash
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 ```
 
-### Backend variables
+### 2. Start the backend
 
-`backend/.env` includes:
-
-- `PROJECT_NAME`
-- `PROJECT_VERSION`
-- `ENVIRONMENT`
-- `DEBUG`
-- `API_V1_PREFIX`
-- `BACKEND_CORS_ORIGINS`
-- `MONGODB_URI`
-- `MONGODB_DB_NAME`
-- `JWT_SECRET_KEY`
-- `JWT_ALGORITHM`
-- `ACCESS_TOKEN_EXPIRE_MINUTES`
-- `LOG_LEVEL`
-- `CINEMA_TIMEZONE`
-- `HALL_ROWS_COUNT`
-- `HALL_SEATS_PER_ROW`
-- `FIRST_SESSION_HOUR`
-- `LAST_SESSION_START_HOUR`
-- `ADMIN_EMAILS`
-
-For direct local backend runs, the default MongoDB URI is `mongodb://localhost:27017`.
-
-For Docker Compose runs, `docker-compose.yml` overrides it to `mongodb://mongodb:27017`, so the same `.env` file works in both modes.
-
-### Frontend variables
-
-`frontend/.env` currently needs:
-
-- `VITE_API_BASE_URL=http://localhost:8000/api/v1`
-
-## Admin login for local development and demo
-
-Admin access is determined during registration by the backend setting `ADMIN_EMAILS`.
-
-Actual implementation:
-
-- `backend/app/services/auth.py` assigns role `admin` only when the registering email is present in `settings.admin_emails`
-- `backend/app/core/config.py` loads that list from `ADMIN_EMAILS`
-- the default template in `backend/.env.example` already contains `ADMIN_EMAILS=["admin@example.com"]`
-
-To create an admin account:
-
-1. Copy `backend/.env.example` to `backend/.env` if you have not done it yet.
-2. Open `backend/.env` and set `ADMIN_EMAILS` to the email or emails that should receive admin role on registration.
-3. Start the backend or restart the Docker Compose stack after changing the env file.
-4. Register a new user with one of those emails from the frontend registration page.
-5. Log in with that account.
-6. Open `http://localhost:5173/admin` or use the `Admin` action in the header.
-
-Important behavior:
-
-- Existing users are not auto-upgraded when you later add their email to `ADMIN_EMAILS`.
-- If you already registered that email as a normal user, use a new admin email, delete that user from MongoDB, or reset the demo database.
-- For Docker demo reset, use `docker compose down -v` and then start the stack again. This removes the MongoDB volume and all stored data.
-
-## Admin workspace flow
-
-After signing in with an admin account, open `http://localhost:5173/admin`.
-
-The admin area is now split into three working sections:
-
-- Movie management: create, edit, deactivate, and delete movies from the catalog.
-- Session management: use the one-hall chronoboard to schedule sessions by day and time.
-- Reports / attendance: review attendance summaries, latest bookings, and recent users.
-
-### How the chronoboard works
-
-1. Create or activate a movie in the movie management section.
-2. In the session planner, pick a day from the quick day pills or the date input.
-3. Drag an active movie from the planning shelf onto the board.
-4. Drop it on a free time slot. The planner panel opens with the movie and start time already filled in.
-5. Confirm the price and save the session.
-6. The board refreshes automatically and shows the new session in its time range.
-
-Existing session cards on the board can be clicked to inspect details. From the inspector panel you can:
-
-- edit the session
-- cancel the session
-- delete the session when backend rules allow it
-
-Overlap rules remain enforced for the one-hall cinema model. Blocked slots are highlighted before save, and the backend still validates overlaps and other session constraints.
-
-## Frontend browsing flow
-
-The public frontend now has three main browsing entry points:
-
-- Home: `http://localhost:5173/`
-  Shows only active movies that currently have at least one upcoming public session. Each card highlights the nearest session and links to movie details or the session page.
-- Movies catalog: `http://localhost:5173/movies`
-  Shows all stored movies, including inactive titles and movies without scheduled sessions. The page supports search by title, genre filtering, and active/inactive filtering.
-- Movie details: `http://localhost:5173/movies/<movie_id>`
-  Shows full movie information and all currently available upcoming sessions for that movie, if any exist.
-- Schedule: `http://localhost:5173/schedule`
-  Shows the public session board as a day-based chronoboard. Pick a day first, then browse sessions for that date with title search, movie filter, and free-seat sorting.
-
-## Docker build and run
-
-### 1. Build images
-
-```powershell
-docker compose build
-```
-
-### 2. Start the full stack
-
-```powershell
-docker compose up
-```
-
-To rebuild and start in one command:
-
-```powershell
-docker compose up --build
-```
-
-To run in detached mode:
-
-```powershell
-docker compose up --build -d
-```
-
-### 3. Open the application
-
-After startup:
-
-- Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:8000`
-- Swagger UI: `http://localhost:8000/docs`
-- Backend health endpoint: `http://localhost:8000/api/v1/health`
-- MongoDB host port: `localhost:27017`
-
-## Docker Compose behavior
-
-The Compose setup is aimed at reliable local coursework demonstration:
-
-- MongoDB has a healthcheck before the backend is started
-- Backend has a healthcheck before the frontend is started
-- MongoDB data is stored in the named volume `mongo_data`
-- Frontend dependencies are stored in the named volume `frontend_node_modules`
-- Backend source is bind-mounted into the container for local development
-- Frontend source is bind-mounted into the container for local development
-- Polling-based file watching is enabled for Docker Desktop compatibility on Windows and macOS
-
-## Stopping containers
-
-Stop the running stack:
-
-```powershell
-docker compose down
-```
-
-Stop the stack and remove MongoDB data:
-
-```powershell
-docker compose down -v
-```
-
-Use `down -v` only when you intentionally want to reset the database.
-
-## Local non-Docker startup
-
-If you want to run the project without Docker:
-
-Backend:
-
-```powershell
+```bash
 cd backend
 python -m venv .venv
-.venv\Scripts\activate
+```
+
+Activate the virtual environment:
+
+- PowerShell: `.venv\Scripts\Activate.ps1`
+- cmd: `.venv\Scripts\activate.bat`
+- Bash: `source .venv/bin/activate`
+
+Install dependencies and run the API:
+
+```bash
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Frontend:
+### 3. Start the frontend
 
-```powershell
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-MongoDB:
+### 4. Open the application
 
-- run MongoDB separately on `localhost:27017`
-- keep `MONGODB_URI=mongodb://localhost:27017` in `backend/.env`
+- Frontend: `http://localhost:5173`
+- Backend API: `http://localhost:8000`
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+- Health check: `http://localhost:8000/api/v1/health`
 
-## Validation notes
+## Run with Docker
 
-The Docker setup is designed so that these checks should succeed in a normal local Docker Desktop environment:
+### 1. Prepare environment files
 
-- `docker compose build`
-- `docker compose up`
-- backend startup after MongoDB becomes healthy
-- frontend startup after backend becomes healthy
-- backend connection to MongoDB through `mongodb:27017`
-- frontend requests to backend through `http://localhost:8000/api/v1`
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
 
-## Limitations
+### 2. Build and start the stack
 
-- The frontend container runs the Vite development server, not a production Nginx build. This is intentional for local coursework demonstration and faster iteration.
-- Live reload depends on bind mounts and polling, so file watching can be slower than a fully native run.
-- Docker Desktop or another compatible Docker engine must be running before using `docker compose`.
+```bash
+docker compose up --build
+```
 
-## Useful commands
+Detached mode:
 
-```powershell
-docker compose logs -f
-docker compose logs -f backend
-docker compose logs -f frontend
-docker compose logs -f mongodb
-docker compose ps
+```bash
+docker compose up --build -d
+```
+
+### 3. Available services
+
+- `mongodb` on `localhost:27017`
+- `backend` on `localhost:8000`
+- `frontend` on `localhost:5173`
+
+### Docker Compose details
+
+- MongoDB uses a named volume: `mongo_data`
+- Frontend dependencies use a named volume: `frontend_node_modules`
+- The backend source is bind-mounted into the container
+- The frontend source is bind-mounted into the container
+- MongoDB has a healthcheck before the backend starts
+- The backend has a healthcheck before the frontend starts
+- Compose overrides backend `MONGODB_URI` to `mongodb://mongodb:27017`
+- The frontend still uses `http://localhost:8000/api/v1` because the browser calls the API from the host machine
+- Polling-based file watching is enabled for Docker Desktop compatibility
+
+### Stop the stack
+
+```bash
+docker compose down
+```
+
+To remove the MongoDB volume and reset all stored data:
+
+```bash
+docker compose down -v
 ```
 
 ## Testing
 
-Backend tests can still be run outside Docker:
+The repository currently has **backend automated tests** and **no frontend automated test suite yet**.
 
-```powershell
+### Run the backend test suite
+
+```bash
 cd backend
 pytest
+```
+
+Pytest is configured through `pyproject.toml` and includes coverage by default:
+
+- `--cov=app`
+- `--cov-report=term-missing`
+- `--cov-report=xml`
+
+### Run only integration tests
+
+```bash
+cd backend
 pytest app/tests/integration -o addopts=
 ```
 
-The integration suite uses a dedicated MongoDB test database and does not need any change to the one-hall cinema domain model.
+### Frontend verification
+
+There is no frontend test runner configured in `package.json` yet. The current lightweight verification command is:
+
+```bash
+cd frontend
+npm run build
+```
+
+### What the backend tests cover
+
+- authentication and access control
+- admin registration rules
+- movie CRUD and visibility behavior
+- schedule filtering, sorting, and validation
+- session overlap and edit/cancel restrictions
+- ticket purchase and cancellation
+- concurrent purchase protection for the same seat
+- pagination, password hashing, validators, and indexes
+
+### Integration test database behavior
+
+- Integration tests use a dedicated MongoDB database.
+- The default test DB name is `cinema_showcase_test`.
+- The suite drops the test database before and after execution.
+- The tests refuse to run against the development DB name `cinema_showcase`.
+- If MongoDB is unavailable, integration tests are skipped rather than faking a database.
+
+## Admin Access
+
+Admin access is determined **during registration** by the backend setting `ADMIN_EMAILS`.
+
+### How to create an admin account
+
+1. Copy `backend/.env.example` to `backend/.env`.
+2. Set `ADMIN_EMAILS` to include the email address that should become an admin.
+3. Start or restart the backend.
+4. Register a new account from the frontend using that exact email.
+5. Log in.
+6. Open `/admin` or use the `Admin` button in the header.
+
+### Important admin-role behavior
+
+- The client cannot self-assign the admin role.
+- Admin role is assigned server-side only when the registering email matches `ADMIN_EMAILS`.
+- Existing users are **not** upgraded automatically if you add their email later.
+- If an email was already registered as a normal user, use a new email or reset/remove that user first.
+- For a full Docker demo reset, `docker compose down -v` clears the MongoDB volume.
+
+## API and Swagger
+
+### API entry points
+
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+- OpenAPI JSON: `http://localhost:8000/openapi.json`
+- Health endpoint: `http://localhost:8000/api/v1/health`
+
+### Main API groups
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/movies`
+- `GET /api/v1/movies/{movie_id}`
+- `GET /api/v1/schedule`
+- `GET /api/v1/schedule/{session_id}`
+- `GET /api/v1/sessions/{session_id}/seats`
+- `POST /api/v1/tickets/purchase`
+- `GET /api/v1/tickets/me`
+- `PATCH /api/v1/tickets/{ticket_id}/cancel`
+- `GET /api/v1/users/me`
+- `PATCH /api/v1/users/me`
+- `DELETE /api/v1/users/me`
+- `GET /api/v1/admin/*`
+
+## Deployment Notes
+
+The repository ships a **local demo/development deployment** through Docker Compose.
+
+That setup is well-suited for coursework, presentations, and local verification, but it is not yet a production deployment package. In the current repository:
+
+- the frontend container runs the Vite development server, not a static production build;
+- the deployment is centered around a single backend instance for local/demo use;
+- there is no reverse proxy, CI/CD pipeline, or cloud deployment manifest in the repo;
+- secrets are environment-based and intended for local setup.
+
+## Current Limitations and Future Work
+
+### Current limitations
+
+- The project is intentionally designed around a **single hall**. Multi-hall scheduling is out of scope for the current domain model.
+- Ticket purchase is an **application-level reservation flow**. There is no payment gateway integration.
+- Frontend automated tests are not configured yet.
+- The booking workflow is strong for a **single backend instance**, but the in-memory per-session lock only coordinates writes inside one process.
+- The backend does not currently use MongoDB multi-document transactions for booking/cancellation flows.
+- Poster handling is URL-based; there is no built-in media upload pipeline.
+- The repository does not include seed/demo data scripts yet.
+
+### Good next improvements
+
+- Add frontend tests for route flows, auth, and booking interactions.
+- Introduce seeded demo content for faster presentations and coursework demos.
+- Harden booking consistency for multi-instance deployments with distributed coordination or transactional strategies.
+- Add a production frontend build + reverse proxy deployment path.
+- Add an explicit admin bootstrap or seed command instead of relying only on `ADMIN_EMAILS` registration.

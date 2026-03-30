@@ -20,6 +20,7 @@ from app.schemas.movie import MovieCreate, MovieRead, MovieUpdate
 from app.schemas.report import AttendanceReportRead, AttendanceSessionSummary
 from app.schemas.session import SessionCreate, SessionDetailsRead, SessionRead, SessionUpdate
 from app.schemas.user import UserRead
+from app.utils.session_locks import session_write_lock
 
 
 class AdminService:
@@ -187,11 +188,12 @@ class AdminService:
 
     async def cancel_session(self, session_id: str, cancelled_by: UserRead) -> SessionRead:
         """Cancel an existing session via a command object."""
-        command = SessionCancellationCommand(
-            session_repository=self.session_repository,
-            event_publisher=self.event_publisher,
-        )
-        return await command.execute(session_id=session_id, cancelled_by=cancelled_by)
+        async with session_write_lock(session_id):
+            command = SessionCancellationCommand(
+                session_repository=self.session_repository,
+                event_publisher=self.event_publisher,
+            )
+            return await command.execute(session_id=session_id, cancelled_by=cancelled_by)
 
     async def update_session(
         self,
@@ -205,84 +207,90 @@ class AdminService:
         if not updates:
             raise ValidationException("At least one session field must be provided for update.")
 
-        now = datetime.now(tz=timezone.utc)
-        await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
+        async with session_write_lock(session_id):
+            now = datetime.now(tz=timezone.utc)
+            await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
 
-        existing_session = await self.session_repository.get_by_id(session_id)
-        if existing_session is None:
-            raise NotFoundException("Session was not found.")
-        update_blocker = self._get_session_update_blocker(existing_session, now=now)
-        if update_blocker is not None:
-            raise ConflictException(update_blocker)
-
-        purchased_tickets = await self.ticket_repository.count_by_session(session_id, active_only=True)
-        if purchased_tickets > 0:
-            raise ConflictException("Sessions with purchased tickets cannot be edited. Cancel the session instead.")
-
-        movie_id = str(updates.get("movie_id", existing_session["movie_id"]))
-        start_time = self._normalize_session_time(
-            updates["start_time"] if "start_time" in updates else existing_session["start_time"]
-        )
-        end_time = self._normalize_session_time(
-            updates["end_time"] if "end_time" in updates else existing_session["end_time"]
-        )
-
-        movie = await self._require_movie_for_scheduling(
-            movie_id,
-            allow_inactive_when_same=movie_id == existing_session["movie_id"],
-        )
-        self._validate_session_slot(movie=movie, start_time=start_time, end_time=end_time, now=now)
-
-        overlapping = await self.session_repository.find_overlapping(
-            start_time=start_time,
-            end_time=end_time,
-            exclude_session_id=session_id,
-        )
-        if overlapping is not None:
-            raise ConflictException("Session overlaps with an existing session in the only hall.")
-
-        updated_document = await self.session_repository.update_session_if_editable(
-            session_id,
-            updates={
-                "movie_id": movie_id,
-                "start_time": start_time,
-                "end_time": end_time,
-                "price": updates.get("price", existing_session["price"]),
-            },
-            current_time=now,
-            updated_at=now,
-        )
-        if updated_document is None:
-            latest_session = await self.session_repository.get_by_id(session_id)
-            if latest_session is None:
+            existing_session = await self.session_repository.get_by_id(session_id)
+            if existing_session is None:
                 raise NotFoundException("Session was not found.")
-            latest_update_blocker = self._get_session_update_blocker(latest_session, now=now)
-            if latest_update_blocker is not None:
-                raise ConflictException(latest_update_blocker)
-            if latest_session["available_seats"] < latest_session["total_seats"]:
-                raise ConflictException("Sessions with purchased tickets cannot be edited. Cancel the session instead.")
-            raise ConflictException("Session can no longer be edited.")
+            update_blocker = self._get_session_update_blocker(existing_session, now=now)
+            if update_blocker is not None:
+                raise ConflictException(update_blocker)
 
-        return SessionDetailsFactory.build(
-            session=SessionRead.model_validate(updated_document),
-            movie=movie,
-        )
+            purchased_tickets = await self.ticket_repository.count_by_session(session_id, active_only=True)
+            if purchased_tickets > 0:
+                raise ConflictException(
+                    "Sessions with purchased tickets cannot be edited. Cancel the session instead."
+                )
+
+            movie_id = str(updates.get("movie_id", existing_session["movie_id"]))
+            start_time = self._normalize_session_time(
+                updates["start_time"] if "start_time" in updates else existing_session["start_time"]
+            )
+            end_time = self._normalize_session_time(
+                updates["end_time"] if "end_time" in updates else existing_session["end_time"]
+            )
+
+            movie = await self._require_movie_for_scheduling(
+                movie_id,
+                allow_inactive_when_same=movie_id == existing_session["movie_id"],
+            )
+            self._validate_session_slot(movie=movie, start_time=start_time, end_time=end_time, now=now)
+
+            overlapping = await self.session_repository.find_overlapping(
+                start_time=start_time,
+                end_time=end_time,
+                exclude_session_id=session_id,
+            )
+            if overlapping is not None:
+                raise ConflictException("Session overlaps with an existing session in the only hall.")
+
+            updated_document = await self.session_repository.update_session_if_editable(
+                session_id,
+                updates={
+                    "movie_id": movie_id,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "price": updates.get("price", existing_session["price"]),
+                },
+                current_time=now,
+                updated_at=now,
+            )
+            if updated_document is None:
+                latest_session = await self.session_repository.get_by_id(session_id)
+                if latest_session is None:
+                    raise NotFoundException("Session was not found.")
+                latest_update_blocker = self._get_session_update_blocker(latest_session, now=now)
+                if latest_update_blocker is not None:
+                    raise ConflictException(latest_update_blocker)
+                if latest_session["available_seats"] < latest_session["total_seats"]:
+                    raise ConflictException(
+                        "Sessions with purchased tickets cannot be edited. Cancel the session instead."
+                    )
+                raise ConflictException("Session can no longer be edited.")
+
+            return SessionDetailsFactory.build(
+                session=SessionRead.model_validate(updated_document),
+                movie=movie,
+            )
 
     async def delete_session(self, session_id: str, deleted_by: UserRead) -> DeleteResultRead:
         """Delete a session only when no tickets have ever been stored for it."""
         _ = deleted_by
-        session = await self.session_repository.get_by_id(session_id)
-        if session is None:
-            raise NotFoundException("Session was not found.")
+        async with session_write_lock(session_id):
+            session = await self.session_repository.get_by_id(session_id)
+            if session is None:
+                raise NotFoundException("Session was not found.")
 
-        stored_tickets = await self.ticket_repository.count_by_session(session_id, active_only=False)
-        if stored_tickets > 0:
-            raise ConflictException("Sessions with stored tickets cannot be deleted. Cancel the session instead.")
+            stored_tickets = await self.ticket_repository.count_by_session(session_id, active_only=False)
+            if stored_tickets > 0:
+                raise ConflictException("Sessions with stored tickets cannot be deleted. Cancel the session instead.")
 
-        deleted = await self.session_repository.delete_session(session_id)
-        if not deleted:
-            raise NotFoundException("Session was not found.")
-        return DeleteResultRead(id=session_id)
+            deleted = await self.session_repository.delete_session(session_id)
+            if not deleted:
+                raise NotFoundException("Session was not found.")
+            return DeleteResultRead(id=session_id)
 
     async def build_attendance_report(self, requested_by: UserRead) -> AttendanceReportRead:
         """Build an attendance report across all sessions."""

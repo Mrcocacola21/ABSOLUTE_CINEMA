@@ -71,9 +71,11 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
     )
 
     session_validator_clauses = sessions_command["validator"]["$and"]
+    ticket_validator_clauses = tickets_command["validator"]["$and"]
     session_properties = session_validator_clauses[0]["$jsonSchema"]["properties"]
     session_expr = session_validator_clauses[1]["$expr"]["$and"]
-    ticket_properties = tickets_command["validator"]["$jsonSchema"]["properties"]
+    ticket_properties = ticket_validator_clauses[0]["$jsonSchema"]["properties"]
+    ticket_expr = ticket_validator_clauses[1]["$expr"]["$or"]
 
     assert session_properties["movie_id"]["bsonType"] == "string"
     assert session_properties["updated_at"]["bsonType"] == ["date", "null"]
@@ -81,3 +83,5 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
     assert {"$lte": ["$available_seats", "$total_seats"]} in session_expr
     assert ticket_properties["user_id"]["bsonType"] == "string"
     assert ticket_properties["session_id"]["bsonType"] == "string"
+    assert any({"$eq": ["$status", "purchased"]} in clause["$and"] for clause in ticket_expr)
+    assert any({"$eq": ["$status", "cancelled"]} in clause["$and"] for clause in ticket_expr)

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
 from bson import ObjectId
 
+from app.core.exceptions import DatabaseException
 from app.db.collections import DatabaseCollections
 
 from app.tests.integration.conftest import API_PREFIX
@@ -102,6 +104,63 @@ async def test_duplicate_seat_purchase_is_rejected_without_double_decrement(
     assert stored_session["available_seats"] == stored_session["total_seats"] - 1
 
     stored_tickets = await database[DatabaseCollections.TICKETS].count_documents({"session_id": session["id"]})
+    assert stored_tickets == 1
+
+
+@pytest.mark.asyncio
+async def test_fast_concurrent_requests_for_same_seat_only_create_one_ticket(
+    client: httpx.AsyncClient,
+    database,
+    user_auth: dict[str, object],
+    create_authenticated_user,
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Concurrent Seat Purchase Movie", duration_minutes=120)
+    session = await create_session(movie_id=movie["id"], start_hour=14, duration_minutes=160, price=255)
+
+    second_user = await create_authenticated_user(email="seat-race-2@example.com", name="Seat Race 2")
+    third_user = await create_authenticated_user(email="seat-race-3@example.com", name="Seat Race 3")
+
+    async def purchase(headers: dict[str, str]) -> httpx.Response:
+        return await client.post(
+            f"{API_PREFIX}/tickets/purchase",
+            headers=headers,
+            json={
+                "session_id": session["id"],
+                "seat_row": 6,
+                "seat_number": 8,
+            },
+        )
+
+    responses = await asyncio.gather(
+        purchase(user_auth["headers"]),
+        purchase(second_user["headers"]),
+        purchase(third_user["headers"]),
+    )
+
+    assert sorted(response.status_code for response in responses) == [201, 409, 409]
+    conflict_messages = [
+        response.json()["error"]["message"]
+        for response in responses
+        if response.status_code == 409
+    ]
+    assert conflict_messages == [
+        "Selected seat has already been purchased.",
+        "Selected seat has already been purchased.",
+    ]
+
+    stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
+    stored_tickets = await database[DatabaseCollections.TICKETS].count_documents(
+        {
+            "session_id": session["id"],
+            "seat_row": 6,
+            "seat_number": 8,
+            "status": "purchased",
+        }
+    )
+    assert stored_session is not None
+    assert stored_session["available_seats"] == stored_session["total_seats"] - 1
     assert stored_tickets == 1
 
 
@@ -217,6 +276,49 @@ async def test_purchase_is_rejected_when_no_seats_left_and_counter_stays_non_neg
 
 
 @pytest.mark.asyncio
+async def test_purchase_insert_failure_restores_available_seats_and_keeps_session_consistent(
+    client: httpx.AsyncClient,
+    database,
+    monkeypatch: pytest.MonkeyPatch,
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Ticket Insert Failure Movie", duration_minutes=120)
+    session = await create_session(movie_id=movie["id"], start_hour=17, duration_minutes=160)
+
+    async def fail_create_ticket(self, document: dict[str, object]) -> dict[str, object]:
+        _ = (self, document)
+        raise DatabaseException("Simulated ticket insert failure.")
+
+    monkeypatch.setattr(
+        "app.repositories.tickets.TicketRepository.create_ticket",
+        fail_create_ticket,
+    )
+
+    response = await client.post(
+        f"{API_PREFIX}/tickets/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seat_row": 1,
+            "seat_number": 3,
+        },
+    )
+
+    assert response.status_code == 503
+    body = response.json()
+    assert body["error"]["code"] == "database_error"
+    assert body["error"]["message"] == "Simulated ticket insert failure."
+
+    stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
+    stored_tickets = await database[DatabaseCollections.TICKETS].count_documents({"session_id": session["id"]})
+    assert stored_session is not None
+    assert stored_session["available_seats"] == stored_session["total_seats"]
+    assert stored_tickets == 0
+
+
+@pytest.mark.asyncio
 async def test_current_user_can_list_and_cancel_tickets_and_admin_can_list_all_tickets(
     client: httpx.AsyncClient,
     database,
@@ -279,6 +381,61 @@ async def test_current_user_can_list_and_cancel_tickets_and_admin_can_list_all_t
 
 
 @pytest.mark.asyncio
+async def test_ticket_for_cancelled_future_session_can_still_be_cancelled_and_releases_the_seat(
+    client: httpx.AsyncClient,
+    database,
+    admin_auth: dict[str, object],
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Cancelled Session Ticket Movie", duration_minutes=120)
+    session = await create_session(movie_id=movie["id"], start_hour=19, duration_minutes=160)
+
+    purchase_response = await client.post(
+        f"{API_PREFIX}/tickets/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seat_row": 7,
+            "seat_number": 2,
+        },
+    )
+    assert purchase_response.status_code == 201
+    ticket_id = purchase_response.json()["data"]["id"]
+
+    cancel_session_response = await client.patch(
+        f"{API_PREFIX}/admin/sessions/{session['id']}/cancel",
+        headers=admin_auth["headers"],
+    )
+    assert cancel_session_response.status_code == 200
+
+    my_tickets_response = await client.get(f"{API_PREFIX}/tickets/me", headers=user_auth["headers"])
+    assert my_tickets_response.status_code == 200
+    assert my_tickets_response.json()["data"][0]["is_cancellable"] is True
+
+    cancel_ticket_response = await client.patch(
+        f"{API_PREFIX}/tickets/{ticket_id}/cancel",
+        headers=user_auth["headers"],
+    )
+    assert cancel_ticket_response.status_code == 200
+    assert cancel_ticket_response.json()["data"]["status"] == "cancelled"
+
+    stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
+    assert stored_session is not None
+    assert stored_session["available_seats"] == stored_session["total_seats"]
+
+    seats_response = await client.get(f"{API_PREFIX}/sessions/{session['id']}/seats")
+    assert seats_response.status_code == 200
+    seats_payload = seats_response.json()["data"]
+    released_seat = next(
+        seat for seat in seats_payload["seats"] if seat["row"] == 7 and seat["number"] == 2
+    )
+    assert released_seat["is_available"] is True
+    assert seats_payload["available_seats"] == seats_payload["total_seats"]
+
+
+@pytest.mark.asyncio
 async def test_ticket_cancellation_is_rejected_when_repeated_twice(
     client: httpx.AsyncClient,
     database,
@@ -319,6 +476,69 @@ async def test_ticket_cancellation_is_rejected_when_repeated_twice(
     stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
     assert stored_session is not None
     assert stored_session["available_seats"] == stored_session["total_seats"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("start_shift", "end_shift", "expected_message"),
+    [
+        (timedelta(minutes=-20), timedelta(hours=2), "Tickets can only be cancelled before the session starts."),
+        (timedelta(hours=-3), timedelta(hours=-1), "Tickets for completed sessions cannot be cancelled."),
+    ],
+)
+async def test_ticket_cancellation_for_started_or_completed_sessions_is_rejected(
+    client: httpx.AsyncClient,
+    database,
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+    start_shift: timedelta,
+    end_shift: timedelta,
+    expected_message: str,
+) -> None:
+    movie = await create_movie(title="Unavailable Ticket Cancellation Movie", duration_minutes=120)
+    session = await create_session(movie_id=movie["id"], start_hour=20, duration_minutes=160)
+
+    purchase_response = await client.post(
+        f"{API_PREFIX}/tickets/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seat_row": 8,
+            "seat_number": 4,
+        },
+    )
+    assert purchase_response.status_code == 201
+    ticket_id = purchase_response.json()["data"]["id"]
+
+    now = datetime.now(tz=timezone.utc)
+    await database[DatabaseCollections.SESSIONS].update_one(
+        {"_id": ObjectId(session["id"])},
+        {
+            "$set": {
+                "status": "scheduled",
+                "start_time": now + start_shift,
+                "end_time": now + end_shift,
+            }
+        },
+    )
+
+    cancel_response = await client.patch(
+        f"{API_PREFIX}/tickets/{ticket_id}/cancel",
+        headers=user_auth["headers"],
+    )
+
+    assert cancel_response.status_code == 409
+    body = cancel_response.json()
+    assert body["error"]["code"] == "conflict"
+    assert body["error"]["message"] == expected_message
+
+    stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
+    stored_ticket = await database[DatabaseCollections.TICKETS].find_one({"_id": ObjectId(ticket_id)})
+    assert stored_session is not None
+    assert stored_ticket is not None
+    assert stored_session["available_seats"] == stored_session["total_seats"] - 1
+    assert stored_ticket["status"] == "purchased"
 
 
 @pytest.mark.asyncio

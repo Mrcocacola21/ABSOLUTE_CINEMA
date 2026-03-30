@@ -172,52 +172,74 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
     },
     DatabaseCollections.TICKETS: {
         "validator": {
-            "$jsonSchema": {
-                "bsonType": "object",
-                "required": [
-                    "user_id",
-                    "session_id",
-                    "seat_row",
-                    "seat_number",
-                    "price",
-                    "status",
-                    "purchased_at",
-                ],
-                "properties": {
-                    "user_id": {
-                        "bsonType": "string",
-                        "minLength": 1,
-                    },
-                    "session_id": {
-                        "bsonType": "string",
-                        "minLength": 1,
-                    },
-                    "seat_row": {
-                        "bsonType": ["int", "long"],
-                        "minimum": 1,
-                    },
-                    "seat_number": {
-                        "bsonType": ["int", "long"],
-                        "minimum": 1,
-                    },
-                    "price": {
-                        "bsonType": ["int", "long", "double", "decimal"],
-                        "minimum": 0,
-                    },
-                    "status": {
-                        "enum": [TicketStatuses.PURCHASED, TicketStatuses.CANCELLED],
-                    },
-                    "purchased_at": {
-                        "bsonType": "date",
-                    },
-                    "updated_at": {
-                        "bsonType": ["date", "null"],
-                    },
-                    "cancelled_at": {
-                        "bsonType": ["date", "null"],
-                    },
+            "$and": [
+                {
+                    "$jsonSchema": {
+                        "bsonType": "object",
+                        "required": [
+                            "user_id",
+                            "session_id",
+                            "seat_row",
+                            "seat_number",
+                            "price",
+                            "status",
+                            "purchased_at",
+                        ],
+                        "properties": {
+                            "user_id": {
+                                "bsonType": "string",
+                                "minLength": 1,
+                            },
+                            "session_id": {
+                                "bsonType": "string",
+                                "minLength": 1,
+                            },
+                            "seat_row": {
+                                "bsonType": ["int", "long"],
+                                "minimum": 1,
+                            },
+                            "seat_number": {
+                                "bsonType": ["int", "long"],
+                                "minimum": 1,
+                            },
+                            "price": {
+                                "bsonType": ["int", "long", "double", "decimal"],
+                                "minimum": 0,
+                            },
+                            "status": {
+                                "enum": [TicketStatuses.PURCHASED, TicketStatuses.CANCELLED],
+                            },
+                            "purchased_at": {
+                                "bsonType": "date",
+                            },
+                            "updated_at": {
+                                "bsonType": ["date", "null"],
+                            },
+                            "cancelled_at": {
+                                "bsonType": ["date", "null"],
+                            },
+                        },
+                    }
                 },
-            }
+                {
+                    "$expr": {
+                        "$or": [
+                            {
+                                "$and": [
+                                    {"$eq": ["$status", TicketStatuses.PURCHASED]},
+                                    {"$eq": [{"$ifNull": ["$cancelled_at", None]}, None]},
+                                ]
+                            },
+                            {
+                                "$and": [
+                                    {"$eq": ["$status", TicketStatuses.CANCELLED]},
+                                    {"$ne": [{"$ifNull": ["$cancelled_at", None]}, None]},
+                                ]
+                            },
+                        ]
+                    }
+                },
+            ]
         },
         "validationLevel": "strict",
         "validationAction": "error",

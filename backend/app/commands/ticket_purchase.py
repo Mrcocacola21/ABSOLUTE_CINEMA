@@ -6,7 +6,12 @@ from datetime import datetime, timezone
 
 from app.core.config import get_settings
 from app.core.constants import SessionStatuses, TicketStatuses
-from app.core.exceptions import ConflictException, NotFoundException, ValidationException
+from app.core.exceptions import (
+    ConflictException,
+    DatabaseException,
+    NotFoundException,
+    ValidationException,
+)
 from app.core.logging import get_logger
 from app.observers.events import EventPublisher, new_ticket_purchased_event
 from app.repositories.sessions import SessionRepository
@@ -83,8 +88,12 @@ class TicketPurchaseCommand:
         }
         try:
             ticket = await self.ticket_repository.create_ticket(ticket_document)
-        except Exception:
-            await self._reconcile_available_seats(payload.session_id, updated_at=now)
+        except Exception as exc:
+            restored = await self._restore_reserved_seat(payload.session_id, updated_at=now)
+            if not restored:
+                raise DatabaseException(
+                    "Ticket purchase failed and the session seat counter could not be restored."
+                ) from exc
             raise
 
         try:
@@ -129,11 +138,31 @@ class TicketPurchaseCommand:
             return "There are no available seats left for this session."
         return None
 
-    async def _reconcile_available_seats(self, session_id: str, *, updated_at: datetime) -> None:
+    async def _restore_reserved_seat(self, session_id: str, *, updated_at: datetime) -> bool:
+        seats_restored = await self.session_repository.increment_available_seats(
+            session_id,
+            updated_at=updated_at,
+        )
+        if seats_restored:
+            return True
+        if await self._session_counter_matches_active_tickets(session_id):
+            return True
+        return await self._reconcile_available_seats(session_id, updated_at=updated_at)
+
+    async def _session_counter_matches_active_tickets(self, session_id: str) -> bool:
+        session = await self.session_repository.get_by_id(session_id)
+        if session is None:
+            return False
+
+        active_ticket_count = await self.ticket_repository.count_by_session(session_id, active_only=True)
+        expected_available_seats = session["total_seats"] - active_ticket_count
+        return session["available_seats"] == expected_available_seats
+
+    async def _reconcile_available_seats(self, session_id: str, *, updated_at: datetime) -> bool:
         session = await self.session_repository.get_by_id(session_id)
         if session is None:
             logger.error("Unable to reconcile seats for missing session %s", session_id)
-            return
+            return False
 
         active_ticket_count = await self.ticket_repository.count_by_session(session_id, active_only=True)
         expected_available_seats = session["total_seats"] - active_ticket_count
@@ -144,3 +173,5 @@ class TicketPurchaseCommand:
         )
         if repaired_session is None:
             logger.error("Unable to reconcile available seats for session %s", session_id)
+            return False
+        return True

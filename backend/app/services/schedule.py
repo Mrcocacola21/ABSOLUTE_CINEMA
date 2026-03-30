@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.core.exceptions import NotFoundException
 from app.factories.schedule_factory import ScheduleItemFactory, SessionDetailsFactory
 from app.repositories.movies import MovieRepository
@@ -22,6 +23,8 @@ from app.schemas.session import (
 )
 from app.strategies.schedule_sorting import ScheduleSortingStrategyFactory
 from app.utils.pagination import build_pagination_meta
+
+logger = get_logger(__name__)
 
 
 class ScheduleService:
@@ -96,6 +99,14 @@ class ScheduleService:
             (ticket["seat_row"], ticket["seat_number"])
             for ticket in tickets
         }
+        derived_available_seats = max(session.total_seats - len(occupied), 0)
+        if derived_available_seats != session.available_seats:
+            logger.warning(
+                "Seat counter mismatch detected for session %s: stored=%s derived=%s",
+                session.id,
+                session.available_seats,
+                derived_available_seats,
+            )
 
         seats = [
             SeatAvailabilityRead(
@@ -111,7 +122,7 @@ class ScheduleService:
             rows_count=settings.hall_rows_count,
             seats_per_row=settings.hall_seats_per_row,
             total_seats=session.total_seats,
-            available_seats=session.available_seats,
+            available_seats=derived_available_seats,
             seats=seats,
         )
 

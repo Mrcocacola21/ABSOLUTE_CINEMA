@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { getMoviesRequest, getScheduleRequest } from "@/api/schedule";
 import { useAuth } from "@/features/auth/useAuth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { getMovieStatusBadgeClassName } from "@/shared/movieStatus";
+import { formatCurrency, formatDateTime } from "@/shared/presentation";
 import { buildRotationMovies } from "@/shared/scheduleBrowse";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, ScheduleItem } from "@/types/domain";
@@ -64,16 +66,43 @@ export function HomePage() {
     [movies],
   );
 
+  const featuredActiveMovie = activeMovies[0] ?? null;
   const featuredPlannedMovie = plannedMovies[0] ?? null;
+  const spotlightMovie = featuredActiveMovie ? (moviesById[featuredActiveMovie.id] ?? null) : featuredPlannedMovie;
+  const spotlightVariant = featuredActiveMovie ? "active" : spotlightMovie ? "planned" : "empty";
+  const spotlightDescription = spotlightMovie
+    ? spotlightMovie.description ||
+      (featuredActiveMovie ? t("homeMovieFallback") : t("homePlannedFallback"))
+    : t("comingSoonEmptyText");
+  const spotlightSummary = featuredActiveMovie
+    ? t("homeActiveBannerLine", {
+        sessions: featuredActiveMovie.upcomingSessions,
+        price: formatCurrency(featuredActiveMovie.minPrice),
+      })
+    : spotlightMovie
+      ? t("homePlannedBannerLine")
+      : t("comingSoonEmptyText");
+  const spotlightMeta: string[] = spotlightMovie
+    ? [spotlightMovie.age_rating, ...spotlightMovie.genres.slice(0, 2)].filter(
+        (item): item is string => Boolean(item),
+      )
+    : [];
 
   return (
     <>
       <section className="page-header page-header--home home-hero">
         <div className="home-hero__copy">
-          <p className="page-eyebrow">{t("brand")}</p>
-          <h1 className="page-title">{t("homeHeroTitle")}</h1>
-          <p className="page-subtitle">{t("homeHeroIntro")}</p>
-          <div className="actions-row">
+          <div className="home-hero__topline">
+            <p className="page-eyebrow">{t("brand")}</p>
+            <p className="home-hero__tagline">{t("brandTagline")}</p>
+          </div>
+
+          <div className="home-hero__lead">
+            <h1 className="page-title">{t("homeHeroTitle")}</h1>
+            <p className="page-subtitle">{t("homeHeroIntro")}</p>
+          </div>
+
+          <div className="actions-row home-hero__actions">
             <Link to="/movies" className="button--ghost">
               {t("browseMovies")}
             </Link>
@@ -81,32 +110,86 @@ export function HomePage() {
               {role === "admin" ? t("openAdmin") : t("browseSchedule")}
             </Link>
           </div>
-        </div>
 
-        <div className="home-hero__aside">
-          <div className="home-hero__metrics">
-            <div className="home-hero__metric">
-              <span>{t("activeLabel")}</span>
-              <strong>{activeMovies.length}</strong>
+          <div className="home-hero__summary" aria-label={t("homeResultsLabel", { movies: movies.length, sessions: items.length })}>
+            <div className="home-hero__summary-item">
+              <span className="home-hero__summary-value">{activeMovies.length}</span>
+              <span className="home-hero__summary-label">{t("activeLabel")}</span>
             </div>
-            <div className="home-hero__metric">
-              <span>{t("plannedLabel")}</span>
-              <strong>{plannedMovies.length}</strong>
+            <div className="home-hero__summary-item">
+              <span className="home-hero__summary-value">{plannedMovies.length}</span>
+              <span className="home-hero__summary-label">{t("plannedLabel")}</span>
             </div>
-            <div className="home-hero__metric">
-              <span>{t("upcomingSessions")}</span>
-              <strong>{items.length}</strong>
+            <div className="home-hero__summary-item">
+              <span className="home-hero__summary-value">{items.length}</span>
+              <span className="home-hero__summary-label">{t("upcomingSessions")}</span>
             </div>
           </div>
+        </div>
 
-          <div className="home-hero__note">
-            <p className="page-eyebrow">{t("comingSoonEyebrow")}</p>
-            <strong>{featuredPlannedMovie ? featuredPlannedMovie.title : t("comingSoonEmptyTitle")}</strong>
-            <p className="muted">
-              {featuredPlannedMovie
-                ? featuredPlannedMovie.description || t("homePlannedFallback")
-                : t("comingSoonEmptyText")}
-            </p>
+        <div className={`home-hero__spotlight home-hero__spotlight--${spotlightVariant}`}>
+          {spotlightMovie?.poster_url ? (
+            <div
+              className="home-hero__spotlight-backdrop"
+              aria-hidden="true"
+              style={{ backgroundImage: `url(${spotlightMovie.poster_url})` }}
+            />
+          ) : null}
+          <div className="home-hero__spotlight-scrim" aria-hidden="true" />
+
+          <div className="home-hero__spotlight-body">
+            {spotlightMovie ? (
+              <div className="home-hero__spotlight-topline">
+                <span className={getMovieStatusBadgeClassName(spotlightMovie.status)}>
+                  {t(`${spotlightMovie.status}Label`)}
+                </span>
+                {featuredActiveMovie ? (
+                  <span className="badge home-hero__spotlight-session">
+                    {formatDateTime(featuredActiveMovie.nextSession.start_time)}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="home-hero__spotlight-copy">
+              <p className="page-eyebrow">
+                {featuredActiveMovie ? t("nowShowingEyebrow") : t("comingSoonEyebrow")}
+              </p>
+              <h2 className="home-hero__spotlight-title">
+                {spotlightMovie ? spotlightMovie.title : t("comingSoonEmptyTitle")}
+              </h2>
+              <p className="home-hero__spotlight-description">{spotlightDescription}</p>
+            </div>
+
+            {spotlightMeta.length > 0 ? (
+              <div className="home-hero__spotlight-meta">
+                {spotlightMeta.map((item) => (
+                  <span key={item} className="badge">
+                    {item}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="home-hero__spotlight-footer">
+              <p className="home-hero__spotlight-summary">{spotlightSummary}</p>
+              <Link
+                to={
+                  featuredActiveMovie
+                    ? `/schedule/${featuredActiveMovie.nextSession.id}`
+                    : spotlightMovie
+                      ? `/movies/${spotlightMovie.id}`
+                      : "/movies"
+                }
+                className="button--ghost home-hero__spotlight-action"
+              >
+                {featuredActiveMovie
+                  ? t("viewNextSession")
+                  : spotlightMovie
+                    ? t("movieDetailsAction")
+                    : t("browseMovies")}
+              </Link>
+            </div>
           </div>
         </div>
       </section>

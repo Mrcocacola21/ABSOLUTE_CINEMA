@@ -86,20 +86,29 @@ export function PlanningShelf({
                     <span>{getMovieMonogram(movie.title)}</span>
                   )}
                 </div>
-                <div>
-                  <strong>{movie.title}</strong>
-                  <p className="muted">{movie.duration_minutes} min</p>
+                <div className="admin-source-card__copy">
+                  <strong className="admin-source-card__title">{movie.title}</strong>
+                  <div className="admin-source-card__meta">
+                    <span className={getMovieStatusBadgeClassName(movie.status)}>
+                      {formatStateLabel(movie.status)}
+                    </span>
+                    {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
+                    <span className="badge admin-source-card__duration-badge">{movie.duration_minutes} min</span>
+                  </div>
+                  {movie.genres.length > 0 ? (
+                    <div className="admin-source-card__genres">
+                      <span className="badge admin-source-card__genres-badge">{movie.genres.join(", ")}</span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
-              <div className="stats-row">
-                <span className={getMovieStatusBadgeClassName(movie.status)}>
-                  {formatStateLabel(movie.status)}
-                </span>
-                {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
-                {movie.genres.length > 0 ? <span className="badge">{movie.genres.join(", ")}</span> : null}
-              </div>
-              <div className="actions-row">
-                <button className="button--ghost" type="button" disabled={isBusy} onClick={() => onSelectMovie(movie)}>
+              <div className="actions-row admin-source-card__actions">
+                <button
+                  className="button--ghost"
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => onSelectMovie(movie)}
+                >
                   Select
                 </button>
               </div>

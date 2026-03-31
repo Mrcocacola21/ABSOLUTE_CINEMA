@@ -1,5 +1,6 @@
 export type LanguageCode = "uk" | "en";
 export type UserRole = "user" | "admin";
+export type MovieStatus = "planned" | "active" | "deactivated";
 
 export interface User {
   id: string;
@@ -25,7 +26,7 @@ export interface Movie {
   poster_url?: string | null;
   age_rating?: string | null;
   genres: string[];
-  is_active: boolean;
+  status: MovieStatus;
   created_at: string;
   updated_at?: string | null;
 }

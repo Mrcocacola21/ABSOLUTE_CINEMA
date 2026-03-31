@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import { getMovieStatusTranslationKey } from "@/shared/movieStatus";
 import { formatDateTime } from "@/shared/presentation";
 import type { Movie, ScheduleItem } from "@/types/domain";
 
@@ -27,9 +28,7 @@ export function MovieCatalogCard({
   lastSession,
 }: MovieCatalogCardProps) {
   const { t } = useTranslation();
-  const statusClassName = movie.is_active
-    ? "catalog-movie-card__status catalog-movie-card__status--active"
-    : "catalog-movie-card__status catalog-movie-card__status--inactive";
+  const statusClassName = `catalog-movie-card__status catalog-movie-card__status--${movie.status}`;
 
   return (
     <article className="card catalog-movie-card">
@@ -46,17 +45,19 @@ export function MovieCatalogCard({
           <div className="catalog-movie-card__topline">
             <div className="catalog-movie-card__title-row">
               <h3 className="catalog-movie-card__title">{movie.title}</h3>
-              <span className={statusClassName}>{movie.is_active ? t("activeLabel") : t("inactiveLabel")}</span>
+              <div className="catalog-movie-card__title-meta">
+                <span className={statusClassName}>{t(getMovieStatusTranslationKey(movie.status))}</span>
+                {movie.age_rating ? <span className="badge catalog-movie-card__age-rating">{movie.age_rating}</span> : null}
+              </div>
             </div>
 
-            {movie.genres.length > 0 || movie.age_rating ? (
+            {movie.genres.length > 0 ? (
               <div className="meta-row catalog-movie-card__taxonomy">
                 {movie.genres.map((genre) => (
                   <span key={`${movie.id}-${genre}`} className="badge">
                     {genre}
                   </span>
                 ))}
-                {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
               </div>
             ) : null}
           </div>

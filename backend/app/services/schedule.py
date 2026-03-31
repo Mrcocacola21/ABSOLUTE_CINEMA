@@ -23,6 +23,7 @@ from app.schemas.session import (
 )
 from app.strategies.schedule_sorting import ScheduleSortingStrategyFactory
 from app.utils.pagination import build_pagination_meta
+from app.services.movie_status import MovieStatusManager
 
 logger = get_logger(__name__)
 
@@ -39,6 +40,10 @@ class ScheduleService:
         self.session_repository = session_repository
         self.ticket_repository = ticket_repository
         self.movie_repository = movie_repository
+        self.movie_status_manager = MovieStatusManager(
+            movie_repository=movie_repository,
+            session_repository=session_repository,
+        )
 
     async def list_schedule(
         self,
@@ -47,7 +52,7 @@ class ScheduleService:
     ) -> tuple[list[ScheduleItemRead], PaginationMeta]:
         """Return public schedule items with pagination metadata."""
         now = datetime.now(tz=timezone.utc)
-        await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
         session_documents = await self.session_repository.list_public_schedule(
             current_time=now,
             movie_id=filters.movie_id,
@@ -76,7 +81,7 @@ class ScheduleService:
     async def get_session_details(self, session_id: str) -> SessionDetailsRead:
         """Return a session by id or raise if it does not exist."""
         now = datetime.now(tz=timezone.utc)
-        await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
         session_document = await self.session_repository.get_by_id(session_id)
         if session_document is None:
             raise NotFoundException("Session was not found.")

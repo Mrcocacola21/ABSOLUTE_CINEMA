@@ -50,6 +50,7 @@ def get_movie_service() -> MovieService:
     """Create a public movie service instance."""
     return MovieService(
         movie_repository=get_movie_repository(),
+        session_repository=get_session_repository(),
     )
 
 

@@ -6,10 +6,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.core.constants import Roles, SessionStatuses, TicketStatuses
+from app.core.constants import MovieStatuses, Roles, SessionStatuses, TicketStatuses
 from app.core.exceptions import ConflictException, ValidationException
 from app.schemas.movie import MovieUpdate
 from app.schemas.movie import MovieRead
+from app.schemas.movie import MovieCreate
 from app.schemas.session import SessionCreate
 from app.schemas.ticket import TicketRead
 from app.schemas.user import UserRead, UserUpdate
@@ -65,6 +66,18 @@ class FakeSessionRepository:
     async def count_by_movie(self, movie_id: str) -> int:
         _ = movie_id
         return self._count_by_movie
+
+    async def has_future_scheduled_sessions(self, movie_id: str, *, current_time: datetime) -> bool:
+        if self.session is None or self.session["movie_id"] != movie_id:
+            return False
+        return self.session["status"] == SessionStatuses.SCHEDULED and self.session["start_time"] > current_time
+
+    async def list_movie_ids_with_future_scheduled_sessions(self, *, current_time: datetime) -> list[str]:
+        if self.session is None:
+            return []
+        if self.session["status"] != SessionStatuses.SCHEDULED or self.session["start_time"] <= current_time:
+            return []
+        return [str(self.session["movie_id"])]
 
     async def sync_completed_sessions(self, *, current_time: datetime, updated_at: datetime) -> int:
         _ = (current_time, updated_at)
@@ -215,7 +228,12 @@ def build_regular_user() -> UserRead:
     )
 
 
-def build_movie(movie_id: str = "movie-1", *, duration_minutes: int = 120, is_active: bool = True) -> dict[str, object]:
+def build_movie(
+    movie_id: str = "movie-1",
+    *,
+    duration_minutes: int = 120,
+    status: str = MovieStatuses.PLANNED,
+) -> dict[str, object]:
     now = datetime.now(tz=timezone.utc)
     return MovieRead(
         id=movie_id,
@@ -225,7 +243,7 @@ def build_movie(movie_id: str = "movie-1", *, duration_minutes: int = 120, is_ac
         poster_url=None,
         age_rating="PG-13",
         genres=["Sci-Fi", "Drama"],
-        is_active=is_active,
+        status=status,
         created_at=now,
         updated_at=None,
     ).model_dump(mode="python")
@@ -269,11 +287,13 @@ def test_movie_update_schema_normalizes_genres_and_keeps_nullables() -> None:
     payload = MovieUpdate(
         genres=[" Drama ", "", "drama", "Comedy"],
         poster_url=None,
+        status=MovieStatuses.DEACTIVATED,
     )
 
     dumped = payload.model_dump(exclude_unset=True)
 
     assert dumped["genres"] == ["Drama", "Comedy"]
+    assert dumped["status"] == MovieStatuses.DEACTIVATED
     assert "poster_url" in dumped
     assert dumped["poster_url"] is None
 
@@ -324,6 +344,56 @@ async def test_admin_service_requires_session_slot_long_enough_for_movie() -> No
             ),
             created_by=build_admin_user(),
         )
+
+
+@pytest.mark.asyncio
+async def test_admin_service_rejects_active_movie_creation_without_sessions() -> None:
+    service = AdminService(
+        movie_repository=FakeMovieRepository(),
+        session_repository=FakeSessionRepository(),
+        ticket_repository=FakeTicketRepository(),
+    )
+
+    with pytest.raises(ValidationException):
+        await service.create_movie(
+            MovieCreate(
+                title="Premature Active",
+                description="Should fail",
+                duration_minutes=90,
+                genres=["Drama"],
+                status=MovieStatuses.ACTIVE,
+            ),
+            created_by=build_admin_user(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_admin_service_promotes_planned_movie_to_active_after_session_creation() -> None:
+    movie_repository = FakeMovieRepository(movie=build_movie(status=MovieStatuses.PLANNED))
+    session_repository = FakeSessionRepository()
+    ticket_repository = FakeTicketRepository()
+    service = AdminService(
+        movie_repository=movie_repository,
+        session_repository=session_repository,
+        ticket_repository=ticket_repository,
+    )
+    now = datetime.now(tz=timezone.utc) + timedelta(days=1)
+    start_time = now.replace(hour=10, minute=0, second=0, microsecond=0)
+    end_time = start_time + timedelta(minutes=120)
+
+    created = await service.create_session(
+        SessionCreate(
+            movie_id="movie-1",
+            start_time=start_time,
+            end_time=end_time,
+            price=200,
+        ),
+        created_by=build_admin_user(),
+    )
+
+    assert created.movie.status == MovieStatuses.ACTIVE
+    assert movie_repository.movie is not None
+    assert movie_repository.movie["status"] == MovieStatuses.ACTIVE
 
 
 @pytest.mark.asyncio

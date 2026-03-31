@@ -1,5 +1,7 @@
 import type { DragEvent } from "react";
 
+import { getMovieStatusBadgeClassName } from "@/shared/movieStatus";
+import { formatStateLabel } from "@/shared/presentation";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
 import type { Movie } from "@/types/domain";
 import { getMovieMonogram } from "@/widgets/admin/chronoboard/utils";
@@ -37,17 +39,17 @@ export function PlanningShelf({
         <div>
           <p className="page-eyebrow">Planning Shelf</p>
           <h3 className="section-title">Drag source / staging area</h3>
-          <p className="muted">Pick an active title, then drag it onto the board to create a gray draft.</p>
+          <p className="muted">Pick a planned or active title, then drag it onto the board to create a gray draft.</p>
         </div>
         <span className="badge">{planningMovies.length}</span>
       </div>
 
       <label className="field">
-        <span>Find an active movie</span>
+        <span>Find a schedule-ready movie</span>
         <input
           value={plannerMovieQuery}
           onChange={(event) => onPlannerMovieQueryChange(event.target.value)}
-          placeholder="Search active titles"
+          placeholder="Search planned and active titles"
         />
       </label>
 
@@ -90,6 +92,9 @@ export function PlanningShelf({
                 </div>
               </div>
               <div className="stats-row">
+                <span className={getMovieStatusBadgeClassName(movie.status)}>
+                  {formatStateLabel(movie.status)}
+                </span>
                 {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
                 {movie.genres.length > 0 ? <span className="badge">{movie.genres.join(", ")}</span> : null}
               </div>
@@ -104,8 +109,8 @@ export function PlanningShelf({
 
         {planningMovies.length === 0 ? (
           <section className="empty-state empty-state--panel">
-            <h2>No active movies ready</h2>
-            <p>Activate or create a movie first, then drag it from the shelf onto the board.</p>
+            <h2>No schedule-ready movies</h2>
+            <p>Create a planned movie or return a deactivated one to planned before placing it on the board.</p>
           </section>
         ) : null}
       </div>

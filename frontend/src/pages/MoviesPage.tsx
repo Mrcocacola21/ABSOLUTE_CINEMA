@@ -3,11 +3,12 @@ import { useTranslation } from "react-i18next";
 
 import { getMoviesRequest, getScheduleRequest } from "@/api/schedule";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { getMovieStatusPriority } from "@/shared/movieStatus";
 import { StatePanel } from "@/shared/ui/StatePanel";
-import type { Movie, ScheduleItem } from "@/types/domain";
+import type { Movie, MovieStatus, ScheduleItem } from "@/types/domain";
 import { MovieCatalogCard } from "@/widgets/movies/MovieCatalogCard";
 
-type StatusFilter = "all" | "active" | "inactive";
+type StatusFilter = "all" | MovieStatus;
 
 export function MoviesPage() {
   const { t } = useTranslation();
@@ -82,10 +83,7 @@ export function MoviesPage() {
 
     return [...movies]
       .filter((movie) => {
-        if (status === "active" && !movie.is_active) {
-          return false;
-        }
-        if (status === "inactive" && movie.is_active) {
+        if (status !== "all" && movie.status !== status) {
           return false;
         }
         if (genre && !movie.genres.includes(genre)) {
@@ -97,8 +95,9 @@ export function MoviesPage() {
         return movie.title.toLowerCase().includes(normalizedQuery);
       })
       .sort((left, right) => {
-        if (left.is_active !== right.is_active) {
-          return left.is_active ? -1 : 1;
+        const statusComparison = getMovieStatusPriority(left.status) - getMovieStatusPriority(right.status);
+        if (statusComparison !== 0) {
+          return statusComparison;
         }
         return left.title.localeCompare(right.title);
       });
@@ -123,7 +122,13 @@ export function MoviesPage() {
             {movies.length} {t("movies")}
           </span>
           <span className="badge">
-            {movies.filter((movie) => movie.is_active).length} {t("activeLabel")}
+            {movies.filter((movie) => movie.status === "active").length} {t("activeLabel")}
+          </span>
+          <span className="badge">
+            {movies.filter((movie) => movie.status === "planned").length} {t("plannedLabel")}
+          </span>
+          <span className="badge">
+            {movies.filter((movie) => movie.status === "deactivated").length} {t("deactivatedLabel")}
           </span>
           <span className="badge">
             {items.length} {t("upcomingSessions")}
@@ -173,8 +178,9 @@ export function MoviesPage() {
                 onChange={(event) => setStatus(event.target.value as StatusFilter)}
               >
                 <option value="all">{t("allStatuses")}</option>
+                <option value="planned">{t("plannedOnly")}</option>
                 <option value="active">{t("activeOnly")}</option>
-                <option value="inactive">{t("inactiveOnly")}</option>
+                <option value="deactivated">{t("deactivatedOnly")}</option>
               </select>
             </label>
             <div className="toolbar__actions">

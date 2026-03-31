@@ -26,7 +26,7 @@ async def test_admin_can_create_list_read_and_update_movies(
             "poster_url": None,
             "age_rating": "PG-13",
             "genres": ["Sci-Fi", "Drama"],
-            "is_active": True,
+            "status": "planned",
         },
     )
 
@@ -34,10 +34,11 @@ async def test_admin_can_create_list_read_and_update_movies(
     created_movie = create_response.json()["data"]
     movie_id = created_movie["id"]
     assert created_movie["title"] == "Arrival"
+    assert created_movie["status"] == "planned"
 
     stored_movie = await database[DatabaseCollections.MOVIES].find_one({"title": "Arrival"})
     assert stored_movie is not None
-    assert stored_movie["is_active"] is True
+    assert stored_movie["status"] == "planned"
 
     list_response = await client.get(f"{API_PREFIX}/admin/movies", headers=admin_auth["headers"])
     assert list_response.status_code == 200
@@ -61,6 +62,7 @@ async def test_admin_can_create_list_read_and_update_movies(
     assert updated_movie["description"] == "Updated description"
     assert updated_movie["genres"] == ["Drama", "Mystery"]
     assert updated_movie["poster_url"] is None
+    assert updated_movie["status"] == "planned"
 
 
 @pytest.mark.asyncio
@@ -96,7 +98,7 @@ async def test_admin_can_create_and_update_movie_with_localized_fields_and_poste
             "poster_url": poster_url,
             "age_rating": "16+",
             "genres": localized_genres,
-            "is_active": True,
+            "status": "planned",
         },
     )
 
@@ -105,6 +107,7 @@ async def test_admin_can_create_and_update_movie_with_localized_fields_and_poste
     assert created_movie["title"] == localized_title
     assert created_movie["poster_url"] == poster_url
     assert created_movie["genres"] == localized_genres
+    assert created_movie["status"] == "planned"
 
     stored_movie = await database[DatabaseCollections.MOVIES].find_one({"_id": ObjectId(created_movie["id"])})
     assert stored_movie is not None
@@ -124,13 +127,94 @@ async def test_admin_can_create_and_update_movie_with_localized_fields_and_poste
 
 
 @pytest.mark.asyncio
+async def test_admin_can_update_movie_status_when_no_future_sessions(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+    database,
+) -> None:
+    movie = await create_movie(title="Status Update", status="planned")
+
+    response = await client.patch(
+        f"{API_PREFIX}/admin/movies/{movie['id']}",
+        headers=admin_auth["headers"],
+        json={"status": "deactivated"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "deactivated"
+
+    stored_movie = await database[DatabaseCollections.MOVIES].find_one({"_id": ObjectId(movie["id"])})
+    assert stored_movie is not None
+    assert stored_movie["status"] == "deactivated"
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_create_movie_as_active_without_scheduling(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+) -> None:
+    response = await client.post(
+        f"{API_PREFIX}/admin/movies",
+        headers=admin_auth["headers"],
+        json={
+            "title": "Invalid Active",
+            "description": "Should fail",
+            "duration_minutes": 100,
+            "poster_url": None,
+            "age_rating": "PG",
+            "genres": ["Drama"],
+            "status": "active",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["message"] == (
+        "New movies must start as planned or deactivated. Active status is assigned automatically after scheduling."
+    )
+
+
+@pytest.mark.asyncio
+async def test_movie_becomes_active_after_session_creation_and_deactivates_after_cancellation(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Lifecycle Demo", status="planned")
+
+    created_session = await create_session(movie_id=movie["id"], start_hour=10, duration_minutes=180)
+    assert created_session["movie"]["status"] == "active"
+
+    admin_movie_response = await client.get(
+        f"{API_PREFIX}/admin/movies/{movie['id']}",
+        headers=admin_auth["headers"],
+    )
+    assert admin_movie_response.status_code == 200
+    assert admin_movie_response.json()["data"]["status"] == "active"
+
+    cancel_response = await client.patch(
+        f"{API_PREFIX}/admin/sessions/{created_session['id']}/cancel",
+        headers=admin_auth["headers"],
+    )
+    assert cancel_response.status_code == 200
+
+    refreshed_movie_response = await client.get(
+        f"{API_PREFIX}/admin/movies/{movie['id']}",
+        headers=admin_auth["headers"],
+    )
+    assert refreshed_movie_response.status_code == 200
+    assert refreshed_movie_response.json()["data"]["status"] == "deactivated"
+
+
+@pytest.mark.asyncio
 async def test_admin_can_deactivate_movie(
     client: httpx.AsyncClient,
     admin_auth: dict[str, object],
     create_movie,
     database,
 ) -> None:
-    movie = await create_movie(title="Blade Runner 2049")
+    movie = await create_movie(title="Blade Runner 2049", status="planned")
 
     response = await client.patch(
         f"{API_PREFIX}/admin/movies/{movie['id']}/deactivate",
@@ -138,11 +222,34 @@ async def test_admin_can_deactivate_movie(
     )
 
     assert response.status_code == 200
-    assert response.json()["data"]["is_active"] is False
+    assert response.json()["data"]["status"] == "deactivated"
 
     stored_movie = await database[DatabaseCollections.MOVIES].find_one({"_id": ObjectId(movie["id"])})
     assert stored_movie is not None
-    assert stored_movie["is_active"] is False
+    assert stored_movie["status"] == "deactivated"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_return_deactivated_movie_to_planned(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+    database,
+) -> None:
+    movie = await create_movie(title="Return Me", status="deactivated")
+
+    response = await client.patch(
+        f"{API_PREFIX}/admin/movies/{movie['id']}",
+        headers=admin_auth["headers"],
+        json={"status": "planned"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "planned"
+
+    stored_movie = await database[DatabaseCollections.MOVIES].find_one({"_id": ObjectId(movie["id"])})
+    assert stored_movie is not None
+    assert stored_movie["status"] == "planned"
 
 
 @pytest.mark.asyncio
@@ -152,7 +259,7 @@ async def test_movie_delete_succeeds_when_movie_has_no_sessions(
     create_movie,
     database,
 ) -> None:
-    movie = await create_movie(title="Delete Me")
+    movie = await create_movie(title="Delete Me", status="planned")
 
     response = await client.delete(f"{API_PREFIX}/admin/movies/{movie['id']}", headers=admin_auth["headers"])
 
@@ -171,7 +278,7 @@ async def test_movie_delete_is_rejected_when_sessions_exist(
     create_movie,
     create_session,
 ) -> None:
-    movie = await create_movie(title="Protected Movie")
+    movie = await create_movie(title="Protected Movie", status="planned")
     session = await create_session(movie_id=movie["id"], start_hour=10, duration_minutes=180)
     assert session["movie_id"] == movie["id"]
 
@@ -185,43 +292,48 @@ async def test_movie_delete_is_rejected_when_sessions_exist(
 
 
 @pytest.mark.asyncio
-async def test_public_movies_catalog_can_include_inactive_movies_when_requested(
+async def test_public_movies_catalog_can_include_non_active_movies_when_requested(
     client: httpx.AsyncClient,
     create_movie,
+    create_session,
 ) -> None:
-    active_movie = await create_movie(title="Public Active", is_active=True)
-    inactive_movie = await create_movie(title="Public Inactive", is_active=False)
+    active_movie = await create_movie(title="Public Active", status="planned")
+    _ = await create_session(movie_id=active_movie["id"], start_hour=10, duration_minutes=180)
+    planned_movie = await create_movie(title="Public Planned", status="planned")
+    deactivated_movie = await create_movie(title="Public Archived", status="deactivated")
 
     default_response = await client.get(f"{API_PREFIX}/movies")
     assert default_response.status_code == 200
     default_ids = [movie["id"] for movie in default_response.json()["data"]]
     assert active_movie["id"] in default_ids
-    assert inactive_movie["id"] not in default_ids
+    assert planned_movie["id"] not in default_ids
+    assert deactivated_movie["id"] not in default_ids
 
     catalog_response = await client.get(f"{API_PREFIX}/movies", params={"include_inactive": "true"})
     assert catalog_response.status_code == 200
     catalog_ids = [movie["id"] for movie in catalog_response.json()["data"]]
     assert active_movie["id"] in catalog_ids
-    assert inactive_movie["id"] in catalog_ids
+    assert planned_movie["id"] in catalog_ids
+    assert deactivated_movie["id"] in catalog_ids
 
 
 @pytest.mark.asyncio
-async def test_public_movie_details_can_include_inactive_movies_when_requested(
+async def test_public_movie_details_can_include_planned_movies_when_requested(
     client: httpx.AsyncClient,
     create_movie,
 ) -> None:
-    inactive_movie = await create_movie(title="Archived Title", is_active=False)
+    planned_movie = await create_movie(title="Planned Title", status="planned")
 
-    default_response = await client.get(f"{API_PREFIX}/movies/{inactive_movie['id']}")
+    default_response = await client.get(f"{API_PREFIX}/movies/{planned_movie['id']}")
     assert default_response.status_code == 404
 
     catalog_response = await client.get(
-        f"{API_PREFIX}/movies/{inactive_movie['id']}",
+        f"{API_PREFIX}/movies/{planned_movie['id']}",
         params={"include_inactive": "true"},
     )
     assert catalog_response.status_code == 200
-    assert catalog_response.json()["data"]["id"] == inactive_movie["id"]
-    assert catalog_response.json()["data"]["is_active"] is False
+    assert catalog_response.json()["data"]["id"] == planned_movie["id"]
+    assert catalog_response.json()["data"]["status"] == "planned"
 
 
 @pytest.mark.asyncio

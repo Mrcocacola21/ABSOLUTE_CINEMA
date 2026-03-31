@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from app.builders.attendance_report import AttendanceReportBuilder
 from app.commands.session_cancellation import SessionCancellationCommand
 from app.core.config import get_settings
-from app.core.constants import SessionStatuses
+from app.core.constants import MovieStatuses, SessionStatuses
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
 from app.factories.schedule_factory import SessionDetailsFactory
 from app.observers.events import build_default_event_publisher
@@ -20,6 +20,7 @@ from app.schemas.movie import MovieCreate, MovieRead, MovieUpdate
 from app.schemas.report import AttendanceReportRead, AttendanceSessionSummary
 from app.schemas.session import SessionCreate, SessionDetailsRead, SessionRead, SessionUpdate
 from app.schemas.user import UserRead
+from app.services.movie_status import MovieStatusManager
 from app.utils.session_locks import session_write_lock
 
 
@@ -36,24 +37,33 @@ class AdminService:
         self.session_repository = session_repository
         self.ticket_repository = ticket_repository
         self.event_publisher = build_default_event_publisher()
+        self.movie_status_manager = MovieStatusManager(
+            movie_repository=movie_repository,
+            session_repository=session_repository,
+        )
 
     async def list_movies(self, requested_by: UserRead) -> list[MovieRead]:
         """Return all movies for administration views."""
         _ = requested_by
+        now = datetime.now(tz=timezone.utc)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
         movies = await self.movie_repository.list_movies(active_only=False)
         return [MovieRead.model_validate(movie) for movie in movies]
 
     async def get_movie(self, movie_id: str, requested_by: UserRead) -> MovieRead:
         """Return a movie for administration views."""
         _ = requested_by
-        movie = await self.movie_repository.get_by_id(movie_id)
-        if movie is None:
-            raise NotFoundException("Movie was not found.")
-        return MovieRead.model_validate(movie)
+        now = datetime.now(tz=timezone.utc)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
+        return await self._get_movie_or_not_found(movie_id)
 
     async def create_movie(self, payload: MovieCreate, created_by: UserRead) -> MovieRead:
         """Create a new movie available for future scheduling."""
         _ = created_by
+        if payload.status == MovieStatuses.ACTIVE:
+            raise ValidationException(
+                "New movies must start as planned or deactivated. Active status is assigned automatically after scheduling."
+            )
         now = datetime.now(tz=timezone.utc)
         document = self._normalize_movie_document(payload.model_dump(mode="python"))
         document["created_at"] = now
@@ -69,32 +79,48 @@ class AdminService:
     ) -> MovieRead:
         """Update editable movie information."""
         _ = updated_by
+        now = datetime.now(tz=timezone.utc)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
         updates = self._normalize_movie_document(payload.model_dump(mode="python", exclude_unset=True))
         if not updates:
             raise ValidationException("At least one movie field must be provided for update.")
 
+        movie = await self._get_movie_or_not_found(movie_id)
+        if "status" in updates:
+            await self._validate_requested_movie_status(
+                movie_id=movie_id,
+                requested_status=str(updates["status"]),
+                current_time=now,
+            )
+
         updated = await self.movie_repository.update_movie(
             movie_id=movie_id,
             updates=updates,
-            updated_at=datetime.now(tz=timezone.utc),
+            updated_at=now,
         )
         if updated is None:
             raise NotFoundException("Movie was not found.")
+        if "status" in updates and movie.status == MovieStatuses.ACTIVE and updates["status"] != MovieStatuses.ACTIVE:
+            await self.movie_status_manager.refresh_statuses(current_time=now)
         return MovieRead.model_validate(updated)
 
     async def deactivate_movie(self, movie_id: str, deactivated_by: UserRead) -> MovieRead:
         """Soft-disable a movie while keeping existing sessions and tickets intact."""
         _ = deactivated_by
-        movie = await self.movie_repository.get_by_id(movie_id)
-        if movie is None:
-            raise NotFoundException("Movie was not found.")
-        if movie.get("is_active") is False:
-            return MovieRead.model_validate(movie)
+        now = datetime.now(tz=timezone.utc)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
+        movie = await self._get_movie_or_not_found(movie_id)
+        if await self.movie_status_manager.has_future_sessions(movie_id, current_time=now):
+            raise ConflictException(
+                "Movies with future scheduled sessions cannot be deactivated. Cancel or move those sessions first."
+            )
+        if movie.status == MovieStatuses.DEACTIVATED:
+            return movie
 
         updated = await self.movie_repository.update_movie(
             movie_id=movie_id,
-            updates={"is_active": False},
-            updated_at=datetime.now(tz=timezone.utc),
+            updates={"status": MovieStatuses.DEACTIVATED},
+            updated_at=now,
         )
         if updated is None:
             raise NotFoundException("Movie was not found.")
@@ -124,7 +150,7 @@ class AdminService:
         """Return all sessions with attached movie data for the admin board."""
         _ = requested_by
         now = datetime.now(tz=timezone.utc)
-        await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
         sessions = [SessionRead.model_validate(document) for document in await self.session_repository.list_all()]
         movies = await self.movie_repository.list_by_ids([session.movie_id for session in sessions])
         movie_map = {movie["id"]: MovieRead.model_validate(movie) for movie in movies}
@@ -138,7 +164,7 @@ class AdminService:
         """Return a single session with movie details for the admin board."""
         _ = requested_by
         now = datetime.now(tz=timezone.utc)
-        await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
         session_document = await self.session_repository.get_by_id(session_id)
         if session_document is None:
             raise NotFoundException("Session was not found.")
@@ -157,6 +183,7 @@ class AdminService:
         _ = created_by
         settings = get_settings()
         now = datetime.now(tz=timezone.utc)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
 
         start_time = self._normalize_session_time(payload.start_time)
         end_time = self._normalize_session_time(payload.end_time)
@@ -183,8 +210,12 @@ class AdminService:
         }
 
         session_document = await self.session_repository.create_session(document)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
         session = SessionRead.model_validate(session_document)
-        return SessionDetailsFactory.build(session=session, movie=movie)
+        return SessionDetailsFactory.build(
+            session=session,
+            movie=await self._get_movie_or_not_found(payload.movie_id),
+        )
 
     async def cancel_session(self, session_id: str, cancelled_by: UserRead) -> SessionRead:
         """Cancel an existing session via a command object."""
@@ -193,7 +224,9 @@ class AdminService:
                 session_repository=self.session_repository,
                 event_publisher=self.event_publisher,
             )
-            return await command.execute(session_id=session_id, cancelled_by=cancelled_by)
+            cancelled_session = await command.execute(session_id=session_id, cancelled_by=cancelled_by)
+            await self.movie_status_manager.refresh_statuses(current_time=datetime.now(tz=timezone.utc))
+            return cancelled_session
 
     async def update_session(
         self,
@@ -209,7 +242,7 @@ class AdminService:
 
         async with session_write_lock(session_id):
             now = datetime.now(tz=timezone.utc)
-            await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
+            await self.movie_status_manager.refresh_statuses(current_time=now)
 
             existing_session = await self.session_repository.get_by_id(session_id)
             if existing_session is None:
@@ -234,7 +267,7 @@ class AdminService:
 
             movie = await self._require_movie_for_scheduling(
                 movie_id,
-                allow_inactive_when_same=movie_id == existing_session["movie_id"],
+                allow_deactivated_when_same=movie_id == existing_session["movie_id"],
             )
             self._validate_session_slot(movie=movie, start_time=start_time, end_time=end_time, now=now)
 
@@ -270,15 +303,18 @@ class AdminService:
                     )
                 raise ConflictException("Session can no longer be edited.")
 
+            await self.movie_status_manager.refresh_statuses(current_time=now)
             return SessionDetailsFactory.build(
                 session=SessionRead.model_validate(updated_document),
-                movie=movie,
+                movie=await self._get_movie_or_not_found(movie_id),
             )
 
     async def delete_session(self, session_id: str, deleted_by: UserRead) -> DeleteResultRead:
         """Delete a session only when no tickets have ever been stored for it."""
         _ = deleted_by
         async with session_write_lock(session_id):
+            now = datetime.now(tz=timezone.utc)
+            await self.movie_status_manager.refresh_statuses(current_time=now)
             session = await self.session_repository.get_by_id(session_id)
             if session is None:
                 raise NotFoundException("Session was not found.")
@@ -290,6 +326,7 @@ class AdminService:
             deleted = await self.session_repository.delete_session(session_id)
             if not deleted:
                 raise NotFoundException("Session was not found.")
+            await self.movie_status_manager.refresh_statuses(current_time=now)
             return DeleteResultRead(id=session_id)
 
     async def build_attendance_report(self, requested_by: UserRead) -> AttendanceReportRead:
@@ -297,7 +334,7 @@ class AdminService:
         _ = requested_by
         builder = AttendanceReportBuilder()
         now = datetime.now(tz=timezone.utc)
-        await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
         sessions = [SessionRead.model_validate(document) for document in await self.session_repository.list_all()]
         movies = await self.movie_repository.list_by_ids([session.movie_id for session in sessions])
         movie_map = {movie["id"]: MovieRead.model_validate(movie) for movie in movies}
@@ -340,14 +377,11 @@ class AdminService:
         self,
         movie_id: str,
         *,
-        allow_inactive_when_same: bool = False,
+        allow_deactivated_when_same: bool = False,
     ) -> MovieRead:
-        movie_document = await self.movie_repository.get_by_id(movie_id)
-        if movie_document is None:
-            raise NotFoundException("Movie was not found.")
-        movie = MovieRead.model_validate(movie_document)
-        if not movie.is_active and not allow_inactive_when_same:
-            raise ValidationException("Inactive movies cannot be scheduled.")
+        movie = await self._get_movie_or_not_found(movie_id)
+        if movie.status == MovieStatuses.DEACTIVATED and not allow_deactivated_when_same:
+            raise ValidationException("Deactivated movies cannot be scheduled. Set the movie back to planned first.")
         return movie
 
     def _validate_session_slot(
@@ -373,6 +407,32 @@ class AdminService:
         if normalized.get("poster_url") is not None:
             normalized["poster_url"] = str(normalized["poster_url"])
         return normalized
+
+    async def _get_movie_or_not_found(self, movie_id: str) -> MovieRead:
+        movie_document = await self.movie_repository.get_by_id(movie_id)
+        if movie_document is None:
+            raise NotFoundException("Movie was not found.")
+        return MovieRead.model_validate(movie_document)
+
+    async def _validate_requested_movie_status(
+        self,
+        *,
+        movie_id: str,
+        requested_status: str,
+        current_time: datetime,
+    ) -> None:
+        has_future_sessions = await self.movie_status_manager.has_future_sessions(
+            movie_id,
+            current_time=current_time,
+        )
+        if requested_status == MovieStatuses.ACTIVE and not has_future_sessions:
+            raise ValidationException(
+                "Movies become active automatically after a future session is scheduled."
+            )
+        if requested_status != MovieStatuses.ACTIVE and has_future_sessions:
+            raise ConflictException(
+                "Movies with future scheduled sessions stay active. Update or cancel those sessions first."
+            )
 
     def _get_session_update_blocker(self, session_document: dict[str, object], *, now: datetime) -> str | None:
         if session_document["status"] == SessionStatuses.CANCELLED:

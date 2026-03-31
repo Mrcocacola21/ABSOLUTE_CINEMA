@@ -28,16 +28,18 @@ export function ScheduleCard({ item }: ScheduleCardProps) {
         </div>
         <div className="schedule-card__body">
           <div className="schedule-card__topline">
-            <h3 className="schedule-card__title">{item.movie_title}</h3>
+            <div className="schedule-card__title-row">
+              <h3 className="schedule-card__title">{item.movie_title}</h3>
+              {item.age_rating ? <span className="badge schedule-card__age-rating">{item.age_rating}</span> : null}
+            </div>
 
-            {item.genres.length > 0 || item.age_rating ? (
+            {item.genres.length > 0 ? (
               <div className="meta-row schedule-card__taxonomy">
                 {item.genres.map((genre) => (
                   <span key={`${item.id}-${genre}`} className="badge">
                     {genre}
                   </span>
                 ))}
-                {item.age_rating ? <span className="badge">{item.age_rating}</span> : null}
               </div>
             ) : null}
           </div>

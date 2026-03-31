@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { getMoviesRequest, getScheduleRequest } from "@/api/schedule";
 import { useScheduleQueryParams } from "@/hooks/useScheduleQueryParams";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { isMovieActive } from "@/shared/movieStatus";
 import {
   filterBoardScheduleItems,
   filterScheduleListItems,
@@ -87,7 +88,7 @@ export function SchedulePage() {
         items
           .filter((item) => {
             const movie = moviesById[item.movie_id];
-            return movie ? movie.is_active : true;
+            return movie ? isMovieActive(movie) : true;
           })
           .map((item) => item.movie_id),
       ).size,

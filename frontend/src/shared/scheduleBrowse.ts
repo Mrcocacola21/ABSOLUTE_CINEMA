@@ -1,5 +1,6 @@
 import { formatScheduleDayLabel, toScheduleDayKey } from "@/shared/scheduleTimeline";
-import type { Movie, ScheduleItem } from "@/types/domain";
+import { getMovieStatusPriority, isMovieActive } from "@/shared/movieStatus";
+import type { Movie, MovieStatus, ScheduleItem } from "@/types/domain";
 
 export interface MovieOption {
   id: string;
@@ -22,7 +23,7 @@ export interface RotationMovie {
   poster_url?: string | null;
   age_rating?: string | null;
   genres: string[];
-  is_active: boolean;
+  status: MovieStatus;
   nextSession: ScheduleItem;
   lastSession: ScheduleItem;
   upcomingSessions: number;
@@ -257,7 +258,7 @@ export function buildRotationMovies(
     const lastSession = sortedItems[sortedItems.length - 1];
     const movie = moviesById[movieId];
 
-    if (!movie || !movie.is_active) {
+    if (!movie || !isMovieActive(movie)) {
       continue;
     }
 
@@ -271,7 +272,7 @@ export function buildRotationMovies(
       poster_url: movie.poster_url ?? nextSession.poster_url,
       age_rating: movie.age_rating ?? nextSession.age_rating,
       genres: movie.genres.length ? movie.genres : nextSession.genres,
-      is_active: movie.is_active,
+      status: movie.status,
       nextSession,
       lastSession,
       upcomingSessions: movieItems.length,
@@ -296,6 +297,11 @@ export function buildRotationMovies(
         if (timeComparison !== 0) {
           return timeComparison;
         }
+      }
+
+      const statusComparison = getMovieStatusPriority(left.status) - getMovieStatusPriority(right.status);
+      if (statusComparison !== 0) {
+        return statusComparison;
       }
 
       return compareText(left.title, right.title, "asc");

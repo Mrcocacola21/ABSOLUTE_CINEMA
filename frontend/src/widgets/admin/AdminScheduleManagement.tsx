@@ -6,6 +6,7 @@ import type {
   SessionCreatePayload,
   SessionUpdatePayload,
 } from "@/api/admin";
+import { isMovieScheduleReady } from "@/shared/movieStatus";
 import type { Movie, Session, SessionDetails } from "@/types/domain";
 import { ChronoboardHeader } from "@/widgets/admin/chronoboard/ChronoboardHeader";
 import { ChronoboardInspector } from "@/widgets/admin/chronoboard/ChronoboardInspector";
@@ -34,7 +35,7 @@ const emptyMovieForm: MovieCreatePayload = {
   description: "",
   duration_minutes: 120,
   genres: [],
-  is_active: true,
+  status: "planned",
 };
 
 export function AdminScheduleManagement({
@@ -70,8 +71,17 @@ export function AdminScheduleManagement({
     [movies],
   );
 
-  const activeMovies = useMemo(
-    () => sortedMovies.filter((movie) => movie.is_active),
+  const scheduleReadyMovies = useMemo(
+    () => sortedMovies.filter((movie) => isMovieScheduleReady(movie)),
+    [sortedMovies],
+  );
+
+  const statusCounts = useMemo(
+    () => ({
+      planned: sortedMovies.filter((movie) => movie.status === "planned").length,
+      active: sortedMovies.filter((movie) => movie.status === "active").length,
+      deactivated: sortedMovies.filter((movie) => movie.status === "deactivated").length,
+    }),
     [sortedMovies],
   );
 
@@ -98,7 +108,7 @@ export function AdminScheduleManagement({
   const chronoboard = useChronoboardState({
     moviesById,
     sortedMovies,
-    activeMovies,
+    scheduleReadyMovies,
     sessions,
     onCreateSession,
     onUpdateSession,
@@ -125,7 +135,7 @@ export function AdminScheduleManagement({
       poster_url: movie.poster_url ?? undefined,
       age_rating: movie.age_rating ?? undefined,
       genres: movie.genres,
-      is_active: movie.is_active,
+      status: movie.status,
     });
     setGenresInput(movie.genres.join(", "));
   }
@@ -158,12 +168,14 @@ export function AdminScheduleManagement({
     }
 
     resetMovieForm();
-    chronoboard.pinMovie(createdMovie.id);
+    if (isMovieScheduleReady(createdMovie)) {
+      chronoboard.pinMovie(createdMovie.id);
+    }
   }
 
   async function handleDeactivateManagedMovie(movie: Movie) {
     const confirmed = window.confirm(
-      `Deactivate "${movie.title}"? Existing sessions and ticket history will stay intact.`,
+      `Deactivate "${movie.title}"? The movie will stay in the catalog but will no longer be available for new scheduling.`,
     );
     if (!confirmed) {
       return;
@@ -176,6 +188,20 @@ export function AdminScheduleManagement({
 
     if (chronoboard.pinnedMovieId === movie.id) {
       chronoboard.clearPlanningSelection();
+    }
+  }
+
+  async function handleReturnMovieToPlanned(movie: Movie) {
+    const confirmed = window.confirm(
+      `Return "${movie.title}" to planned? The movie will become available for future scheduling again.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const result = await onUpdateMovie(movie.id, { status: "planned" });
+    if (!result) {
+      return;
     }
   }
 
@@ -205,7 +231,8 @@ export function AdminScheduleManagement({
       <MovieCatalogPanel
         catalogMovies={catalogMovies}
         totalMoviesCount={movies.length}
-        activeMoviesCount={activeMovies.length}
+        scheduleReadyMoviesCount={scheduleReadyMovies.length}
+        statusCounts={statusCounts}
         isBusy={isBusy}
         busyActionLabel={busyActionLabel}
         movieForm={movieForm}
@@ -220,6 +247,7 @@ export function AdminScheduleManagement({
         onEditMovie={handleMovieCatalogEdit}
         onQueueMovie={chronoboard.handlePlanningMovieSelect}
         onDeactivateMovie={handleDeactivateManagedMovie}
+        onReturnToPlanned={handleReturnMovieToPlanned}
         onDeleteMovie={handleDeleteManagedMovie}
       />
 

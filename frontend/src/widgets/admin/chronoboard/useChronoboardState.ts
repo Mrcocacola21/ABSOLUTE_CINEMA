@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
 import type { SessionCreatePayload, SessionUpdatePayload } from "@/api/admin";
+import { isMovieScheduleReady } from "@/shared/movieStatus";
 import { formatTime } from "@/shared/presentation";
 import type { Movie, Session, SessionDetails } from "@/types/domain";
 import type {
@@ -32,7 +33,7 @@ import {
 interface UseChronoboardStateOptions {
   moviesById: Record<string, Movie>;
   sortedMovies: Movie[];
-  activeMovies: Movie[];
+  scheduleReadyMovies: Movie[];
   sessions: SessionDetails[];
   onCreateSession: (payload: SessionCreatePayload) => Promise<SessionDetails | null>;
   onUpdateSession: (sessionId: string, payload: SessionUpdatePayload) => Promise<SessionDetails | null>;
@@ -43,7 +44,7 @@ interface UseChronoboardStateOptions {
 export function useChronoboardState({
   moviesById,
   sortedMovies,
-  activeMovies,
+  scheduleReadyMovies,
   sessions,
   onCreateSession,
   onUpdateSession,
@@ -66,14 +67,14 @@ export function useChronoboardState({
 
   const planningMovies = useMemo(() => {
     const normalizedQuery = plannerMovieQuery.trim().toLowerCase();
-    return activeMovies.filter((movie) => {
+    return scheduleReadyMovies.filter((movie) => {
       if (!normalizedQuery) {
         return true;
       }
 
       return [movie.title, movie.genres.join(" ")].join(" ").toLowerCase().includes(normalizedQuery);
     });
-  }, [activeMovies, plannerMovieQuery]);
+  }, [plannerMovieQuery, scheduleReadyMovies]);
 
   const sessionsByMoviePrice = useMemo(() => {
     const map = new Map<string, number>();
@@ -122,7 +123,7 @@ export function useChronoboardState({
     () =>
       sortedMovies.filter(
         (movie) =>
-          movie.is_active ||
+          isMovieScheduleReady(movie) ||
           movie.id === draftPlacement?.movie_id ||
           movie.id === editingDraft?.movie_id ||
           movie.id === selectedSession?.movie_id,

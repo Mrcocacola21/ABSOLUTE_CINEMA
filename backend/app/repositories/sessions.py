@@ -170,6 +170,29 @@ class SessionRepository(BaseRepository):
         """Return the number of sessions linked to a movie."""
         return await self.collection.count_documents({"movie_id": movie_id})
 
+    async def has_future_scheduled_sessions(self, movie_id: str, *, current_time: datetime) -> bool:
+        """Return whether the movie still has at least one future scheduled session."""
+        count = await self.collection.count_documents(
+            {
+                "movie_id": movie_id,
+                "status": SessionStatuses.SCHEDULED,
+                "start_time": {"$gt": current_time},
+            },
+            limit=1,
+        )
+        return count > 0
+
+    async def list_movie_ids_with_future_scheduled_sessions(self, *, current_time: datetime) -> list[str]:
+        """Return movie ids that currently have future scheduled sessions."""
+        movie_ids = await self.collection.distinct(
+            "movie_id",
+            {
+                "status": SessionStatuses.SCHEDULED,
+                "start_time": {"$gt": current_time},
+            },
+        )
+        return [str(movie_id) for movie_id in movie_ids if movie_id]
+
     async def sync_completed_sessions(self, *, current_time: datetime, updated_at: datetime) -> int:
         """Mark sessions that have already ended as completed."""
         result = await self.collection.update_many(

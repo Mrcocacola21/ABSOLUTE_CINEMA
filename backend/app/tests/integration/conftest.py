@@ -249,7 +249,7 @@ async def create_movie(
         description: str = "Science fiction epic",
         duration_minutes: int = 169,
         genres: list[str] | None = None,
-        is_active: bool = True,
+        status: str = "planned",
     ) -> dict[str, object]:
         response = await client.post(
             f"{API_PREFIX}/admin/movies",
@@ -261,7 +261,7 @@ async def create_movie(
                 "poster_url": None,
                 "age_rating": "PG-13",
                 "genres": genres or ["Sci-Fi", "Drama"],
-                "is_active": is_active,
+                "status": status,
             },
         )
         assert response.status_code == 201, response.text

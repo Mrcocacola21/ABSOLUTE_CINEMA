@@ -16,6 +16,14 @@ class Roles:
     ADMIN = "admin"
 
 
+class MovieStatuses:
+    """Lifecycle statuses for movies in the cinema catalog."""
+
+    PLANNED = "planned"
+    ACTIVE = "active"
+    DEACTIVATED = "deactivated"
+
+
 class SessionStatuses:
     """Lifecycle statuses for movie sessions."""
 
@@ -31,6 +39,11 @@ class TicketStatuses:
     CANCELLED = "cancelled"
 
 
+MOVIE_STATUS_VALUES: Final[tuple[str, ...]] = (
+    MovieStatuses.PLANNED,
+    MovieStatuses.ACTIVE,
+    MovieStatuses.DEACTIVATED,
+)
 ALLOWED_SORT_FIELDS: Final[tuple[str, ...]] = (
     "movie_title",
     "available_seats",

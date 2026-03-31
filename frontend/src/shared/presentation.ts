@@ -34,6 +34,10 @@ export function formatStateLabel(value: string): string {
       return "Purchased";
     case "active":
       return "Active";
+    case "planned":
+      return "Planned";
+    case "deactivated":
+      return "Deactivated";
     case "inactive":
       return "Inactive";
     case "admin":

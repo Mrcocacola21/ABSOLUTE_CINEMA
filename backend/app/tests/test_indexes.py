@@ -65,7 +65,7 @@ def _build_database(ticket_indexes: dict[str, dict]) -> FakeDatabase:
                 {
                     "_id_": {"key": [("_id", 1)]},
                     "ix_movies_title": {"key": [("title", 1)]},
-                    "ix_movies_is_active": {"key": [("is_active", 1)]},
+                    "ix_movies_status": {"key": [("status", 1)]},
                 }
             ),
             DatabaseCollections.SESSIONS: FakeCollection(

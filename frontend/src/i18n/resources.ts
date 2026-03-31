@@ -1,7 +1,9 @@
 export const resources = {
   en: {
     translation: {
-      activeLabel: "active",
+      activeLabel: "Active",
+      plannedLabel: "Planned",
+      deactivatedLabel: "Deactivated",
       admin: "Admin",
       adminIntro:
         "Manage movies first, then place them into session slots, review sold tickets, and monitor attendance.",
@@ -41,6 +43,12 @@ export const resources = {
       chooseDay: "Days",
       chooseSeatPrompt: "Choose a seat from the map to continue.",
       clearForm: "Clear form",
+      comingSoonEyebrow: "Upcoming line-up",
+      comingSoonEmptyText: "When upcoming releases are prepared in the catalog, they will appear here.",
+      comingSoonEmptyTitle: "No planned titles yet.",
+      comingSoonIntro:
+        "Preview planned titles that are already prepared in the catalog but have not entered the active rotation yet.",
+      comingSoonTitle: "Soon in cinema",
       createAccount: "Create account",
       currentlyShowing: "Currently showing",
       dashboard: "Dashboard",
@@ -64,9 +72,20 @@ export const resources = {
       genresLabel: "Genres",
       genresPlaceholder: "Drama, Comedy, Animation",
       home: "Home",
+      homeActiveBannerLine: "{{sessions}} upcoming sessions | from {{price}}",
+      homeActiveEmptyText:
+        "As soon as a movie has a future session, it will appear here as part of the current rotation.",
+      homeActiveEmptyTitle: "No active movies in release right now.",
+      homeActiveRibbon: "Tickets on sale",
       homeEmptyText: "Reset the controls to see everything currently scheduled in the cinema.",
       homeEmptyTitle: "No movies match the current filters.",
+      homeHeroIntro:
+        "A cleaner cinema landing page: current releases first, then the titles already prepared for future scheduling.",
+      homeHeroTitle: "Current releases and the next titles in line.",
       homeMovieFallback: "Upcoming sessions are already open for booking and schedule browsing.",
+      homePlannedBannerLine: "Prepared for future scheduling in the cinema.",
+      homePlannedFallback: "This title is already in the catalog and waiting for its first scheduled session.",
+      homePlannedRibbon: "Coming soon",
       homeResultsLabel: "{{movies}} movies | {{sessions}} upcoming sessions",
       inactiveLabel: "inactive",
       language: "Language",
@@ -168,6 +187,7 @@ export const resources = {
       allGenres: "All genres",
       allDays: "All days",
       allStatuses: "All statuses",
+      plannedOnly: "Planned only",
       activeOnly: "Active only",
       dateSortLabel: "Date order",
       seatSortLabel: "Free seats order",
@@ -179,6 +199,7 @@ export const resources = {
       dateSortPriorityHint: "Date order is active. Choose a free-seats order to override it.",
       seatSortPriorityHint: "Free-seats order is active now. Clear it to return to date order.",
       inactiveOnly: "Inactive only",
+      deactivatedOnly: "Deactivated only",
       backToCatalog: "Back to catalog",
       daySessionsTitle: "Available sessions",
       lastUpcomingSession: "Last upcoming session",
@@ -186,7 +207,9 @@ export const resources = {
   },
   uk: {
     translation: {
-      activeLabel: "\u0430\u043a\u0442\u0438\u0432\u043d\u0438\u0439",
+      activeLabel: "\u0410\u043a\u0442\u0438\u0432\u043d\u0438\u0439",
+      plannedLabel: "\u0417\u0430\u043f\u043b\u0430\u043d\u043e\u0432\u0430\u043d\u0438\u0439",
+      deactivatedLabel: "\u0414\u0435\u0430\u043a\u0442\u0438\u0432\u043e\u0432\u0430\u043d\u0438\u0439",
       admin: "\u0410\u0434\u043c\u0456\u043d",
       adminIntro:
         "\u0421\u043f\u043e\u0447\u0430\u0442\u043a\u0443 \u043a\u0435\u0440\u0443\u0439\u0442\u0435 \u0444\u0456\u043b\u044c\u043c\u0430\u043c\u0438, \u043f\u043e\u0442\u0456\u043c \u0440\u043e\u0437\u0441\u0442\u0430\u0432\u043b\u044f\u0439\u0442\u0435 \u0457\u0445 \u0443 \u0447\u0430\u0441\u043e\u0432\u0456 \u0441\u043b\u043e\u0442\u0438, \u043f\u0435\u0440\u0435\u0433\u043b\u044f\u0434\u0430\u0439\u0442\u0435 \u043f\u0440\u043e\u0434\u0430\u043d\u0456 \u043a\u0432\u0438\u0442\u043a\u0438 \u0442\u0430 \u0437\u0430\u0433\u0430\u043b\u044c\u043d\u0443 \u0432\u0456\u0434\u0432\u0456\u0434\u0443\u0432\u0430\u043d\u0456\u0441\u0442\u044c.",
@@ -233,6 +256,13 @@ export const resources = {
       clearForm: "\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u0438 \u0444\u043e\u0440\u043c\u0443",
       createAccount: "\u0421\u0442\u0432\u043e\u0440\u0438\u0442\u0438 \u0430\u043a\u0430\u0443\u043d\u0442",
       currentlyShowing: "\u0423 \u043f\u0440\u043e\u043a\u0430\u0442\u0456 \u0437\u0430\u0440\u0430\u0437",
+      comingSoonEyebrow: "\u041d\u0435\u0437\u0430\u0431\u0430\u0440\u043e\u043c",
+      comingSoonEmptyText:
+        "\u041a\u043e\u043b\u0438 \u0432 \u043a\u0430\u0442\u0430\u043b\u043e\u0437\u0456 \u0437'\u044f\u0432\u043b\u044f\u0442\u044c\u0441\u044f \u043c\u0430\u0439\u0431\u0443\u0442\u043d\u0456 \u0440\u0435\u043b\u0456\u0437\u0438, \u0432\u043e\u043d\u0438 \u0432\u0456\u0434\u043e\u0431\u0440\u0430\u0437\u044f\u0442\u044c\u0441\u044f \u0442\u0443\u0442.",
+      comingSoonEmptyTitle: "\u0417\u0430\u043f\u043b\u0430\u043d\u043e\u0432\u0430\u043d\u0438\u0445 \u0444\u0456\u043b\u044c\u043c\u0456\u0432 \u043f\u043e\u043a\u0438 \u043d\u0435\u043c\u0430\u0454.",
+      comingSoonIntro:
+        "\u041f\u0435\u0440\u0435\u0433\u043b\u044f\u043d\u044c\u0442\u0435 \u0437\u0430\u043f\u043b\u0430\u043d\u043e\u0432\u0430\u043d\u0456 \u0444\u0456\u043b\u044c\u043c\u0438, \u044f\u043a\u0456 \u0432\u0436\u0435 \u043f\u0456\u0434\u0433\u043e\u0442\u043e\u0432\u043b\u0435\u043d\u0456 \u0432 \u043a\u0430\u0442\u0430\u043b\u043e\u0437\u0456, \u0430\u043b\u0435 \u0449\u0435 \u043d\u0435 \u0443\u0432\u0456\u0439\u0448\u043b\u0438 \u0434\u043e \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0457 \u0440\u043e\u0442\u0430\u0446\u0456\u0457.",
+      comingSoonTitle: "\u0421\u043a\u043e\u0440\u043e \u0432 \u043a\u0456\u043d\u043e",
       dashboard: "\u041f\u0430\u043d\u0435\u043b\u044c \u043a\u0435\u0440\u0443\u0432\u0430\u043d\u043d\u044f",
       dateTime: "\u0414\u0430\u0442\u0430 \u0456 \u0447\u0430\u0441",
       deactivateAction: "\u0414\u0435\u0430\u043a\u0442\u0438\u0432\u0443\u0432\u0430\u0442\u0438",
@@ -255,12 +285,26 @@ export const resources = {
       genresLabel: "\u0416\u0430\u043d\u0440\u0438",
       genresPlaceholder: "\u0414\u0440\u0430\u043c\u0430, \u041a\u043e\u043c\u0435\u0434\u0456\u044f, \u0410\u043d\u0456\u043c\u0430\u0446\u0456\u044f",
       home: "\u0413\u043e\u043b\u043e\u0432\u043d\u0430",
+      homeActiveBannerLine:
+        "{{sessions}} \u043c\u0430\u0439\u0431\u0443\u0442\u043d\u0456\u0445 \u0441\u0435\u0430\u043d\u0441\u0456\u0432 | \u0432\u0456\u0434 {{price}}",
+      homeActiveEmptyText:
+        "\u0429\u043e\u0439\u043d\u043e \u0434\u043b\u044f \u0444\u0456\u043b\u044c\u043c\u0443 \u0437'\u044f\u0432\u0438\u0442\u044c\u0441\u044f \u043c\u0430\u0439\u0431\u0443\u0442\u043d\u0456\u0439 \u0441\u0435\u0430\u043d\u0441, \u0432\u0456\u043d \u043f\u043e\u0442\u0440\u0430\u043f\u0438\u0442\u044c \u0441\u044e\u0434\u0438 \u044f\u043a \u0447\u0430\u0441\u0442\u0438\u043d\u0430 \u043f\u043e\u0442\u043e\u0447\u043d\u043e\u0457 \u0440\u043e\u0442\u0430\u0446\u0456\u0457.",
+      homeActiveEmptyTitle: "\u0417\u0430\u0440\u0430\u0437 \u043d\u0435\u043c\u0430\u0454 \u0430\u043a\u0442\u0438\u0432\u043d\u0438\u0445 \u0444\u0456\u043b\u044c\u043c\u0456\u0432 \u0443 \u043f\u0440\u043e\u043a\u0430\u0442\u0456.",
+      homeActiveRibbon: "\u041a\u0432\u0438\u0442\u043a\u0438 \u0443 \u043f\u0440\u043e\u0434\u0430\u0436\u0443",
       homeEmptyText:
         "\u0421\u043a\u0438\u043d\u044c\u0442\u0435 \u043d\u0430\u043b\u0430\u0448\u0442\u0443\u0432\u0430\u043d\u043d\u044f, \u0449\u043e\u0431 \u043f\u043e\u0431\u0430\u0447\u0438\u0442\u0438 \u0432\u0441\u0456 \u0444\u0456\u043b\u044c\u043c\u0438, \u044f\u043a\u0456 \u0437\u0430\u0440\u0430\u0437 \u0441\u0442\u043e\u044f\u0442\u044c \u0443 \u0440\u043e\u0437\u043a\u043b\u0430\u0434\u0456.",
       homeEmptyTitle:
         "\u0417\u0430 \u043f\u043e\u0442\u043e\u0447\u043d\u0438\u043c\u0438 \u0444\u0456\u043b\u044c\u0442\u0440\u0430\u043c\u0438 \u043d\u0456\u0447\u043e\u0433\u043e \u043d\u0435 \u0437\u043d\u0430\u0439\u0434\u0435\u043d\u043e.",
+      homeHeroIntro:
+        "\u0413\u043e\u043b\u043e\u0432\u043d\u0430 \u0441\u0442\u043e\u0440\u0456\u043d\u043a\u0430 \u0442\u0435\u043f\u0435\u0440 \u043f\u0440\u0430\u0446\u044e\u0454 \u044f\u043a \u043a\u0456\u043d\u0435\u043c\u0430\u0442\u043e\u0433\u0440\u0430\u0444\u0456\u0447\u043d\u0430 \u0432\u0456\u0442\u0440\u0438\u043d\u0430: \u0441\u043f\u043e\u0447\u0430\u0442\u043a\u0443 \u0444\u0456\u043b\u044c\u043c\u0438 \u0443 \u043f\u0440\u043e\u043a\u0430\u0442\u0456, \u0434\u0430\u043b\u0456 \u2014 \u0441\u0442\u0440\u0456\u0447\u043a\u0438, \u0449\u043e \u0433\u043e\u0442\u0443\u044e\u0442\u044c\u0441\u044f \u0434\u043e \u043f\u043e\u043a\u0430\u0437\u0443.",
+      homeHeroTitle: "\u041f\u043e\u0442\u043e\u0447\u043d\u0456 \u0440\u0435\u043b\u0456\u0437\u0438 \u0442\u0430 \u043d\u0430\u0439\u0431\u043b\u0438\u0436\u0447\u0456 \u043f\u0440\u0435\u043c'\u0454\u0440\u0438.",
       homeMovieFallback:
         "\u041d\u0430\u0439\u0431\u043b\u0438\u0436\u0447\u0456 \u043f\u043e\u043a\u0430\u0437\u0438 \u0432\u0436\u0435 \u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0456 \u0434\u043b\u044f \u043f\u0435\u0440\u0435\u0433\u043b\u044f\u0434\u0443 \u0439 \u0431\u0440\u043e\u043d\u044e\u0432\u0430\u043d\u043d\u044f.",
+      homePlannedBannerLine:
+        "\u041f\u0456\u0434\u0433\u043e\u0442\u043e\u0432\u043b\u0435\u043d\u043e \u0434\u043b\u044f \u043c\u0430\u0439\u0431\u0443\u0442\u043d\u044c\u043e\u0433\u043e \u043f\u043b\u0430\u043d\u0443\u0432\u0430\u043d\u043d\u044f \u0441\u0435\u0430\u043d\u0441\u0456\u0432.",
+      homePlannedFallback:
+        "\u0426\u0435\u0439 \u0444\u0456\u043b\u044c\u043c \u0443\u0436\u0435 \u0454 \u0432 \u043a\u0430\u0442\u0430\u043b\u043e\u0437\u0456 \u0442\u0430 \u043e\u0447\u0456\u043a\u0443\u0454 \u043d\u0430 \u0441\u0432\u0456\u0439 \u043f\u0435\u0440\u0448\u0438\u0439 \u0437\u0430\u043f\u043b\u0430\u043d\u043e\u0432\u0430\u043d\u0438\u0439 \u0441\u0435\u0430\u043d\u0441.",
+      homePlannedRibbon: "\u0421\u043a\u043e\u0440\u043e \u0432 \u043a\u0456\u043d\u043e",
       homeResultsLabel:
         "{{movies}} \u0444\u0456\u043b\u044c\u043c\u0456\u0432 | {{sessions}} \u043c\u0430\u0439\u0431\u0443\u0442\u043d\u0456\u0445 \u0441\u0435\u0430\u043d\u0441\u0456\u0432",
       inactiveLabel: "\u043d\u0435\u0430\u043a\u0442\u0438\u0432\u043d\u0438\u0439",
@@ -383,6 +427,8 @@ export const resources = {
       backToCatalog: "Назад до каталогу",
       daySessionsTitle: "Доступні сеанси",
       lastUpcomingSession: "Останній майбутній сеанс",
+      plannedOnly: "\u041b\u0438\u0448\u0435 \u0437\u0430\u043f\u043b\u0430\u043d\u043e\u0432\u0430\u043d\u0456",
+      deactivatedOnly: "\u041b\u0438\u0448\u0435 \u0434\u0435\u0430\u043a\u0442\u0438\u0432\u043e\u0432\u0430\u043d\u0456",
     },
   },
 } as const;

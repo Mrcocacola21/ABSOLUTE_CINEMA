@@ -1,11 +1,21 @@
 import type { MovieCreatePayload } from "@/api/admin";
+import {
+  getMovieStatusBadgeClassName,
+  isMovieScheduleReady,
+} from "@/shared/movieStatus";
+import { formatStateLabel } from "@/shared/presentation";
 import type { Movie } from "@/types/domain";
 import { getMovieMonogram } from "@/widgets/admin/chronoboard/utils";
 
 interface MovieCatalogPanelProps {
   catalogMovies: Movie[];
   totalMoviesCount: number;
-  activeMoviesCount: number;
+  scheduleReadyMoviesCount: number;
+  statusCounts: {
+    planned: number;
+    active: number;
+    deactivated: number;
+  };
   isBusy: boolean;
   busyActionLabel?: string;
   movieForm: MovieCreatePayload;
@@ -20,13 +30,15 @@ interface MovieCatalogPanelProps {
   onEditMovie: (movie: Movie) => void;
   onQueueMovie: (movie: Movie) => void;
   onDeactivateMovie: (movie: Movie) => Promise<void> | void;
+  onReturnToPlanned: (movie: Movie) => Promise<void> | void;
   onDeleteMovie: (movie: Movie) => Promise<void> | void;
 }
 
 export function MovieCatalogPanel({
   catalogMovies,
   totalMoviesCount,
-  activeMoviesCount,
+  scheduleReadyMoviesCount,
+  statusCounts,
   isBusy,
   busyActionLabel,
   movieForm,
@@ -41,8 +53,21 @@ export function MovieCatalogPanel({
   onEditMovie,
   onQueueMovie,
   onDeactivateMovie,
+  onReturnToPlanned,
   onDeleteMovie,
 }: MovieCatalogPanelProps) {
+  const statusOptions =
+    editingMovieId && movieForm.status === "active"
+      ? [
+          { value: "planned", label: "Planned" },
+          { value: "active", label: "Active (automatic)" },
+          { value: "deactivated", label: "Deactivated" },
+        ]
+      : [
+          { value: "planned", label: "Planned" },
+          { value: "deactivated", label: "Deactivated" },
+        ];
+
   return (
     <section className="form-card admin-zone">
       <div className="admin-section__header">
@@ -50,11 +75,14 @@ export function MovieCatalogPanel({
           <p className="page-eyebrow">Movie Management</p>
           <h2 className="section-title">Maintain the movie catalog</h2>
           <p className="muted">
-            Build the lineup here first. Active titles become available in the planning shelf.
+            Build the lineup here first. Planned and active titles stay available in the planning shelf.
           </p>
         </div>
         <div className="stats-row">
-          <span className="badge">{activeMoviesCount} active titles</span>
+          <span className="badge">{scheduleReadyMoviesCount} schedule-ready</span>
+          <span className="badge">{statusCounts.planned} planned</span>
+          <span className="badge">{statusCounts.active} active</span>
+          <span className="badge">{statusCounts.deactivated} deactivated</span>
           <span className="badge">{totalMoviesCount} total titles</span>
         </div>
       </div>
@@ -140,16 +168,26 @@ export function MovieCatalogPanel({
                 placeholder="Drama, Comedy, Thriller"
               />
             </label>
-            <label className="field field--checkbox">
-              <input
-                checked={movieForm.is_active}
-                type="checkbox"
+            <label className="field">
+              <span>Status</span>
+              <select
                 disabled={isBusy}
-                onChange={(event) => onMovieFormChange("is_active", event.target.checked)}
-              />
-              <span>Keep this title active for scheduling</span>
+                value={movieForm.status}
+                onChange={(event) => onMovieFormChange("status", event.target.value as MovieCreatePayload["status"])}
+              >
+                {statusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
+
+          <p className="field__hint">
+            Planned titles are ready for scheduling. A movie becomes active automatically after it gets a future
+            session. Deactivated titles stay in the catalog but are excluded from planning.
+          </p>
 
           <div className="actions-row">
             <button className="button" type="submit" disabled={isBusy}>
@@ -189,21 +227,20 @@ export function MovieCatalogPanel({
                       )}
                     </div>
                     <div className="admin-catalog__copy">
-                      <strong>{movie.title}</strong>
+                      <strong className="admin-catalog__title">{movie.title}</strong>
+                      <div className="admin-catalog__badges">
+                        {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
+                        {movie.genres.length > 0 ? <span className="badge">{movie.genres.join(", ")}</span> : null}
+                      </div>
                       <p className="muted">{movie.description}</p>
                     </div>
                   </div>
-                  <div className="stats-row">
-                    <span className="badge">{movie.duration_minutes} min</span>
-                    <span className={`badge${movie.is_active ? "" : " badge--danger"}`}>
-                      {movie.is_active ? "Active" : "Inactive"}
+                  <div className="admin-catalog__status-panel">
+                    <span className={getMovieStatusBadgeClassName(movie.status)}>
+                      {formatStateLabel(movie.status)}
                     </span>
+                    <span className="admin-catalog__duration">{movie.duration_minutes} min</span>
                   </div>
-                </div>
-
-                <div className="stats-row">
-                  {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
-                  {movie.genres.length > 0 ? <span className="badge">{movie.genres.join(", ")}</span> : null}
                 </div>
 
                 <div className="actions-row">
@@ -213,19 +250,30 @@ export function MovieCatalogPanel({
                   <button
                     className="button--ghost"
                     type="button"
-                    disabled={isBusy || !movie.is_active}
+                    disabled={isBusy || !isMovieScheduleReady(movie)}
                     onClick={() => onQueueMovie(movie)}
                   >
                     Queue for board
                   </button>
-                  <button
-                    className="button--ghost"
-                    type="button"
-                    disabled={isBusy || !movie.is_active}
-                    onClick={() => void onDeactivateMovie(movie)}
-                  >
-                    Deactivate
-                  </button>
+                  {movie.status === "deactivated" ? (
+                    <button
+                      className="button--ghost"
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => void onReturnToPlanned(movie)}
+                    >
+                      Return to planned
+                    </button>
+                  ) : (
+                    <button
+                      className="button--ghost"
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => void onDeactivateMovie(movie)}
+                    >
+                      Deactivate
+                    </button>
+                  )}
                   <button
                     className="button--danger"
                     type="button"

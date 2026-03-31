@@ -21,6 +21,7 @@ import {
   updateSessionRequest,
 } from "@/api/admin";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { isMovieActive } from "@/shared/movieStatus";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
 import type { AttendanceReport, Movie, Session, SessionDetails, TicketListItem, User } from "@/types/domain";
@@ -193,7 +194,9 @@ export function AdminDashboardPage() {
     );
   }
 
-  const activeMoviesCount = movies.filter((movie) => movie.is_active).length;
+  const activeMoviesCount = movies.filter((movie) => isMovieActive(movie)).length;
+  const plannedMoviesCount = movies.filter((movie) => movie.status === "planned").length;
+  const deactivatedMoviesCount = movies.filter((movie) => movie.status === "deactivated").length;
   const scheduledSessionsCount = sessions.filter((session) => session.status === "scheduled").length;
 
   return (
@@ -206,7 +209,13 @@ export function AdminDashboardPage() {
         </div>
         <div className="actions-row">
           <span className="badge">
-            {activeMoviesCount}/{movies.length} {t("movieCatalogTitle")}
+            {activeMoviesCount} {t("activeLabel")}
+          </span>
+          <span className="badge">
+            {plannedMoviesCount} {t("plannedLabel")}
+          </span>
+          <span className="badge">
+            {deactivatedMoviesCount} {t("deactivatedLabel")}
           </span>
           <span className="badge">
             {scheduledSessionsCount}/{sessions.length} {t("sessionBoardTitle")}
@@ -233,18 +242,19 @@ export function AdminDashboardPage() {
           <p className="page-eyebrow">Movie Management</p>
           <h2 className="section-title">Maintain the catalog</h2>
           <p className="muted">
-            Create titles, update metadata, and keep the active lineup ready for scheduling.
+            Create titles, keep planned films ready for scheduling, and archive movies that should stay out of rotation.
           </p>
           <div className="stats-row">
+            <span className="badge">{plannedMoviesCount} planned</span>
             <span className="badge">{activeMoviesCount} active</span>
-            <span className="badge">{movies.length - activeMoviesCount} archived</span>
+            <span className="badge">{deactivatedMoviesCount} deactivated</span>
           </div>
         </article>
         <article className="card admin-overview-card">
           <p className="page-eyebrow">Session Planner</p>
           <h2 className="section-title">Schedule on the chronoboard</h2>
           <p className="muted">
-            Drag an active movie onto the board, confirm the slot, and manage the day view in one lane.
+            Drag planned or active movies onto the board, confirm the slot, and let scheduled titles become active automatically.
           </p>
           <div className="stats-row">
             <span className="badge">{scheduledSessionsCount} scheduled</span>

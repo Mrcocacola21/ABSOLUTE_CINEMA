@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { getMovieRequest, getScheduleRequest } from "@/api/schedule";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { getMovieStatusTranslationKey } from "@/shared/movieStatus";
 import { formatCurrency, formatDateTime, formatTime } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, ScheduleItem } from "@/types/domain";
@@ -89,7 +90,7 @@ export function MovieDetailsPage() {
     };
   }, [sessions]);
 
-  const statusLabel = movie ? (movie.is_active ? t("activeLabel") : t("inactiveLabel")) : "--";
+  const statusLabel = movie ? t(getMovieStatusTranslationKey(movie.status)) : "--";
 
   return (
     <>
@@ -204,7 +205,7 @@ export function MovieDetailsPage() {
               <div className="movie-detail-card__fact-grid">
                 <div className="movie-detail-card__fact">
                   <span>{t("status")}</span>
-                  <strong>{movie.is_active ? t("activeLabel") : t("inactiveLabel")}</strong>
+                  <strong>{t(getMovieStatusTranslationKey(movie.status))}</strong>
                 </div>
                 <div className="movie-detail-card__fact">
                   <span>{t("duration")}</span>

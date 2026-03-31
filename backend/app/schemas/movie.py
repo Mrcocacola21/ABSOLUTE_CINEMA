@@ -3,10 +3,26 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from pydantic import Field, HttpUrl, field_validator
+from pydantic import Field, HttpUrl, field_validator, model_validator
 
+from app.core.constants import MOVIE_STATUS_VALUES, MovieStatuses
 from app.schemas.common import BaseSchema
+
+
+def _populate_legacy_movie_status(value: Any) -> Any:
+    """Map legacy boolean flags into the explicit movie status field."""
+    if not isinstance(value, dict):
+        return value
+
+    if "status" in value or "is_active" not in value:
+        return value
+
+    return {
+        **value,
+        "status": MovieStatuses.ACTIVE if value.get("is_active") else MovieStatuses.DEACTIVATED,
+    }
 
 
 class MovieBase(BaseSchema):
@@ -18,7 +34,13 @@ class MovieBase(BaseSchema):
     poster_url: HttpUrl | None = None
     age_rating: str | None = Field(default=None, max_length=32)
     genres: list[str] = Field(default_factory=list)
-    is_active: bool = True
+    status: str = MovieStatuses.PLANNED
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_legacy_status(cls, value: Any) -> Any:
+        """Accept legacy payloads/documents that still send `is_active`."""
+        return _populate_legacy_movie_status(value)
 
     @field_validator("genres")
     @classmethod
@@ -38,6 +60,14 @@ class MovieBase(BaseSchema):
             normalized.append(cleaned)
         return normalized
 
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        """Restrict movie status values to the supported lifecycle states."""
+        if value not in MOVIE_STATUS_VALUES:
+            raise ValueError("Unsupported movie status.")
+        return value
+
 
 class MovieCreate(MovieBase):
     """Payload for creating a movie."""
@@ -52,7 +82,13 @@ class MovieUpdate(BaseSchema):
     poster_url: HttpUrl | None = None
     age_rating: str | None = Field(default=None, max_length=32)
     genres: list[str] | None = None
-    is_active: bool | None = None
+    status: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_legacy_status(cls, value: Any) -> Any:
+        """Accept legacy partial updates that still send `is_active`."""
+        return _populate_legacy_movie_status(value)
 
     @field_validator("genres")
     @classmethod
@@ -61,6 +97,14 @@ class MovieUpdate(BaseSchema):
         if value is None:
             return None
         return MovieBase.normalize_genres(value)
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str | None) -> str | None:
+        """Validate partial status updates when status is provided."""
+        if value is None:
+            return None
+        return MovieBase.validate_status(value)
 
 
 class MovieRead(MovieBase):

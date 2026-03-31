@@ -8,6 +8,7 @@ from typing import Any
 from pymongo import ReturnDocument
 
 from app.adapters.mongo_adapter import MongoDocumentAdapter
+from app.core.constants import MovieStatuses
 from app.db.collections import DatabaseCollections
 from app.repositories.base import BaseRepository
 from app.utils.identifiers import to_object_id
@@ -53,7 +54,7 @@ class MovieRepository(BaseRepository):
 
     async def list_movies(self, *, active_only: bool) -> list[dict[str, Any]]:
         """Return movies ordered by title."""
-        query: dict[str, Any] = {"is_active": True} if active_only else {}
+        query: dict[str, Any] = {"status": MovieStatuses.ACTIVE} if active_only else {}
         cursor = self.collection.find(query).sort("title", 1)
         documents = await cursor.to_list(length=500)
         return MongoDocumentAdapter.normalize_many(documents)

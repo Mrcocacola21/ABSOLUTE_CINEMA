@@ -1,6 +1,14 @@
 import { apiClient } from "@/api/client";
 import type { ApiResponse } from "@/types/api";
-import type { AttendanceReport, Movie, Session, SessionDetails, TicketListItem, User } from "@/types/domain";
+import type {
+  AttendanceReport,
+  Movie,
+  MovieStatus,
+  Session,
+  SessionDetails,
+  TicketListItem,
+  User,
+} from "@/types/domain";
 
 export interface MovieCreatePayload {
   title: string;
@@ -9,7 +17,7 @@ export interface MovieCreatePayload {
   poster_url?: string;
   age_rating?: string;
   genres: string[];
-  is_active: boolean;
+  status: MovieStatus;
 }
 
 export interface MovieUpdatePayload {
@@ -19,7 +27,7 @@ export interface MovieUpdatePayload {
   poster_url?: string | null;
   age_rating?: string | null;
   genres?: string[];
-  is_active?: boolean;
+  status?: MovieStatus;
 }
 
 export interface SessionCreatePayload {

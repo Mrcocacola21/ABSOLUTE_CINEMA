@@ -27,7 +27,7 @@ class MovieDocument(TypedDict):
     poster_url: NotRequired[str | None]
     age_rating: NotRequired[str | None]
     genres: list[str]
-    is_active: bool
+    status: str
     created_at: datetime
     updated_at: NotRequired[datetime | None]
 

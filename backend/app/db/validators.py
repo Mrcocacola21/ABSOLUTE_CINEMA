@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.core.constants import Roles, SessionStatuses, TicketStatuses
+from app.core.constants import MOVIE_STATUS_VALUES, Roles, SessionStatuses, TicketStatuses
 from app.db.collections import DatabaseCollections
 
 
@@ -61,7 +61,7 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                     "description",
                     "duration_minutes",
                     "genres",
-                    "is_active",
+                    "status",
                     "created_at",
                 ],
                 "properties": {
@@ -87,8 +87,8 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                         "bsonType": "array",
                         "items": {"bsonType": "string"},
                     },
-                    "is_active": {
-                        "bsonType": "bool",
+                    "status": {
+                        "enum": list(MOVIE_STATUS_VALUES),
                     },
                     "created_at": {
                         "bsonType": "date",

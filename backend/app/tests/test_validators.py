@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.core.constants import MOVIE_STATUS_VALUES
 from app.db.collections import DatabaseCollections
 from app.db.validators import COLLECTION_VALIDATORS, ensure_collection_validators
 
@@ -66,10 +67,14 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
     sessions_command = next(
         command for command in database.commands if command["collMod"] == DatabaseCollections.SESSIONS
     )
+    movies_command = next(
+        command for command in database.commands if command["collMod"] == DatabaseCollections.MOVIES
+    )
     tickets_command = next(
         command for command in database.commands if command["collMod"] == DatabaseCollections.TICKETS
     )
 
+    movie_properties = movies_command["validator"]["$jsonSchema"]["properties"]
     session_validator_clauses = sessions_command["validator"]["$and"]
     ticket_validator_clauses = tickets_command["validator"]["$and"]
     session_properties = session_validator_clauses[0]["$jsonSchema"]["properties"]
@@ -77,6 +82,7 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
     ticket_properties = ticket_validator_clauses[0]["$jsonSchema"]["properties"]
     ticket_expr = ticket_validator_clauses[1]["$expr"]["$or"]
 
+    assert movie_properties["status"]["enum"] == list(MOVIE_STATUS_VALUES)
     assert session_properties["movie_id"]["bsonType"] == "string"
     assert session_properties["updated_at"]["bsonType"] == ["date", "null"]
     assert {"$gt": ["$end_time", "$start_time"]} in session_expr

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.core.constants import MOVIE_STATUS_VALUES
+from app.core.constants import MOVIE_STATUS_VALUES, ORDER_STATUS_VALUES
 from app.db.collections import DatabaseCollections
 from app.db.validators import COLLECTION_VALIDATORS, ensure_collection_validators
 
@@ -38,6 +38,7 @@ async def test_ensure_collection_validators_creates_missing_collections() -> Non
     assert created_names == [
         DatabaseCollections.MOVIES,
         DatabaseCollections.SESSIONS,
+        DatabaseCollections.ORDERS,
         DatabaseCollections.TICKETS,
     ]
     assert database.commands == [
@@ -55,6 +56,7 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
             DatabaseCollections.USERS,
             DatabaseCollections.MOVIES,
             DatabaseCollections.SESSIONS,
+            DatabaseCollections.ORDERS,
             DatabaseCollections.TICKETS,
         ]
     )
@@ -62,7 +64,7 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
     await ensure_collection_validators(database)
 
     assert database.created_collections == []
-    assert len(database.commands) == 4
+    assert len(database.commands) == 5
 
     sessions_command = next(
         command for command in database.commands if command["collMod"] == DatabaseCollections.SESSIONS
@@ -70,11 +72,15 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
     movies_command = next(
         command for command in database.commands if command["collMod"] == DatabaseCollections.MOVIES
     )
+    orders_command = next(
+        command for command in database.commands if command["collMod"] == DatabaseCollections.ORDERS
+    )
     tickets_command = next(
         command for command in database.commands if command["collMod"] == DatabaseCollections.TICKETS
     )
 
     movie_properties = movies_command["validator"]["$jsonSchema"]["properties"]
+    order_properties = orders_command["validator"]["$jsonSchema"]["properties"]
     session_validator_clauses = sessions_command["validator"]["$and"]
     ticket_validator_clauses = tickets_command["validator"]["$and"]
     session_properties = session_validator_clauses[0]["$jsonSchema"]["properties"]
@@ -83,11 +89,14 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
     ticket_expr = ticket_validator_clauses[1]["$expr"]["$or"]
 
     assert movie_properties["status"]["enum"] == list(MOVIE_STATUS_VALUES)
+    assert order_properties["status"]["enum"] == list(ORDER_STATUS_VALUES)
     assert session_properties["movie_id"]["bsonType"] == "string"
     assert session_properties["updated_at"]["bsonType"] == ["date", "null"]
     assert {"$gt": ["$end_time", "$start_time"]} in session_expr
     assert {"$lte": ["$available_seats", "$total_seats"]} in session_expr
+    assert order_properties["tickets_count"]["minimum"] == 1
     assert ticket_properties["user_id"]["bsonType"] == "string"
+    assert ticket_properties["order_id"]["bsonType"] == ["string", "null"]
     assert ticket_properties["session_id"]["bsonType"] == "string"
     assert any({"$eq": ["$status", "purchased"]} in clause["$and"] for clause in ticket_expr)
     assert any({"$eq": ["$status", "cancelled"]} in clause["$and"] for clause in ticket_expr)

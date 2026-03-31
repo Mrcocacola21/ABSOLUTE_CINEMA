@@ -20,7 +20,7 @@ KYIV_TIMEZONE = ZoneInfo("Europe/Kyiv")
 DEFAULT_PASSWORD = "CinemaPass123"
 ADMIN_EMAIL = "admin@example.com"
 USER_EMAIL = "user@example.com"
-DEFAULT_TEST_MONGODB_URI = "mongodb://127.0.0.1:27017"
+DEFAULT_TEST_MONGODB_URI = "mongodb://127.0.0.1:27017/?replicaSet=rs0&directConnection=true"
 DEFAULT_TEST_DB_NAME = "cinema_showcase_test"
 UNSAFE_DATABASE_NAMES = {"cinema_showcase"}
 
@@ -64,6 +64,12 @@ def integration_settings() -> dict[str, str]:
     try:
         mongo_client = MongoClient(mongodb_uri, serverSelectionTimeoutMS=2000)
         mongo_client.admin.command("ping")
+        topology = mongo_client.admin.command("hello")
+        if not topology.get("setName"):
+            pytest.skip(
+                "MongoDB replica set support is required for transactional integration tests. "
+                "Start the local single-node replica set first."
+            )
     except Exception as exc:  # pragma: no cover - environment dependent
         pytest.skip(f"MongoDB is required for integration tests: {exc}")
 
@@ -108,6 +114,7 @@ async def clean_database(app: object) -> AsyncIterator[None]:
 
     database = mongodb_manager.get_database()
     collections = (
+        DatabaseCollections.ORDERS,
         DatabaseCollections.TICKETS,
         DatabaseCollections.SESSIONS,
         DatabaseCollections.MOVIES,

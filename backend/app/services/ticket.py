@@ -4,16 +4,20 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from motor.motor_asyncio import AsyncIOMotorClientSession
+
 from app.commands.ticket_purchase import TicketPurchaseCommand
-from app.core.constants import Roles, SessionStatuses, TicketStatuses
+from app.core.constants import OrderStatuses, Roles, SessionStatuses, TicketStatuses
 from app.core.exceptions import (
     AuthorizationException,
     ConflictException,
+    DatabaseException,
     NotFoundException,
 )
-from app.core.logging import get_logger
+from app.db.transactions import mongo_transaction
 from app.observers.events import build_default_event_publisher
 from app.repositories.movies import MovieRepository
+from app.repositories.orders import OrderRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.tickets import TicketRepository
 from app.repositories.users import UserRepository
@@ -23,8 +27,6 @@ from app.schemas.ticket import TicketListRead, TicketPurchaseRequest, TicketRead
 from app.schemas.user import UserRead
 from app.utils.session_locks import session_write_lock
 
-logger = get_logger(__name__)
-
 
 class TicketService:
     """Service encapsulating ticket-related use cases."""
@@ -33,11 +35,13 @@ class TicketService:
         self,
         session_repository: SessionRepository,
         ticket_repository: TicketRepository,
+        order_repository: OrderRepository,
         movie_repository: MovieRepository,
         user_repository: UserRepository,
     ) -> None:
         self.session_repository = session_repository
         self.ticket_repository = ticket_repository
+        self.order_repository = order_repository
         self.movie_repository = movie_repository
         self.user_repository = user_repository
         self.event_publisher = build_default_event_publisher()
@@ -48,6 +52,7 @@ class TicketService:
             command = TicketPurchaseCommand(
                 session_repository=self.session_repository,
                 ticket_repository=self.ticket_repository,
+                order_repository=self.order_repository,
                 event_publisher=self.event_publisher,
             )
             return await command.execute(payload=payload, current_user=current_user)
@@ -62,52 +67,63 @@ class TicketService:
         async with session_write_lock(str(ticket_document["session_id"])):
             now = datetime.now(tz=timezone.utc)
             await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
+            updated_ticket: dict[str, object] | None = None
+            try:
+                async with mongo_transaction() as db_session:
+                    ticket_document = await self.ticket_repository.get_by_id(ticket_id, db_session=db_session)
+                    if ticket_document is None:
+                        raise NotFoundException("Ticket was not found.")
+                    self._ensure_ticket_owner(ticket_document=ticket_document, current_user=current_user)
 
-            ticket_document = await self.ticket_repository.get_by_id(ticket_id)
-            if ticket_document is None:
-                raise NotFoundException("Ticket was not found.")
-            self._ensure_ticket_owner(ticket_document=ticket_document, current_user=current_user)
-
-            session_document = await self.session_repository.get_by_id(ticket_document["session_id"])
-            if session_document is None:
-                raise NotFoundException("Session for this ticket was not found.")
-            cancellation_blocker = self._get_ticket_cancellation_blocker(
-                ticket_document=ticket_document,
-                session_document=session_document,
-                now=now,
-            )
-            if cancellation_blocker is not None:
-                raise ConflictException(cancellation_blocker)
-
-            updated_ticket = await self.ticket_repository.update_status(
-                ticket_id,
-                status=TicketStatuses.CANCELLED,
-                updated_at=now,
-                cancelled_at=now,
-                current_status=TicketStatuses.PURCHASED,
-            )
-            if updated_ticket is None:
-                latest_ticket = await self.ticket_repository.get_by_id(ticket_id)
-                if latest_ticket is None:
-                    raise NotFoundException("Ticket was not found.")
-                latest_blocker = self._get_ticket_cancellation_blocker(
-                    ticket_document=latest_ticket,
-                    session_document=session_document,
-                    now=now,
-                )
-                raise ConflictException(latest_blocker or "Ticket can no longer be cancelled.")
-
-            seats_restored = await self.session_repository.increment_available_seats(
-                ticket_document["session_id"],
-                updated_at=now,
-            )
-            if not seats_restored and not await self._session_counter_matches_active_tickets(ticket_document["session_id"]):
-                reconciled = await self._reconcile_available_seats(ticket_document["session_id"], updated_at=now)
-                if not reconciled:
-                    raise ConflictException(
-                        "Ticket was cancelled but the session seat counter could not be reconciled."
+                    session_document = await self.session_repository.get_by_id(
+                        ticket_document["session_id"],
+                        db_session=db_session,
                     )
+                    if session_document is None:
+                        raise NotFoundException("Session for this ticket was not found.")
+                    cancellation_blocker = self._get_ticket_cancellation_blocker(
+                        ticket_document=ticket_document,
+                        session_document=session_document,
+                        now=now,
+                    )
+                    if cancellation_blocker is not None:
+                        raise ConflictException(cancellation_blocker)
 
+                    updated_ticket = await self.ticket_repository.update_status(
+                        ticket_id,
+                        status=TicketStatuses.CANCELLED,
+                        updated_at=now,
+                        cancelled_at=now,
+                        current_status=TicketStatuses.PURCHASED,
+                        db_session=db_session,
+                    )
+                    if updated_ticket is None:
+                        raise ConflictException("Ticket can no longer be cancelled.")
+
+                    seats_restored = await self.session_repository.increment_available_seats(
+                        ticket_document["session_id"],
+                        updated_at=now,
+                        db_session=db_session,
+                    )
+                    if not seats_restored:
+                        raise DatabaseException(
+                            "Ticket cancellation could not restore the session seat counter."
+                        )
+
+                    order_id = str(ticket_document.get("order_id") or "")
+                    if order_id:
+                        await self._refresh_order_aggregate(
+                            order_id,
+                            updated_at=now,
+                            db_session=db_session,
+                        )
+            except Exception as exc:
+                if isinstance(exc, (AuthorizationException, ConflictException, DatabaseException, NotFoundException)):
+                    raise
+                raise DatabaseException("Unable to cancel the ticket.") from exc
+
+            if updated_ticket is None:
+                raise DatabaseException("Ticket cancellation did not produce an updated ticket.")
             return TicketRead.model_validate(updated_ticket)
 
     async def list_current_user_tickets(self, current_user: UserRead) -> list[TicketListRead]:
@@ -219,29 +235,48 @@ class TicketService:
         if current_user.role != Roles.ADMIN and ticket_document["user_id"] != current_user.id:
             raise AuthorizationException("You can only cancel your own tickets.")
 
-    async def _session_counter_matches_active_tickets(self, session_id: str) -> bool:
-        session_document = await self.session_repository.get_by_id(session_id)
-        if session_document is None:
-            return False
+    async def _refresh_order_aggregate(
+        self,
+        order_id: str,
+        *,
+        updated_at: datetime,
+        db_session: AsyncIOMotorClientSession | None = None,
+    ) -> None:
+        """Keep the stored order summary aligned with current ticket statuses."""
+        order_document = await self.order_repository.get_by_id(order_id, db_session=db_session)
+        if order_document is None:
+            raise DatabaseException("Order for this ticket was not found.")
 
-        active_ticket_count = await self.ticket_repository.count_by_session(session_id, active_only=True)
-        expected_available_seats = session_document["total_seats"] - active_ticket_count
-        return session_document["available_seats"] == expected_available_seats
+        ticket_documents = await self.ticket_repository.list_by_order(order_id, db_session=db_session)
+        if not ticket_documents:
+            raise DatabaseException("Order aggregate could not be refreshed because no tickets were found.")
 
-    async def _reconcile_available_seats(self, session_id: str, *, updated_at: datetime) -> bool:
-        session_document = await self.session_repository.get_by_id(session_id)
-        if session_document is None:
-            logger.error("Unable to reconcile seats for missing session %s", session_id)
-            return False
-
-        active_ticket_count = await self.ticket_repository.count_by_session(session_id, active_only=True)
-        expected_available_seats = session_document["total_seats"] - active_ticket_count
-        repaired_session = await self.session_repository.set_available_seats(
-            session_id,
-            available_seats=max(expected_available_seats, 0),
-            updated_at=updated_at,
+        active_tickets_count = sum(
+            1 for ticket in ticket_documents if ticket["status"] == TicketStatuses.PURCHASED
         )
-        if repaired_session is None:
-            logger.error("Unable to reconcile available seats for session %s", session_id)
-            return False
-        return True
+        if active_tickets_count <= 0:
+            derived_status = OrderStatuses.CANCELLED
+        elif active_tickets_count == len(ticket_documents):
+            derived_status = OrderStatuses.COMPLETED
+        else:
+            derived_status = OrderStatuses.PARTIALLY_CANCELLED
+
+        updates: dict[str, object] = {}
+        if order_document.get("status") != derived_status:
+            updates["status"] = derived_status
+
+        derived_total_price = float(sum(float(ticket["price"]) for ticket in ticket_documents))
+        if int(order_document.get("tickets_count", 0)) != len(ticket_documents):
+            updates["tickets_count"] = len(ticket_documents)
+        if float(order_document.get("total_price", 0)) != derived_total_price:
+            updates["total_price"] = derived_total_price
+
+        if not updates:
+            return
+
+        await self.order_repository.update_order(
+            order_id,
+            updates=updates,
+            updated_at=updated_at,
+            db_session=db_session,
+        )

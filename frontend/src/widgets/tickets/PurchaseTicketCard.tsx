@@ -5,7 +5,7 @@ import type { SeatAvailability } from "@/types/domain";
 
 interface PurchaseTicketCardProps {
   canPurchase: boolean;
-  selectedSeat: SeatAvailability | null;
+  selectedSeats: SeatAvailability[];
   price?: number;
   availableSeats?: number;
   isSubmitting: boolean;
@@ -15,7 +15,7 @@ interface PurchaseTicketCardProps {
 
 export function PurchaseTicketCard({
   canPurchase,
-  selectedSeat,
+  selectedSeats,
   price,
   availableSeats,
   isSubmitting,
@@ -23,11 +23,16 @@ export function PurchaseTicketCard({
   onPurchase,
 }: PurchaseTicketCardProps) {
   const { t } = useTranslation();
+  const selectedSeatLabels = selectedSeats.map((seat) => `${seat.row}-${seat.number}`);
+  const totalPrice =
+    price !== undefined && selectedSeats.length > 0 ? price * selectedSeats.length : undefined;
   const purchaseLabel = isSubmitting
     ? "Purchasing..."
-    : selectedSeat
-      ? t("purchaseTicketAction")
-      : "Select a seat first";
+    : selectedSeats.length > 1
+      ? "Purchase tickets"
+      : selectedSeats.length === 1
+        ? t("purchaseTicketAction")
+        : "Select seats first";
 
   return (
     <aside className="booking-module__summary" aria-live="polite">
@@ -35,20 +40,20 @@ export function PurchaseTicketCard({
         <div className="booking-module__summary-header">
           <h3>{t("ticketPurchase")}</h3>
           <p className="muted">
-            {selectedSeat
-              ? "Your seat is ready to reserve."
-              : "Select a seat from the map to unlock checkout."}
+            {selectedSeats.length > 0
+              ? "Your selected seats are ready to reserve."
+              : "Select seats from the map to unlock checkout."}
           </p>
         </div>
 
-        <div className={`booking-module__selection-card${selectedSeat ? " is-active" : ""}`}>
+        <div className={`booking-module__selection-card${selectedSeats.length > 0 ? " is-active" : ""}`}>
           <span className="booking-module__selection-label">
-            {selectedSeat ? t("selectedSeat") : "Selection"}
+            {selectedSeats.length > 0 ? (selectedSeats.length === 1 ? t("selectedSeat") : "Selected seats") : "Selection"}
           </span>
-          <strong>{selectedSeat ? `${selectedSeat.row}-${selectedSeat.number}` : "--"}</strong>
+          <strong>{selectedSeats.length > 0 ? `${selectedSeats.length}` : "--"}</strong>
           <p>
-            {selectedSeat
-              ? "This exact seat will be reserved when you confirm the purchase."
+            {selectedSeats.length > 0
+              ? `Seats ${selectedSeatLabels.join(", ")} will be reserved when you confirm the purchase.`
               : t("chooseSeatPrompt")}
           </p>
         </div>
@@ -63,8 +68,14 @@ export function PurchaseTicketCard({
         ) : null}
         {price !== undefined ? (
           <div className="booking-module__metric">
-            <span>{t("price")}</span>
+            <span>{selectedSeats.length > 0 ? "Price per ticket" : t("price")}</span>
             <strong>{formatCurrency(price)}</strong>
+          </div>
+        ) : null}
+        {totalPrice !== undefined ? (
+          <div className="booking-module__metric">
+            <span>Total</span>
+            <strong>{formatCurrency(totalPrice)}</strong>
           </div>
         ) : null}
       </div>
@@ -75,7 +86,7 @@ export function PurchaseTicketCard({
         <button
           type="button"
           className="button booking-module__button"
-          disabled={!canPurchase || !selectedSeat || isSubmitting}
+          disabled={!canPurchase || selectedSeats.length === 0 || isSubmitting}
           onClick={onPurchase}
         >
           {purchaseLabel}

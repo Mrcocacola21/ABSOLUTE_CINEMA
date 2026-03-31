@@ -25,8 +25,14 @@ COLLECTION_INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("start_time", ASCENDING)], name="sessions_start_time_idx"),
         IndexModel([("status", ASCENDING)], name="sessions_status_idx"),
     ],
+    DatabaseCollections.ORDERS: [
+        IndexModel([("user_id", ASCENDING)], name="orders_user_id_idx"),
+        IndexModel([("session_id", ASCENDING)], name="orders_session_id_idx"),
+        IndexModel([("status", ASCENDING)], name="orders_status_idx"),
+    ],
     DatabaseCollections.TICKETS: [
         IndexModel([("user_id", ASCENDING)], name="tickets_user_id_idx"),
+        IndexModel([("order_id", ASCENDING)], name="tickets_order_id_idx"),
         IndexModel([("session_id", ASCENDING)], name="tickets_session_id_idx"),
         IndexModel(
             [

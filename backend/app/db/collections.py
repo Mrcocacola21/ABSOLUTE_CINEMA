@@ -7,4 +7,5 @@ class DatabaseCollections:
     USERS = "users"
     MOVIES = "movies"
     SESSIONS = "sessions"
+    ORDERS = "orders"
     TICKETS = "tickets"

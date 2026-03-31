@@ -3366,7 +3366,7 @@ img {
   min-width: min(320px, 100%);
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 
 .booking-module__metric {
@@ -3409,6 +3409,47 @@ img {
   width: 100%;
   min-height: 52px;
   justify-content: center;
+}
+
+.order-history__order {
+  display: grid;
+  gap: 16px;
+}
+
+.order-history__order-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.order-history__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.order-history__tickets {
+  display: grid;
+  gap: 12px;
+}
+
+.order-history__ticket {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.order-history__ticket-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.order-history__ticket-copy p {
+  margin: 0;
 }
 
 .seat-map {
@@ -3910,6 +3951,10 @@ img {
 
   .booking-module__stats {
     justify-content: flex-start;
+  }
+
+  .order-history__order-head {
+    flex-direction: column;
   }
 
   .seat-map__row {

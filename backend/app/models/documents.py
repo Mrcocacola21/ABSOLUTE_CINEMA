@@ -46,9 +46,22 @@ class SessionDocument(TypedDict):
     updated_at: NotRequired[datetime | None]
 
 
+class OrderDocument(TypedDict):
+    """Raw MongoDB order document."""
+
+    user_id: str
+    session_id: str
+    status: str
+    total_price: float
+    tickets_count: int
+    created_at: datetime
+    updated_at: NotRequired[datetime | None]
+
+
 class TicketDocument(TypedDict):
     """Raw MongoDB ticket document."""
 
+    order_id: str
     user_id: str
     session_id: str
     seat_row: int

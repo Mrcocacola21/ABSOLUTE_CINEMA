@@ -77,6 +77,14 @@ def _build_database(ticket_indexes: dict[str, dict]) -> FakeDatabase:
                     "ix_sessions_movie_start": {"key": [("movie_id", 1), ("start_time", 1)]},
                 }
             ),
+            DatabaseCollections.ORDERS: FakeCollection(
+                {
+                    "_id_": {"key": [("_id", 1)]},
+                    "ix_orders_user_id": {"key": [("user_id", 1)]},
+                    "ix_orders_session_id": {"key": [("session_id", 1)]},
+                    "ix_orders_status": {"key": [("status", 1)]},
+                }
+            ),
             DatabaseCollections.TICKETS: FakeCollection(ticket_indexes),
         }
     )
@@ -88,6 +96,7 @@ async def test_ensure_indexes_accepts_equivalent_legacy_index_names() -> None:
         {
             "_id_": {"key": [("_id", 1)]},
             "ix_tickets_user_id": {"key": [("user_id", 1)]},
+            "ix_tickets_order_id": {"key": [("order_id", 1)]},
             "ix_tickets_session_id": {"key": [("session_id", 1)]},
             "tickets_active_session_seat_unique": {
                 "key": [("session_id", 1), ("seat_row", 1), ("seat_number", 1)],
@@ -110,6 +119,7 @@ async def test_ensure_indexes_replaces_legacy_ticket_seat_unique_index() -> None
         {
             "_id_": {"key": [("_id", 1)]},
             "ix_tickets_user_id": {"key": [("user_id", 1)]},
+            "ix_tickets_order_id": {"key": [("order_id", 1)]},
             "ix_tickets_session_id": {"key": [("session_id", 1)]},
             "ux_tickets_session_seat": {
                 "key": [("session_id", 1), ("seat_row", 1), ("seat_number", 1)],

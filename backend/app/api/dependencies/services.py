@@ -1,12 +1,14 @@
 """Dependency providers for repositories and services."""
 
 from app.repositories.movies import MovieRepository
+from app.repositories.orders import OrderRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.tickets import TicketRepository
 from app.repositories.users import UserRepository
 from app.services.admin import AdminService
 from app.services.auth import AuthService
 from app.services.movie import MovieService
+from app.services.order import OrderService
 from app.services.schedule import ScheduleService
 from app.services.ticket import TicketService
 from app.services.user import UserService
@@ -25,6 +27,11 @@ def get_movie_repository() -> MovieRepository:
 def get_session_repository() -> SessionRepository:
     """Create a session repository instance."""
     return SessionRepository()
+
+
+def get_order_repository() -> OrderRepository:
+    """Create an order repository instance."""
+    return OrderRepository()
 
 
 def get_ticket_repository() -> TicketRepository:
@@ -68,8 +75,19 @@ def get_ticket_service() -> TicketService:
     return TicketService(
         session_repository=get_session_repository(),
         ticket_repository=get_ticket_repository(),
+        order_repository=get_order_repository(),
         movie_repository=get_movie_repository(),
         user_repository=get_user_repository(),
+    )
+
+
+def get_order_service() -> OrderService:
+    """Create an order service instance."""
+    return OrderService(
+        session_repository=get_session_repository(),
+        ticket_repository=get_ticket_repository(),
+        movie_repository=get_movie_repository(),
+        order_repository=get_order_repository(),
     )
 
 

@@ -3,16 +3,30 @@ services:
     image: mongo:7
     container_name: cinema-showcase-mongodb
     restart: unless-stopped
+    command: ["mongod", "--bind_ip_all", "--replSet", "rs0"]
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 })"]
+      test: ["CMD", "mongosh", "--host", "127.0.0.1:27017", "--quiet", "--eval", "db.adminCommand({ ping: 1 }).ok"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  mongodb-init-replica:
+    image: mongo:7
+    container_name: cinema-showcase-mongodb-init-replica
+    restart: "no"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGO_HOST: mongodb:27017
+    volumes:
+      - ./docker/mongodb/init-replica.sh:/init-replica.sh:ro
+    entrypoint: ["/bin/sh", "/init-replica.sh"]
 
   backend:
     build:
@@ -22,11 +36,13 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_URI: mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true
       WATCHFILES_FORCE_POLLING: "true"
     depends_on:
       mongodb:
         condition: service_healthy
+      mongodb-init-replica:
+        condition: service_completed_successfully
     ports:
       - "8000:8000"
     volumes:

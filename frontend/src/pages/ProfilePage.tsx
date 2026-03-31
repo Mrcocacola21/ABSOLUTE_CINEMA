@@ -2,14 +2,15 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-import { cancelTicketRequest, listMyTicketsRequest } from "@/api/tickets";
+import { listMyOrdersRequest } from "@/api/orders";
+import { cancelTicketRequest } from "@/api/tickets";
 import { deactivateCurrentUserRequest, updateCurrentUserRequest } from "@/api/users";
 import { useAuth } from "@/features/auth/useAuth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
-import type { TicketListItem } from "@/types/domain";
+import type { Order, OrderTicket } from "@/types/domain";
 
 interface ProfileFormState {
   name: string;
@@ -26,14 +27,14 @@ const emptySensitiveFields = {
 export function ProfilePage() {
   const { t } = useTranslation();
   const { currentUser, isAuthLoading, logout, refreshCurrentUser } = useAuth();
-  const [tickets, setTickets] = useState<TicketListItem[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [form, setForm] = useState<ProfileFormState>({
     name: "",
     email: "",
     ...emptySensitiveFields,
   });
-  const [ticketsErrorMessage, setTicketsErrorMessage] = useState("");
-  const [isTicketsLoading, setIsTicketsLoading] = useState(true);
+  const [ordersErrorMessage, setOrdersErrorMessage] = useState("");
+  const [isOrdersLoading, setIsOrdersLoading] = useState(true);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isDeactivatingAccount, setIsDeactivatingAccount] = useState(false);
   const [cancellingTicketId, setCancellingTicketId] = useState<string | null>(null);
@@ -56,29 +57,29 @@ export function ProfilePage() {
 
   useEffect(() => {
     if (!currentUser) {
-      setTickets([]);
-      setIsTicketsLoading(false);
+      setOrders([]);
+      setIsOrdersLoading(false);
       return;
     }
-    void refreshTickets();
+    void refreshOrders();
   }, [currentUser?.id]);
 
-  async function refreshTickets(options?: { background?: boolean }) {
+  async function refreshOrders(options?: { background?: boolean }) {
     const background = options?.background ?? false;
     if (!background) {
-      setIsTicketsLoading(true);
+      setIsOrdersLoading(true);
     }
 
     try {
-      const response = await listMyTicketsRequest();
-      setTickets(response.data);
-      setTicketsErrorMessage("");
+      const response = await listMyOrdersRequest();
+      setOrders(response.data);
+      setOrdersErrorMessage("");
     } catch (error) {
-      setTickets([]);
-      setTicketsErrorMessage(extractApiErrorMessage(error, "Tickets are currently unavailable."));
+      setOrders([]);
+      setOrdersErrorMessage(extractApiErrorMessage(error, "Orders are currently unavailable."));
     } finally {
       if (!background) {
-        setIsTicketsLoading(false);
+        setIsOrdersLoading(false);
       }
     }
   }
@@ -165,9 +166,9 @@ export function ProfilePage() {
     }
   }
 
-  async function handleCancelTicket(ticket: TicketListItem) {
+  async function handleCancelTicket(order: Order, ticket: OrderTicket) {
     const confirmed = window.confirm(
-      `Cancel the ticket for ${ticket.movie_title} at seat ${ticket.seat_row}-${ticket.seat_number}?`,
+      `Cancel the ticket for ${order.movie_title} at seat ${ticket.seat_row}-${ticket.seat_number}?`,
     );
     if (!confirmed) {
       return;
@@ -177,11 +178,11 @@ export function ProfilePage() {
     setFeedback(null);
     try {
       const response = await cancelTicketRequest(ticket.id);
-      await refreshTickets({ background: true });
+      await refreshOrders({ background: true });
       setFeedback({
         tone: "success",
         title: "Ticket cancelled",
-        message: response.message,
+        message: `${response.message} Order ${order.id} was refreshed.`,
       });
     } catch (error) {
       setFeedback({
@@ -314,68 +315,102 @@ export function ProfilePage() {
         <section className="form-card">
           <div className="admin-section__header">
             <div>
-              <h3>My tickets</h3>
-              <p className="muted">Review upcoming bookings and cancel eligible tickets.</p>
+              <h3>My orders</h3>
+              <p className="muted">Review grouped purchases, inspect seats, and cancel eligible tickets.</p>
             </div>
-            <span className="badge">{tickets.length}</span>
+            <span className="badge">{orders.length}</span>
           </div>
 
-          {isTicketsLoading ? (
+          {isOrdersLoading ? (
             <StatePanel
               tone="loading"
-              title="Loading your tickets"
-              message="Fetching your latest ticket activity."
+              title="Loading your orders"
+              message="Fetching your latest grouped purchases."
             />
           ) : null}
 
-          {!isTicketsLoading && ticketsErrorMessage ? (
+          {!isOrdersLoading && ordersErrorMessage ? (
             <StatePanel
               tone="error"
-              title="Unable to load your tickets"
-              message={ticketsErrorMessage}
+              title="Unable to load your orders"
+              message={ordersErrorMessage}
               action={
-                <button className="button--ghost" type="button" onClick={() => void refreshTickets()}>
+                <button className="button--ghost" type="button" onClick={() => void refreshOrders()}>
                   Try again
                 </button>
               }
             />
           ) : null}
 
-          {!isTicketsLoading && !ticketsErrorMessage && tickets.length === 0 ? (
+          {!isOrdersLoading && !ordersErrorMessage && orders.length === 0 ? (
             <section className="empty-state empty-state--panel">
-              <h2>No tickets yet</h2>
-              <p>Once you purchase a session ticket, it will appear here.</p>
+              <h2>No orders yet</h2>
+              <p>Once you purchase one or more seats for a session, the grouped order will appear here.</p>
               <Link to="/schedule" className="button--ghost">
                 Browse schedule
               </Link>
             </section>
           ) : null}
 
-          {!isTicketsLoading && !ticketsErrorMessage && tickets.length > 0 ? (
+          {!isOrdersLoading && !ordersErrorMessage && orders.length > 0 ? (
             <div className="list">
-              {tickets.map((ticket) => (
-                <article key={ticket.id} className="card">
-                  <strong>{ticket.movie_title}</strong>
-                  <p className="muted">
-                    {formatDateTime(ticket.session_start_time)} | Seat {ticket.seat_row}-{ticket.seat_number}
-                  </p>
-                  <div className="stats-row">
-                    <span className="badge">{formatStateLabel(ticket.status)}</span>
-                    <span className="badge">{formatStateLabel(ticket.session_status)}</span>
-                    <span className="badge">{formatCurrency(ticket.price)}</span>
+              {orders.map((order) => (
+                <article key={order.id} className="card order-history__order">
+                  <div className="order-history__order-head">
+                    <div>
+                      <strong>{order.movie_title}</strong>
+                      <p className="muted">
+                        {formatDateTime(order.session_start_time)} | {formatStateLabel(order.session_status)}
+                      </p>
+                    </div>
+                    <div className="stats-row">
+                      <span className="badge">{formatStateLabel(order.status)}</span>
+                      <span className="badge">
+                        {order.active_tickets_count}/{order.tickets_count} active
+                      </span>
+                      <span className="badge">{formatCurrency(order.total_price)}</span>
+                    </div>
                   </div>
-                  {ticket.is_cancellable ? (
-                    <button
-                      className="button--ghost"
-                      type="button"
-                      disabled={cancellingTicketId === ticket.id}
-                      onClick={() => {
-                        void handleCancelTicket(ticket);
-                      }}
-                    >
-                      {cancellingTicketId === ticket.id ? "Cancelling..." : "Cancel ticket"}
-                    </button>
-                  ) : null}
+
+                  <div className="order-history__meta">
+                    <span className="badge">Order {order.id.slice(-6)}</span>
+                    <span className="badge">
+                      {order.tickets_count} ticket{order.tickets_count > 1 ? "s" : ""}
+                    </span>
+                    {order.age_rating ? <span className="badge">{order.age_rating}</span> : null}
+                  </div>
+
+                  <div className="order-history__tickets">
+                    {order.tickets.map((ticket) => (
+                      <div key={ticket.id} className="order-history__ticket">
+                        <div className="order-history__ticket-copy">
+                          <strong>
+                            Seat {ticket.seat_row}-{ticket.seat_number}
+                          </strong>
+                          <p className="muted">
+                            Purchased {formatDateTime(ticket.purchased_at)}
+                            {ticket.cancelled_at ? ` | Cancelled ${formatDateTime(ticket.cancelled_at)}` : ""}
+                          </p>
+                        </div>
+                        <div className="stats-row">
+                          <span className="badge">{formatStateLabel(ticket.status)}</span>
+                          <span className="badge">{formatCurrency(ticket.price)}</span>
+                        </div>
+                        {ticket.is_cancellable ? (
+                          <button
+                            className="button--ghost"
+                            type="button"
+                            disabled={cancellingTicketId === ticket.id}
+                            onClick={() => {
+                              void handleCancelTicket(order, ticket);
+                            }}
+                          >
+                            {cancellingTicketId === ticket.id ? "Cancelling..." : "Cancel ticket"}
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
                 </article>
               ))}
             </div>

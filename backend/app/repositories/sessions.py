@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from motor.motor_asyncio import AsyncIOMotorClientSession
 from pymongo import ReturnDocument
 
 from app.adapters.mongo_adapter import MongoDocumentAdapter
@@ -22,23 +23,39 @@ class SessionRepository(BaseRepository):
         """Return the MongoDB collection name for sessions."""
         return DatabaseCollections.SESSIONS
 
-    async def create_session(self, document: dict[str, Any]) -> dict[str, Any]:
+    async def create_session(
+        self,
+        document: dict[str, Any],
+        *,
+        db_session: AsyncIOMotorClientSession | None = None,
+    ) -> dict[str, Any]:
         """Insert a new session document and return the normalized result."""
-        result = await self.collection.insert_one(document)
-        created = await self.collection.find_one({"_id": result.inserted_id})
+        result = await self.collection.insert_one(document, session=db_session)
+        created = await self.collection.find_one({"_id": result.inserted_id}, session=db_session)
         return MongoDocumentAdapter.normalize(created) or {}
 
-    async def get_by_id(self, session_id: str) -> dict[str, Any] | None:
+    async def get_by_id(
+        self,
+        session_id: str,
+        *,
+        db_session: AsyncIOMotorClientSession | None = None,
+    ) -> dict[str, Any] | None:
         """Return a session document by its identifier."""
-        session = await self.collection.find_one({"_id": to_object_id(session_id)})
+        session = await self.collection.find_one({"_id": to_object_id(session_id)}, session=db_session)
         return MongoDocumentAdapter.normalize(session)
 
-    async def list_by_ids(self, session_ids: list[str]) -> list[dict[str, Any]]:
+    async def list_by_ids(
+        self,
+        session_ids: list[str],
+        *,
+        db_session: AsyncIOMotorClientSession | None = None,
+    ) -> list[dict[str, Any]]:
         """Return sessions for the provided identifiers."""
         if not session_ids:
             return []
         cursor = self.collection.find(
-            {"_id": {"$in": [to_object_id(session_id) for session_id in set(session_ids)]}}
+            {"_id": {"$in": [to_object_id(session_id) for session_id in set(session_ids)]}},
+            session=db_session,
         )
         documents = await cursor.to_list(length=len(session_ids))
         return MongoDocumentAdapter.normalize_many(documents)
@@ -61,9 +78,9 @@ class SessionRepository(BaseRepository):
         documents = await cursor.to_list(length=500)
         return MongoDocumentAdapter.normalize_many(documents)
 
-    async def list_all(self) -> list[dict[str, Any]]:
+    async def list_all(self, *, db_session: AsyncIOMotorClientSession | None = None) -> list[dict[str, Any]]:
         """Return all sessions ordered by start time."""
-        cursor = self.collection.find({}).sort("start_time", 1)
+        cursor = self.collection.find({}, session=db_session).sort("start_time", 1)
         documents = await cursor.to_list(length=500)
         return MongoDocumentAdapter.normalize_many(documents)
 
@@ -92,12 +109,14 @@ class SessionRepository(BaseRepository):
         *,
         updates: dict[str, Any],
         updated_at: datetime,
+        db_session: AsyncIOMotorClientSession | None = None,
     ) -> dict[str, Any] | None:
         """Apply partial updates to a session and return the updated document."""
         updated = await self.collection.find_one_and_update(
             {"_id": to_object_id(session_id)},
             {"$set": {**updates, "updated_at": updated_at}},
             return_document=ReturnDocument.AFTER,
+            session=db_session,
         )
         return MongoDocumentAdapter.normalize(updated)
 
@@ -108,6 +127,7 @@ class SessionRepository(BaseRepository):
         updates: dict[str, Any],
         current_time: datetime,
         updated_at: datetime,
+        db_session: AsyncIOMotorClientSession | None = None,
     ) -> dict[str, Any] | None:
         """Update a session only while it is still a future scheduled session without sold seats."""
         updated = await self.collection.find_one_and_update(
@@ -119,6 +139,7 @@ class SessionRepository(BaseRepository):
             },
             {"$set": {**updates, "updated_at": updated_at}},
             return_document=ReturnDocument.AFTER,
+            session=db_session,
         )
         return MongoDocumentAdapter.normalize(updated)
 
@@ -128,12 +149,14 @@ class SessionRepository(BaseRepository):
         *,
         status: str,
         updated_at: datetime,
+        db_session: AsyncIOMotorClientSession | None = None,
     ) -> dict[str, Any] | None:
         """Update session status and return the updated document."""
         updated = await self.collection.find_one_and_update(
             {"_id": to_object_id(session_id)},
             {"$set": {"status": status, "updated_at": updated_at}},
             return_document=ReturnDocument.AFTER,
+            session=db_session,
         )
         return MongoDocumentAdapter.normalize(updated)
 
@@ -143,6 +166,7 @@ class SessionRepository(BaseRepository):
         *,
         current_time: datetime,
         updated_at: datetime,
+        db_session: AsyncIOMotorClientSession | None = None,
     ) -> dict[str, Any] | None:
         """Cancel a session only while it remains a future scheduled session."""
         updated = await self.collection.find_one_and_update(
@@ -158,17 +182,28 @@ class SessionRepository(BaseRepository):
                 }
             },
             return_document=ReturnDocument.AFTER,
+            session=db_session,
         )
         return MongoDocumentAdapter.normalize(updated)
 
-    async def delete_session(self, session_id: str) -> bool:
+    async def delete_session(
+        self,
+        session_id: str,
+        *,
+        db_session: AsyncIOMotorClientSession | None = None,
+    ) -> bool:
         """Delete a session by identifier."""
-        result = await self.collection.delete_one({"_id": to_object_id(session_id)})
+        result = await self.collection.delete_one({"_id": to_object_id(session_id)}, session=db_session)
         return result.deleted_count == 1
 
-    async def count_by_movie(self, movie_id: str) -> int:
+    async def count_by_movie(
+        self,
+        movie_id: str,
+        *,
+        db_session: AsyncIOMotorClientSession | None = None,
+    ) -> int:
         """Return the number of sessions linked to a movie."""
-        return await self.collection.count_documents({"movie_id": movie_id})
+        return await self.collection.count_documents({"movie_id": movie_id}, session=db_session)
 
     async def has_future_scheduled_sessions(self, movie_id: str, *, current_time: datetime) -> bool:
         """Return whether the movie still has at least one future scheduled session."""
@@ -193,7 +228,13 @@ class SessionRepository(BaseRepository):
         )
         return [str(movie_id) for movie_id in movie_ids if movie_id]
 
-    async def sync_completed_sessions(self, *, current_time: datetime, updated_at: datetime) -> int:
+    async def sync_completed_sessions(
+        self,
+        *,
+        current_time: datetime,
+        updated_at: datetime,
+        db_session: AsyncIOMotorClientSession | None = None,
+    ) -> int:
         """Mark sessions that have already ended as completed."""
         result = await self.collection.update_many(
             {
@@ -206,6 +247,7 @@ class SessionRepository(BaseRepository):
                     "updated_at": updated_at,
                 }
             },
+            session=db_session,
         )
         return result.modified_count
 
@@ -215,6 +257,8 @@ class SessionRepository(BaseRepository):
         *,
         current_time: datetime,
         updated_at: datetime,
+        quantity: int = 1,
+        db_session: AsyncIOMotorClientSession | None = None,
     ) -> bool:
         """Decrease available seats only if the session is still purchasable."""
         result = await self.collection.update_one(
@@ -222,12 +266,13 @@ class SessionRepository(BaseRepository):
                 "_id": to_object_id(session_id),
                 "status": SessionStatuses.SCHEDULED,
                 "start_time": {"$gt": current_time},
-                "available_seats": {"$gt": 0},
+                "available_seats": {"$gte": quantity},
             },
             {
-                "$inc": {"available_seats": -1},
+                "$inc": {"available_seats": -quantity},
                 "$set": {"updated_at": updated_at},
             },
+            session=db_session,
         )
         return result.modified_count == 1
 
@@ -236,17 +281,20 @@ class SessionRepository(BaseRepository):
         session_id: str,
         *,
         updated_at: datetime,
+        quantity: int = 1,
+        db_session: AsyncIOMotorClientSession | None = None,
     ) -> bool:
         """Restore an available seat only if the counter is still below total capacity."""
         result = await self.collection.update_one(
             {
                 "_id": to_object_id(session_id),
-                "$expr": {"$lt": ["$available_seats", "$total_seats"]},
+                "$expr": {"$lte": [{"$add": ["$available_seats", quantity]}, "$total_seats"]},
             },
             {
-                "$inc": {"available_seats": 1},
+                "$inc": {"available_seats": quantity},
                 "$set": {"updated_at": updated_at},
             },
+            session=db_session,
         )
         return result.modified_count == 1
 
@@ -256,6 +304,7 @@ class SessionRepository(BaseRepository):
         *,
         available_seats: int,
         updated_at: datetime,
+        db_session: AsyncIOMotorClientSession | None = None,
     ) -> dict[str, Any] | None:
         """Set the exact available seats value when repairing denormalized counters."""
         updated = await self.collection.find_one_and_update(
@@ -270,5 +319,6 @@ class SessionRepository(BaseRepository):
                 }
             },
             return_document=ReturnDocument.AFTER,
+            session=db_session,
         )
         return MongoDocumentAdapter.normalize(updated)

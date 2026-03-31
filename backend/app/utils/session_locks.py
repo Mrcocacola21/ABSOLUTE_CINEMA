@@ -1,8 +1,8 @@
 """Per-session async locks for write operations.
 
-These locks only coordinate work inside the current backend process. They are a
-practical safeguard for coursework deployments that run a single FastAPI
-instance against MongoDB without cross-collection transactions.
+These locks only coordinate work inside the current backend process. They now
+sit on top of MongoDB transactions as an extra low-cost contention guard for
+local/demo deployments, but they are no longer the source of atomicity.
 """
 
 from __future__ import annotations

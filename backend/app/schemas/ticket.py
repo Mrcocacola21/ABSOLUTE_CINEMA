@@ -21,6 +21,7 @@ class TicketRead(BaseSchema):
     """Ticket DTO returned by the API."""
 
     id: str
+    order_id: str | None = None
     user_id: str
     session_id: str
     seat_row: int = Field(ge=1)

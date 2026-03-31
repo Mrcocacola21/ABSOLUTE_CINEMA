@@ -25,7 +25,7 @@ class Settings(BaseSettings):
             "http://127.0.0.1:5173",
         ]
     )
-    mongodb_uri: str = "mongodb://localhost:27017"
+    mongodb_uri: str = "mongodb://localhost:27017/?replicaSet=rs0&directConnection=true"
     mongodb_db_name: str = "cinema_showcase"
     jwt_secret_key: str = "<CHANGE_ME>"
     jwt_algorithm: str = "HS256"

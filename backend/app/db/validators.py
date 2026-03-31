@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.core.constants import MOVIE_STATUS_VALUES, Roles, SessionStatuses, TicketStatuses
+from app.core.constants import MOVIE_STATUS_VALUES, ORDER_STATUS_VALUES, Roles, SessionStatuses, TicketStatuses
 from app.db.collections import DatabaseCollections
 
 
@@ -170,6 +170,50 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
         "validationLevel": "strict",
         "validationAction": "error",
     },
+    DatabaseCollections.ORDERS: {
+        "validator": {
+            "$jsonSchema": {
+                "bsonType": "object",
+                "required": [
+                    "user_id",
+                    "session_id",
+                    "status",
+                    "total_price",
+                    "tickets_count",
+                    "created_at",
+                ],
+                "properties": {
+                    "user_id": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                    },
+                    "session_id": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                    },
+                    "status": {
+                        "enum": list(ORDER_STATUS_VALUES),
+                    },
+                    "total_price": {
+                        "bsonType": ["int", "long", "double", "decimal"],
+                        "minimum": 0,
+                    },
+                    "tickets_count": {
+                        "bsonType": ["int", "long"],
+                        "minimum": 1,
+                    },
+                    "created_at": {
+                        "bsonType": "date",
+                    },
+                    "updated_at": {
+                        "bsonType": ["date", "null"],
+                    },
+                },
+            }
+        },
+        "validationLevel": "strict",
+        "validationAction": "error",
+    },
     DatabaseCollections.TICKETS: {
         "validator": {
             "$and": [
@@ -186,6 +230,9 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                             "purchased_at",
                         ],
                         "properties": {
+                            "order_id": {
+                                "bsonType": ["string", "null"],
+                            },
                             "user_id": {
                                 "bsonType": "string",
                                 "minLength": 1,

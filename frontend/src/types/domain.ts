@@ -1,6 +1,7 @@
 export type LanguageCode = "uk" | "en";
 export type UserRole = "user" | "admin";
 export type MovieStatus = "planned" | "active" | "deactivated";
+export type OrderStatus = "completed" | "partially_cancelled" | "cancelled";
 
 export interface User {
   id: string;
@@ -80,6 +81,7 @@ export interface SessionSeats {
 
 export interface Ticket {
   id: string;
+  order_id?: string | null;
   session_id: string;
   user_id: string;
   seat_row: number;
@@ -100,6 +102,40 @@ export interface TicketListItem extends Ticket {
   is_cancellable: boolean;
   user_name?: string | null;
   user_email?: string | null;
+}
+
+export interface OrderTicket {
+  id: string;
+  order_id?: string | null;
+  seat_row: number;
+  seat_number: number;
+  price: number;
+  status: string;
+  purchased_at: string;
+  updated_at?: string | null;
+  cancelled_at?: string | null;
+  is_cancellable: boolean;
+}
+
+export interface Order {
+  id: string;
+  user_id: string;
+  session_id: string;
+  status: OrderStatus;
+  total_price: number;
+  tickets_count: number;
+  created_at: string;
+  updated_at?: string | null;
+  movie_id: string;
+  movie_title: string;
+  poster_url?: string | null;
+  age_rating?: string | null;
+  session_start_time: string;
+  session_end_time: string;
+  session_status: string;
+  active_tickets_count: number;
+  cancelled_tickets_count: number;
+  tickets: OrderTicket[];
 }
 
 export interface AttendanceSessionSummary {

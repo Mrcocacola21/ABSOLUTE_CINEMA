@@ -39,10 +39,23 @@ class TicketStatuses:
     CANCELLED = "cancelled"
 
 
+class OrderStatuses:
+    """Lifecycle statuses for ticket purchase orders."""
+
+    COMPLETED = "completed"
+    PARTIALLY_CANCELLED = "partially_cancelled"
+    CANCELLED = "cancelled"
+
+
 MOVIE_STATUS_VALUES: Final[tuple[str, ...]] = (
     MovieStatuses.PLANNED,
     MovieStatuses.ACTIVE,
     MovieStatuses.DEACTIVATED,
+)
+ORDER_STATUS_VALUES: Final[tuple[str, ...]] = (
+    OrderStatuses.COMPLETED,
+    OrderStatuses.PARTIALLY_CANCELLED,
+    OrderStatuses.CANCELLED,
 )
 ALLOWED_SORT_FIELDS: Final[tuple[str, ...]] = (
     "movie_title",

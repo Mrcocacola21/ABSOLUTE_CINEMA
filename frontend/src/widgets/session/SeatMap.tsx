@@ -5,7 +5,7 @@ import type { SeatAvailability } from "@/types/domain";
 
 interface SeatMapProps {
   seats: SeatAvailability[];
-  selectedSeat: SeatAvailability | null;
+  selectedSeats: SeatAvailability[];
   isLoading?: boolean;
   isDisabled?: boolean;
   onSelect: (seat: SeatAvailability) => void;
@@ -13,12 +13,13 @@ interface SeatMapProps {
 
 export function SeatMap({
   seats,
-  selectedSeat,
+  selectedSeats,
   isLoading = false,
   isDisabled = false,
   onSelect,
 }: SeatMapProps) {
   const { t } = useTranslation();
+  const selectedSeatLabels = selectedSeats.map((seat) => `${seat.row}-${seat.number}`);
   const groupedRows = [...seats]
     .sort((left, right) => {
       if (left.row === right.row) {
@@ -46,16 +47,17 @@ export function SeatMap({
           <p className="muted">
             {isLoading
               ? "Refreshing current seat availability."
-              : "Select an available seat to continue."}
+              : "Select one or more available seats to continue."}
           </p>
         </div>
-        <div className={`seat-map__selection${selectedSeat ? " is-active" : ""}`}>
-          {selectedSeat ? (
+        <div className={`seat-map__selection${selectedSeats.length > 0 ? " is-active" : ""}`}>
+          {selectedSeats.length > 0 ? (
             <>
-              {t("selectedSeat")}: <strong>{selectedSeat.row}-{selectedSeat.number}</strong>
+              {selectedSeats.length === 1 ? t("selectedSeat") : "Selected seats"}:{" "}
+              <strong>{selectedSeatLabels.join(", ")}</strong>
             </>
           ) : (
-            "Choose any available seat."
+            "Choose any available seats."
           )}
         </div>
       </div>
@@ -100,7 +102,10 @@ export function SeatMap({
                         key={`${seat.row}-${seat.number}`}
                         seat={seat}
                         disabled={isDisabled}
-                        selected={selectedSeat?.row === seat.row && selectedSeat?.number === seat.number}
+                        selected={selectedSeats.some(
+                          (selectedSeat) =>
+                            selectedSeat.row === seat.row && selectedSeat.number === seat.number,
+                        )}
                         onSelect={onSelect}
                       />
                     ))}

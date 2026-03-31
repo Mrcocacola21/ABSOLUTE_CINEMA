@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 
+import { purchaseOrderRequest } from "@/api/orders";
 import {
   getSessionDetailsRequest,
   getSessionSeatsRequest,
-  purchaseTicketRequest,
 } from "@/api/schedule";
 import { useAuth } from "@/features/auth/useAuth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
@@ -27,7 +27,7 @@ export function SessionDetailsPage() {
   const { isAuthenticated } = useAuth();
   const [details, setDetails] = useState<SessionDetails | null>(null);
   const [seats, setSeats] = useState<SessionSeats | null>(null);
-  const [selectedSeat, setSelectedSeat] = useState<SeatAvailability | null>(null);
+  const [selectedSeats, setSelectedSeats] = useState<SeatAvailability[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,17 +55,18 @@ export function SessionDetailsPage() {
       setDetails(detailsResponse.data);
       setSeats(seatsResponse.data);
       setErrorMessage("");
-      setSelectedSeat((currentSeat) => {
-        if (!currentSeat) {
-          return null;
+      setSelectedSeats((currentSeats) => {
+        if (currentSeats.length === 0) {
+          return [];
         }
-        const stillAvailable = seatsResponse.data.seats.some(
-          (seat) =>
-            seat.row === currentSeat.row &&
-            seat.number === currentSeat.number &&
-            seat.is_available,
+        return currentSeats.filter((currentSeat) =>
+          seatsResponse.data.seats.some(
+            (seat) =>
+              seat.row === currentSeat.row &&
+              seat.number === currentSeat.number &&
+              seat.is_available,
+          ),
         );
-        return stillAvailable ? currentSeat : null;
       });
     } catch (error) {
       const message = extractApiErrorMessage(error, t("sessionDataUnavailable"));
@@ -78,7 +79,7 @@ export function SessionDetailsPage() {
       } else {
         setDetails(null);
         setSeats(null);
-        setSelectedSeat(null);
+        setSelectedSeats([]);
         setErrorMessage(message);
       }
     } finally {
@@ -95,21 +96,50 @@ export function SessionDetailsPage() {
     void loadSessionData();
   }, [sessionId, t]);
 
+  function handleSeatToggle(seat: SeatAvailability) {
+    setSelectedSeats((currentSeats) => {
+      const isAlreadySelected = currentSeats.some(
+        (selectedSeat) => selectedSeat.row === seat.row && selectedSeat.number === seat.number,
+      );
+      if (isAlreadySelected) {
+        return currentSeats.filter(
+          (selectedSeat) => !(selectedSeat.row === seat.row && selectedSeat.number === seat.number),
+        );
+      }
+      return [...currentSeats, seat].sort((left, right) => {
+        if (left.row === right.row) {
+          return left.number - right.number;
+        }
+        return left.row - right.row;
+      });
+    });
+  }
+
   async function handlePurchase() {
-    if (!selectedSeat) {
+    if (selectedSeats.length === 0) {
       return;
     }
     setIsSubmitting(true);
     setFeedback(null);
     try {
-      await purchaseTicketRequest(sessionId, selectedSeat.row, selectedSeat.number);
+      await purchaseOrderRequest({
+        session_id: sessionId,
+        seats: selectedSeats.map((seat) => ({
+          seat_row: seat.row,
+          seat_number: seat.number,
+        })),
+      });
       await loadSessionData({ background: true });
+      const selectedSeatLabels = selectedSeats.map((seat) => `${seat.row}-${seat.number}`).join(", ");
       setFeedback({
         tone: "success",
-        title: "Ticket purchased",
-        message: `Seat ${selectedSeat.row}-${selectedSeat.number} is now reserved for you.`,
+        title: selectedSeats.length > 1 ? "Tickets purchased" : "Ticket purchased",
+        message:
+          selectedSeats.length > 1
+            ? `Seats ${selectedSeatLabels} are now reserved for you.`
+            : `Seat ${selectedSeatLabels} is now reserved for you.`,
       });
-      setSelectedSeat(null);
+      setSelectedSeats([]);
     } catch (error) {
       setFeedback({
         tone: "error",
@@ -260,9 +290,9 @@ export function SessionDetailsPage() {
                   {t("seatMap")} | {t("ticketPurchase")}
                 </h2>
                 <p className="muted">
-                  {selectedSeat
-                    ? `Seat ${selectedSeat.row}-${selectedSeat.number} is selected. Review the summary and confirm the booking in the same flow.`
-                    : "Choose a seat from the map, review the ticket summary, and complete the purchase without leaving this booking module."}
+                  {selectedSeats.length > 0
+                    ? `${selectedSeats.length} seat${selectedSeats.length > 1 ? "s are" : " is"} selected. Review the summary and confirm the booking in the same flow.`
+                    : "Choose seats from the map, review the ticket summary, and complete the purchase without leaving this booking module."}
                 </p>
               </div>
               <div className="booking-module__stats">
@@ -276,9 +306,15 @@ export function SessionDetailsPage() {
                     {t("price")}: {formatCurrency(details.price)}
                   </span>
                 ) : null}
-                {selectedSeat ? (
+                {selectedSeats.length > 0 ? (
                   <span className="badge">
-                    {t("selectedSeat")}: {selectedSeat.row}-{selectedSeat.number}
+                    {selectedSeats.length === 1 ? t("selectedSeat") : "Selected seats"}:{" "}
+                    {selectedSeats.map((seat) => `${seat.row}-${seat.number}`).join(", ")}
+                  </span>
+                ) : null}
+                {selectedSeats.length > 1 && details?.price !== undefined ? (
+                  <span className="badge">
+                    Total: {formatCurrency(details.price * selectedSeats.length)}
                   </span>
                 ) : null}
               </div>
@@ -287,14 +323,14 @@ export function SessionDetailsPage() {
             <div className="booking-module__body">
               <SeatMap
                 seats={seats?.seats ?? []}
-                selectedSeat={selectedSeat}
+                selectedSeats={selectedSeats}
                 isLoading={isRefreshing}
                 isDisabled={!isSessionPurchasable || isSubmitting}
-                onSelect={setSelectedSeat}
+                onSelect={handleSeatToggle}
               />
               <PurchaseTicketCard
                 canPurchase={isSessionPurchasable}
-                selectedSeat={selectedSeat}
+                selectedSeats={selectedSeats}
                 price={details?.price}
                 availableSeats={seats?.available_seats}
                 isSubmitting={isSubmitting}

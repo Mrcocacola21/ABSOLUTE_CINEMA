@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -16,6 +17,28 @@ from app.schemas.ticket import TicketRead
 from app.schemas.user import UserRead, UserUpdate
 from app.services.admin import AdminService
 from app.services.ticket import TicketService
+
+
+class FakeOrderRepository:
+    async def get_by_id(
+        self,
+        order_id: str,
+        *,
+        db_session=None,
+    ) -> dict[str, object] | None:
+        _ = (order_id, db_session)
+        return None
+
+    async def update_order(
+        self,
+        order_id: str,
+        *,
+        updates: dict[str, object],
+        updated_at: datetime,
+        db_session=None,
+    ) -> dict[str, object] | None:
+        _ = (order_id, updates, updated_at, db_session)
+        return None
 
 
 class FakeMovieRepository:
@@ -97,13 +120,20 @@ class FakeSessionRepository:
         self.session = {**document, "id": "session-1"}
         return self.session
 
-    async def get_by_id(self, session_id: str) -> dict[str, object] | None:
+    async def get_by_id(self, session_id: str, *, db_session=None) -> dict[str, object] | None:
+        _ = db_session
         if self.session is None or self.session["id"] != session_id:
             return None
         return self.session
 
-    async def increment_available_seats(self, session_id: str, *, updated_at: datetime) -> bool:
-        _ = (session_id, updated_at)
+    async def increment_available_seats(
+        self,
+        session_id: str,
+        *,
+        updated_at: datetime,
+        db_session=None,
+    ) -> bool:
+        _ = (session_id, updated_at, db_session)
         self.available_seats += 1
         return True
 
@@ -168,7 +198,8 @@ class FakeTicketRepository:
         _ = (session_id, active_only)
         return 0
 
-    async def get_by_id(self, ticket_id: str) -> dict[str, object] | None:
+    async def get_by_id(self, ticket_id: str, *, db_session=None) -> dict[str, object] | None:
+        _ = db_session
         if self.ticket is None or self.ticket["id"] != ticket_id:
             return None
         return self.ticket
@@ -181,8 +212,9 @@ class FakeTicketRepository:
         updated_at: datetime,
         cancelled_at: datetime | None = None,
         current_status: str | None = None,
+        db_session=None,
     ) -> dict[str, object] | None:
-        _ = updated_at
+        _ = (updated_at, db_session)
         if self.ticket is None or self.ticket["id"] != ticket_id:
             return None
         if current_status is not None and self.ticket["status"] != current_status:
@@ -200,6 +232,11 @@ class FakeUserRepository:
     async def list_by_ids(self, user_ids: list[str]) -> list[dict[str, object]]:
         _ = user_ids
         return []
+
+
+@asynccontextmanager
+async def fake_mongo_transaction():
+    yield object()
 
 
 def build_admin_user() -> UserRead:
@@ -397,12 +434,16 @@ async def test_admin_service_promotes_planned_movie_to_active_after_session_crea
 
 
 @pytest.mark.asyncio
-async def test_ticket_service_cancellation_restores_seat_counter() -> None:
+async def test_ticket_service_cancellation_restores_seat_counter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.ticket.mongo_transaction", fake_mongo_transaction)
     session_repository = FakeSessionRepository(session=build_session())
     ticket_repository = FakeTicketRepository(ticket=build_ticket())
     service = TicketService(
         session_repository=session_repository,
         ticket_repository=ticket_repository,
+        order_repository=FakeOrderRepository(),
         movie_repository=FakeMovieRepository(movie=build_movie()),
         user_repository=FakeUserRepository(),
     )

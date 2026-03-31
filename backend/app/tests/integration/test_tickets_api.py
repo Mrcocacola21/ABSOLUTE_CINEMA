@@ -276,7 +276,7 @@ async def test_purchase_is_rejected_when_no_seats_left_and_counter_stays_non_neg
 
 
 @pytest.mark.asyncio
-async def test_purchase_insert_failure_restores_available_seats_and_keeps_session_consistent(
+async def test_single_ticket_purchase_wrapper_rolls_back_transaction_on_ticket_insert_failure(
     client: httpx.AsyncClient,
     database,
     monkeypatch: pytest.MonkeyPatch,
@@ -287,8 +287,13 @@ async def test_purchase_insert_failure_restores_available_seats_and_keeps_sessio
     movie = await create_movie(title="Ticket Insert Failure Movie", duration_minutes=120)
     session = await create_session(movie_id=movie["id"], start_hour=17, duration_minutes=160)
 
-    async def fail_create_ticket(self, document: dict[str, object]) -> dict[str, object]:
-        _ = (self, document)
+    async def fail_create_ticket(
+        self,
+        document: dict[str, object],
+        *,
+        db_session=None,
+    ) -> dict[str, object]:
+        _ = (self, document, db_session)
         raise DatabaseException("Simulated ticket insert failure.")
 
     monkeypatch.setattr(
@@ -312,9 +317,11 @@ async def test_purchase_insert_failure_restores_available_seats_and_keeps_sessio
     assert body["error"]["message"] == "Simulated ticket insert failure."
 
     stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
+    stored_orders = await database[DatabaseCollections.ORDERS].count_documents({"session_id": session["id"]})
     stored_tickets = await database[DatabaseCollections.TICKETS].count_documents({"session_id": session["id"]})
     assert stored_session is not None
     assert stored_session["available_seats"] == stored_session["total_seats"]
+    assert stored_orders == 0
     assert stored_tickets == 0
 
 
@@ -542,7 +549,7 @@ async def test_ticket_cancellation_for_started_or_completed_sessions_is_rejected
 
 
 @pytest.mark.asyncio
-async def test_ticket_cancellation_reconciles_counter_without_exceeding_total_seats(
+async def test_ticket_cancellation_fails_without_partial_commit_when_session_counter_is_inconsistent(
     client: httpx.AsyncClient,
     database,
     user_auth: dict[str, object],
@@ -575,12 +582,81 @@ async def test_ticket_cancellation_reconciles_counter_without_exceeding_total_se
         f"{API_PREFIX}/tickets/{ticket_id}/cancel",
         headers=user_auth["headers"],
     )
-    assert cancel_response.status_code == 200
-    assert cancel_response.json()["data"]["status"] == "cancelled"
+    assert cancel_response.status_code == 503
+    body = cancel_response.json()
+    assert body["error"]["code"] == "database_error"
+    assert body["error"]["message"] == "Ticket cancellation could not restore the session seat counter."
 
     stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
+    stored_ticket = await database[DatabaseCollections.TICKETS].find_one({"_id": ObjectId(ticket_id)})
     assert stored_session is not None
+    assert stored_ticket is not None
     assert stored_session["available_seats"] == stored_session["total_seats"]
+    assert stored_ticket["status"] == "purchased"
+
+
+@pytest.mark.asyncio
+async def test_ticket_cancellation_transaction_rolls_back_when_order_update_fails(
+    client: httpx.AsyncClient,
+    database,
+    monkeypatch: pytest.MonkeyPatch,
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Ticket Cancellation Rollback Movie", duration_minutes=120)
+    session = await create_session(movie_id=movie["id"], start_hour=20, duration_minutes=160)
+
+    purchase_response = await client.post(
+        f"{API_PREFIX}/orders/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seats": [
+                {"seat_row": 4, "seat_number": 4},
+                {"seat_row": 4, "seat_number": 5},
+            ],
+        },
+    )
+    assert purchase_response.status_code == 201
+    order = purchase_response.json()["data"]
+    ticket_id = order["tickets"][0]["id"]
+
+    async def fail_update_order(
+        self,
+        order_id: str,
+        *,
+        updates: dict[str, object],
+        updated_at: datetime,
+        db_session=None,
+    ) -> dict[str, object] | None:
+        _ = (self, order_id, updates, updated_at, db_session)
+        raise DatabaseException("Simulated order aggregate update failure.")
+
+    monkeypatch.setattr(
+        "app.repositories.orders.OrderRepository.update_order",
+        fail_update_order,
+    )
+
+    cancel_response = await client.patch(
+        f"{API_PREFIX}/tickets/{ticket_id}/cancel",
+        headers=user_auth["headers"],
+    )
+
+    assert cancel_response.status_code == 503
+    body = cancel_response.json()
+    assert body["error"]["code"] == "database_error"
+    assert body["error"]["message"] == "Simulated order aggregate update failure."
+
+    stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
+    stored_ticket = await database[DatabaseCollections.TICKETS].find_one({"_id": ObjectId(ticket_id)})
+    stored_order = await database[DatabaseCollections.ORDERS].find_one({"_id": ObjectId(order["id"])})
+    assert stored_session is not None
+    assert stored_ticket is not None
+    assert stored_order is not None
+    assert stored_session["available_seats"] == stored_session["total_seats"] - 2
+    assert stored_ticket["status"] == "purchased"
+    assert stored_order["status"] == "completed"
 
 
 @pytest.mark.asyncio

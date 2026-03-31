@@ -99,14 +99,13 @@ export function MovieDetailsPage() {
           <p className="page-eyebrow">{t("movieDetailsEyebrow")}</p>
           <h1 className="page-title">{movie?.title ?? t("movieDetails")}</h1>
 
-          {movie && (movie.genres.length > 0 || movie.age_rating) ? (
+          {movie && movie.genres.length > 0 ? (
             <div className="meta-row movie-hero__taxonomy">
               {movie.genres.map((genre) => (
                 <span key={`${movie.id}-${genre}`} className="badge">
                   {genre}
                 </span>
               ))}
-              {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
             </div>
           ) : null}
 
@@ -126,8 +125,8 @@ export function MovieDetailsPage() {
               <strong>{movie ? `${movie.duration_minutes} min` : "--"}</strong>
             </div>
             <div className="movie-hero__fact">
-              <span>{t("sessionsCount")}</span>
-              <strong>{sessions.length}</strong>
+              <span>{movie?.age_rating ? t("ageRating") : t("sessionsCount")}</span>
+              <strong>{movie?.age_rating ?? sessions.length}</strong>
             </div>
           </div>
 
@@ -144,9 +143,6 @@ export function MovieDetailsPage() {
           )}
 
           <div className="actions-row movie-hero__actions">
-            <Link to="/movies" className="button--ghost">
-              {t("backToCatalog")}
-            </Link>
             {sessions[0] ? (
               <Link to={`/schedule/${sessions[0].id}`} className="button">
                 {t("viewNextSession")}
@@ -156,6 +152,9 @@ export function MovieDetailsPage() {
                 {t("browseSchedule")}
               </Link>
             )}
+            <Link to="/movies" className="button--ghost">
+              {t("backToCatalog")}
+            </Link>
           </div>
         </div>
       </section>

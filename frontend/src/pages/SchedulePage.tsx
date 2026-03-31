@@ -181,6 +181,21 @@ export function SchedulePage() {
       day: "",
       genre: "",
       movieId: "",
+      sessionId: "",
+    });
+  }
+
+  function handleBoardDayChange(day: string) {
+    updateParams({
+      day,
+      sessionId: "",
+    });
+  }
+
+  function handleBoardFilterChange(key: "movieId" | "genre", value: string) {
+    updateParams({
+      [key]: value,
+      sessionId: "",
     });
   }
 
@@ -260,8 +275,8 @@ export function SchedulePage() {
             movies={boardMovieOptions}
             genres={boardGenreOptions}
             resultsLabel={boardResultsLabel}
-            onDayChange={(day) => updateParam("day", day)}
-            onFilterChange={updateParam}
+            onDayChange={handleBoardDayChange}
+            onFilterChange={handleBoardFilterChange}
             onReset={resetBoardFilters}
           />
 
@@ -274,7 +289,11 @@ export function SchedulePage() {
               </button>
             </section>
           ) : (
-            <ScheduleChronoboard items={boardItems} selectedDay={selectedBoardDay} />
+            <ScheduleChronoboard
+              items={boardItems}
+              selectedDay={selectedBoardDay}
+              highlightedSessionId={values.sessionId}
+            />
           )}
         </section>
       ) : null}

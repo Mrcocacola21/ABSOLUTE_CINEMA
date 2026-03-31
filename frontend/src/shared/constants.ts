@@ -23,6 +23,7 @@ export const DEFAULT_SCHEDULE_PARAMS = {
   dateSort: "nearest",
   seatSort: "",
   query: "",
+  sessionId: "",
   limit: "100",
   offset: "0",
 };

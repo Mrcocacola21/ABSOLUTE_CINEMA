@@ -58,6 +58,7 @@ export function useScheduleQueryParams() {
       seatSort: searchParams.get("seatSort") ?? DEFAULT_SCHEDULE_PARAMS.seatSort,
       query: searchParams.get("query") ?? DEFAULT_SCHEDULE_PARAMS.query,
       movieId: searchParams.get("movieId") ?? "",
+      sessionId: searchParams.get("sessionId") ?? "",
       limit: searchParams.get("limit") ?? DEFAULT_SCHEDULE_PARAMS.limit,
       offset: searchParams.get("offset") ?? DEFAULT_SCHEDULE_PARAMS.offset,
     },

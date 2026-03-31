@@ -25,6 +25,7 @@ import type { ScheduleItem } from "@/types/domain";
 interface ScheduleChronoboardProps {
   items: ScheduleItem[];
   selectedDay: string;
+  highlightedSessionId?: string;
 }
 
 interface MenuPosition {
@@ -59,7 +60,7 @@ function getPosterBackgroundValue(posterUrl?: string | null): string {
   return posterUrl ? `url("${posterUrl}")` : "none";
 }
 
-export function ScheduleChronoboard({ items, selectedDay }: ScheduleChronoboardProps) {
+export function ScheduleChronoboard({ items, selectedDay, highlightedSessionId = "" }: ScheduleChronoboardProps) {
   const { t } = useTranslation();
   const frameRef = useRef<HTMLDivElement | null>(null);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
@@ -122,6 +123,25 @@ export function ScheduleChronoboard({ items, selectedDay }: ScheduleChronoboardP
       closeMenu();
     }
   }, [activeSessionId, items]);
+
+  useEffect(() => {
+    if (!highlightedSessionId || !items.some((item) => item.id === highlightedSessionId)) {
+      return;
+    }
+
+    const target = frameRef.current?.querySelector<HTMLElement>(`[data-session-id="${highlightedSessionId}"]`);
+    if (!target) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({
+        block: "nearest",
+        inline: "center",
+        behavior: "smooth",
+      });
+    });
+  }, [highlightedSessionId, items, selectedDay]);
 
   useLayoutEffect(() => {
     if (!activeMenuItem) {
@@ -294,7 +314,8 @@ export function ScheduleChronoboard({ items, selectedDay }: ScheduleChronoboardP
                   <button
                     key={item.id}
                     type="button"
-                    className={`public-chrono-session public-chrono-session--${item.status}${activeSessionId === item.id ? " is-active" : ""}`}
+                    data-session-id={item.id}
+                    className={`public-chrono-session public-chrono-session--${item.status}${activeSessionId === item.id ? " is-active" : ""}${highlightedSessionId === item.id ? " is-targeted" : ""}`}
                     style={{
                       ...getPublicScheduleCardStyle(item.start_time, item.end_time),
                       ["--public-chrono-poster" as string]: getPosterBackgroundValue(item.poster_url),

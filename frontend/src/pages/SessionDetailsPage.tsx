@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import {
   getSessionDetailsRequest,
@@ -9,12 +9,17 @@ import {
 } from "@/api/schedule";
 import { useAuth } from "@/features/auth/useAuth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
-import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
+import { formatCurrency, formatDateTime, formatStateLabel, formatTime } from "@/shared/presentation";
+import { toScheduleDayKey } from "@/shared/scheduleTimeline";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
 import type { SeatAvailability, SessionDetails, SessionSeats } from "@/types/domain";
 import { SeatMap } from "@/widgets/session/SeatMap";
 import { PurchaseTicketCard } from "@/widgets/tickets/PurchaseTicketCard";
+
+function formatSessionRange(startTime: string, endTime: string): string {
+  return `${formatTime(startTime)}-${formatTime(endTime)}`;
+}
 
 export function SessionDetailsPage() {
   const { t } = useTranslation();
@@ -135,40 +140,6 @@ export function SessionDetailsPage() {
 
   return (
     <>
-      <section className="panel">
-        <div className="toolbar-panel__header">
-          <div>
-            <h1 className="page-title">
-              {details ? details.movie.title : t("viewSession")}
-            </h1>
-            <p className="muted">
-              {details
-                ? `${formatDateTime(details.start_time)} | ${t("price")}: ${formatCurrency(details.price)}`
-                : t("sessionInfoLoading")}
-            </p>
-          </div>
-          <div className="actions-row">
-            <button
-              className="button--ghost"
-              type="button"
-              disabled={isLoading || isRefreshing || isSubmitting}
-              onClick={() => void loadSessionData({ background: Boolean(details || seats) })}
-            >
-              {isRefreshing ? "Refreshing..." : "Refresh"}
-            </button>
-          </div>
-        </div>
-        <div className="stats-row">
-          {details ? <span className="badge">{formatStateLabel(details.status)}</span> : null}
-          {details?.movie.genres.length ? <span className="badge">{details.movie.genres.join(", ")}</span> : null}
-          {details ? (
-            <span className="badge">
-              {details.available_seats}/{details.total_seats}
-            </span>
-          ) : null}
-        </div>
-      </section>
-
       {feedback ? (
         <StatusBanner
           tone={feedback.tone}
@@ -199,69 +170,140 @@ export function SessionDetailsPage() {
       ) : null}
 
       {!isLoading && !errorMessage ? (
-        <section className="panel booking-module">
-          <div className="booking-module__header">
-            <div className="booking-module__copy">
-              <h2 className="section-title">
-                {t("seatMap")} | {t("ticketPurchase")}
-              </h2>
-              <p className="muted">
-                {selectedSeat
-                  ? `Seat ${selectedSeat.row}-${selectedSeat.number} is selected. Review the summary and confirm the booking in the same flow.`
-                  : "Choose a seat from the map, review the ticket summary, and complete the purchase without leaving this booking module."}
-              </p>
-            </div>
-            <div className="booking-module__stats">
-              {seats ? (
-                <span className="badge">
-                  {seats.available_seats}/{seats.total_seats} {t("availableSeats")}
-                </span>
-              ) : null}
-              {details?.price !== undefined ? (
-                <span className="badge">
-                  {t("price")}: {formatCurrency(details.price)}
-                </span>
-              ) : null}
-              {selectedSeat ? (
-                <span className="badge">
-                  {t("selectedSeat")}: {selectedSeat.row}-{selectedSeat.number}
-                </span>
-              ) : null}
-            </div>
-          </div>
+        <>
+          {details ? (
+            <section className="page-header page-header--movie-detail session-hero">
+              <div className="session-hero__main">
+                <div className="session-hero__copy">
+                  <p className="page-eyebrow">{t("viewSession")}</p>
+                  <h1 className="page-title session-hero__title">{details.movie.title}</h1>
+                  <div className="session-hero__session-line">
+                    <span className="badge session-hero__status-badge">{formatStateLabel(details.status)}</span>
+                    <p className="session-hero__schedule-line">
+                      {formatDateTime(details.start_time)} | {formatSessionRange(details.start_time, details.end_time)}
+                    </p>
+                  </div>
 
-          <div className="booking-module__body">
-            <SeatMap
-              seats={seats?.seats ?? []}
-              selectedSeat={selectedSeat}
-              isLoading={isRefreshing}
-              isDisabled={!isSessionPurchasable || isSubmitting}
-              onSelect={setSelectedSeat}
-            />
-            <PurchaseTicketCard
-              canPurchase={isSessionPurchasable}
-              selectedSeat={selectedSeat}
-              price={details?.price}
-              availableSeats={seats?.available_seats}
-              isSubmitting={isSubmitting}
-              statusHint={purchaseHint}
-              onPurchase={() => void handlePurchase()}
-            />
-          </div>
-        </section>
-      ) : null}
+                  {details.movie.genres.length > 0 ? (
+                    <div className="meta-row session-hero__taxonomy">
+                      {details.movie.genres.map((genre) => (
+                        <span key={`${details.movie.id}-${genre}`} className="badge">
+                          {genre}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
 
-      {!isLoading && !errorMessage && details ? (
-        <section className="panel">
-          <h3>{details.movie.title}</h3>
-          <p className="muted">{details.movie.description}</p>
-          <div className="stats-row">
-            <span className="badge">{t("duration")}: {details.movie.duration_minutes}</span>
-            {details.movie.age_rating ? <span className="badge">{details.movie.age_rating}</span> : null}
-            <span className="badge">{formatStateLabel(details.status)}</span>
-            <span className="badge">{details.available_seats}/{details.total_seats}</span>
-          </div>
-        </section>
+                  <p className="page-subtitle session-hero__description">{details.movie.description}</p>
+                </div>
+              </div>
+
+              <div className="session-hero__aside">
+                <div className="session-hero__aside-head">
+                  <div className="session-hero__section-copy">
+                    <p className="page-eyebrow">{t("dateTime")}</p>
+                    <h2 className="section-title session-hero__aside-title">{formatDateTime(details.start_time)}</h2>
+                    <p className="session-hero__aside-subtitle">
+                      {t("startsAt")}: {formatTime(details.start_time)} | {t("endsAt")}: {formatTime(details.end_time)}
+                    </p>
+                  </div>
+                  <button
+                    className="button--ghost"
+                    type="button"
+                    disabled={isLoading || isRefreshing || isSubmitting}
+                    onClick={() => void loadSessionData({ background: Boolean(details || seats) })}
+                  >
+                    {isRefreshing ? "Refreshing..." : "Refresh"}
+                  </button>
+                </div>
+
+                <div className="session-hero__facts">
+                  <div className="session-hero__fact">
+                    <span>{t("price")}</span>
+                    <strong>{formatCurrency(details.price)}</strong>
+                  </div>
+                  <div className="session-hero__fact">
+                    <span>{t("availableSeats")}</span>
+                    <strong>
+                      {details.available_seats}/{details.total_seats}
+                    </strong>
+                  </div>
+                  <div className="session-hero__fact">
+                    <span>{t("duration")}</span>
+                    <strong>{details.movie.duration_minutes} min</strong>
+                  </div>
+                  <div className="session-hero__fact">
+                    <span>{details.movie.age_rating ? t("ageRating") : t("endsAt")}</span>
+                    <strong>{details.movie.age_rating ?? formatTime(details.end_time)}</strong>
+                  </div>
+                </div>
+
+                <div className="actions-row session-hero__actions">
+                  <Link to={`/movies/${details.movie.id}`} className="button">
+                    {t("viewMovieDetailsAction")}
+                  </Link>
+                  <Link
+                    to={`/schedule?day=${toScheduleDayKey(details.start_time)}&movieId=${details.movie.id}&sessionId=${details.id}`}
+                    className="button--ghost"
+                  >
+                    {t("viewInScheduleAction")}
+                  </Link>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
+          <section className="panel booking-module">
+            <div className="booking-module__header">
+              <div className="booking-module__copy">
+                <h2 className="section-title">
+                  {t("seatMap")} | {t("ticketPurchase")}
+                </h2>
+                <p className="muted">
+                  {selectedSeat
+                    ? `Seat ${selectedSeat.row}-${selectedSeat.number} is selected. Review the summary and confirm the booking in the same flow.`
+                    : "Choose a seat from the map, review the ticket summary, and complete the purchase without leaving this booking module."}
+                </p>
+              </div>
+              <div className="booking-module__stats">
+                {seats ? (
+                  <span className="badge">
+                    {seats.available_seats}/{seats.total_seats} {t("availableSeats")}
+                  </span>
+                ) : null}
+                {details?.price !== undefined ? (
+                  <span className="badge">
+                    {t("price")}: {formatCurrency(details.price)}
+                  </span>
+                ) : null}
+                {selectedSeat ? (
+                  <span className="badge">
+                    {t("selectedSeat")}: {selectedSeat.row}-{selectedSeat.number}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="booking-module__body">
+              <SeatMap
+                seats={seats?.seats ?? []}
+                selectedSeat={selectedSeat}
+                isLoading={isRefreshing}
+                isDisabled={!isSessionPurchasable || isSubmitting}
+                onSelect={setSelectedSeat}
+              />
+              <PurchaseTicketCard
+                canPurchase={isSessionPurchasable}
+                selectedSeat={selectedSeat}
+                price={details?.price}
+                availableSeats={seats?.available_seats}
+                isSubmitting={isSubmitting}
+                statusHint={purchaseHint}
+                onPurchase={() => void handlePurchase()}
+              />
+            </div>
+          </section>
+        </>
       ) : null}
     </>
   );

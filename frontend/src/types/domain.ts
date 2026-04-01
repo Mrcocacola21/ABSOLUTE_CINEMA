@@ -1,7 +1,14 @@
+import type { GenreCode } from "@/shared/genres";
+
 export type LanguageCode = "uk" | "en";
 export type UserRole = "user" | "admin";
 export type MovieStatus = "planned" | "active" | "deactivated";
 export type OrderStatus = "completed" | "partially_cancelled" | "cancelled";
+
+export interface LocalizedText {
+  uk: string;
+  en: string;
+}
 
 export interface User {
   id: string;
@@ -21,12 +28,12 @@ export interface TokenPayload {
 
 export interface Movie {
   id: string;
-  title: string;
-  description: string;
+  title: LocalizedText;
+  description: LocalizedText;
   duration_minutes: number;
   poster_url?: string | null;
   age_rating?: string | null;
-  genres: string[];
+  genres: GenreCode[];
   status: MovieStatus;
   created_at: string;
   updated_at?: string | null;
@@ -35,10 +42,10 @@ export interface Movie {
 export interface ScheduleItem {
   id: string;
   movie_id: string;
-  movie_title: string;
+  movie_title: LocalizedText;
   poster_url?: string | null;
   age_rating?: string | null;
-  genres: string[];
+  genres: GenreCode[];
   start_time: string;
   end_time: string;
   price: number;
@@ -95,7 +102,7 @@ export interface Ticket {
 
 export interface TicketListItem extends Ticket {
   movie_id: string;
-  movie_title: string;
+  movie_title: LocalizedText;
   session_start_time: string;
   session_end_time: string;
   session_status: string;
@@ -127,7 +134,7 @@ export interface Order {
   created_at: string;
   updated_at?: string | null;
   movie_id: string;
-  movie_title: string;
+  movie_title: LocalizedText;
   poster_url?: string | null;
   age_rating?: string | null;
   session_start_time: string;
@@ -140,7 +147,7 @@ export interface Order {
 
 export interface AttendanceSessionSummary {
   session_id: string;
-  movie_title: string;
+  movie_title: LocalizedText;
   start_time: string;
   status: string;
   tickets_sold: number;

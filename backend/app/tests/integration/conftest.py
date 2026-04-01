@@ -25,6 +25,14 @@ DEFAULT_TEST_DB_NAME = "cinema_showcase_test"
 UNSAFE_DATABASE_NAMES = {"cinema_showcase"}
 
 
+def build_localized_text(value: str, *, en: str | None = None) -> dict[str, str]:
+    """Build a localized text payload for tests."""
+    return {
+        "uk": value,
+        "en": en or value,
+    }
+
+
 def build_session_window(
     *,
     day_offset: int = 1,
@@ -262,12 +270,12 @@ async def create_movie(
             f"{API_PREFIX}/admin/movies",
             headers=admin_auth["headers"],
             json={
-                "title": title,
-                "description": description,
+                "title": build_localized_text(title),
+                "description": build_localized_text(description),
                 "duration_minutes": duration_minutes,
                 "poster_url": None,
                 "age_rating": "PG-13",
-                "genres": genres or ["Sci-Fi", "Drama"],
+                "genres": genres or ["science_fiction", "drama"],
                 "status": status,
             },
         )

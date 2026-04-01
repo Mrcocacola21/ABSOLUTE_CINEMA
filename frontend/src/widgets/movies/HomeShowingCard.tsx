@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import { getGenreLabel } from "@/shared/genres";
+import { getLocalizedText } from "@/shared/localization";
 import { formatCurrency, formatDateTime, formatTime } from "@/shared/presentation";
 import type { RotationMovie } from "@/shared/scheduleBrowse";
 
@@ -29,7 +31,9 @@ function formatSessionRange(startTime: string, endTime: string): string {
 }
 
 export function HomeShowingCard({ movie }: HomeShowingCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const title = getLocalizedText(movie.title, i18n.language);
+  const description = getLocalizedText(movie.description, i18n.language);
 
   return (
     <article className="card home-showing-card">
@@ -38,18 +42,18 @@ export function HomeShowingCard({ movie }: HomeShowingCardProps) {
           {movie.poster_url ? (
             <img src={movie.poster_url} alt="" className="media-tile__image" />
           ) : (
-            <span>{getMovieMonogram(movie.title)}</span>
+            <span>{getMovieMonogram(title)}</span>
           )}
         </Link>
 
         <div className="home-showing-card__copy">
-          <h3 className="home-showing-card__title">{movie.title}</h3>
+          <h3 className="home-showing-card__title">{title}</h3>
 
           {movie.genres.length > 0 || movie.age_rating ? (
             <div className="meta-row home-showing-card__taxonomy">
               {movie.genres.map((genre) => (
                 <span key={`${movie.id}-${genre}`} className="badge">
-                  {genre}
+                  {getGenreLabel(genre, i18n.language)}
                 </span>
               ))}
               {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
@@ -57,7 +61,7 @@ export function HomeShowingCard({ movie }: HomeShowingCardProps) {
           ) : null}
 
           <p className="muted home-showing-card__description">
-            {movie.description || t("homeMovieFallback")}
+            {description || t("homeMovieFallback")}
           </p>
         </div>
       </div>

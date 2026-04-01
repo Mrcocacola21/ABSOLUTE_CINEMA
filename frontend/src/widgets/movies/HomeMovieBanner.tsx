@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import { getGenreLabel } from "@/shared/genres";
+import { getLocalizedText } from "@/shared/localization";
 import { getMovieStatusBadgeClassName } from "@/shared/movieStatus";
 import { formatCurrency, formatTime } from "@/shared/presentation";
 import type { Movie, ScheduleItem } from "@/types/domain";
@@ -39,8 +41,9 @@ function formatSessionSlot(startTime: string, endTime: string): string {
 }
 
 export function HomeMovieBanner(props: HomeMovieBannerProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { movie, variant } = props;
+  const title = getLocalizedText(movie.title, i18n.language);
   const ribbonLabel = variant === "active" ? t("homeActiveRibbon") : t("homePlannedRibbon");
   const visibleGenres = movie.genres.slice(0, 5);
 
@@ -53,16 +56,17 @@ export function HomeMovieBanner(props: HomeMovieBannerProps) {
       : t("homePlannedBannerLine");
 
   const description =
-    movie.description || (variant === "active" ? t("homeMovieFallback") : t("homePlannedFallback"));
+    getLocalizedText(movie.description, i18n.language) ||
+    (variant === "active" ? t("homeMovieFallback") : t("homePlannedFallback"));
 
   return (
     <article className={`home-poster-card home-poster-card--${variant}`}>
       <div className="home-poster-card__frame">
         <Link to={`/movies/${movie.id}`} className="home-poster-card__poster">
           {movie.poster_url ? (
-            <img src={movie.poster_url} alt={movie.title} className="home-poster-card__image" />
+            <img src={movie.poster_url} alt={title} className="home-poster-card__image" />
           ) : (
-            <span className="home-poster-card__monogram">{getMovieMonogram(movie.title)}</span>
+            <span className="home-poster-card__monogram">{getMovieMonogram(title)}</span>
           )}
         </Link>
 
@@ -80,7 +84,7 @@ export function HomeMovieBanner(props: HomeMovieBannerProps) {
             <div className="home-poster-card__badges">
               {visibleGenres.map((genre) => (
                 <span key={`${movie.id}-${genre}`} className="badge">
-                  {genre}
+                  {getGenreLabel(genre, i18n.language)}
                 </span>
               ))}
             </div>
@@ -122,7 +126,7 @@ export function HomeMovieBanner(props: HomeMovieBannerProps) {
 
       <div className="home-poster-card__caption">
         <h3 className="home-poster-card__title">
-          <Link to={`/movies/${movie.id}`}>{movie.title}</Link>
+          <Link to={`/movies/${movie.id}`}>{title}</Link>
         </h3>
         <p className="home-poster-card__meta">
           {variant === "active"

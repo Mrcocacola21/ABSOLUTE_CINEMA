@@ -21,8 +21,8 @@ class UserDocument(TypedDict):
 class MovieDocument(TypedDict):
     """Raw MongoDB movie document."""
 
-    title: str
-    description: str
+    title: dict[str, str] | str
+    description: dict[str, str] | str
     duration_minutes: int
     poster_url: NotRequired[str | None]
     age_rating: NotRequired[str | None]

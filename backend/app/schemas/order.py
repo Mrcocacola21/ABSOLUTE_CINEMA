@@ -8,6 +8,7 @@ from pydantic import Field, model_validator
 
 from app.core.constants import ORDER_STATUS_VALUES
 from app.schemas.common import BaseSchema
+from app.schemas.localization import LocalizedText
 
 
 class OrderSeatInput(BaseSchema):
@@ -71,7 +72,7 @@ class OrderListRead(OrderRead):
     """Order DTO enriched with session, movie, and nested ticket data."""
 
     movie_id: str
-    movie_title: str
+    movie_title: LocalizedText
     poster_url: str | None = None
     age_rating: str | None = None
     session_start_time: datetime
@@ -84,4 +85,3 @@ class OrderListRead(OrderRead):
 
 class OrderDetailsRead(OrderListRead):
     """Dedicated schema for order details responses."""
-

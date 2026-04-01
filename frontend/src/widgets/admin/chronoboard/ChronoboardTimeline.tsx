@@ -1,5 +1,7 @@
 import type { DragEvent } from "react";
+import { useTranslation } from "react-i18next";
 
+import { getLocalizedText } from "@/shared/localization";
 import { formatCurrency, formatStateLabel, formatTime } from "@/shared/presentation";
 import type { Movie, SessionDetails } from "@/types/domain";
 import type {
@@ -83,6 +85,8 @@ export function ChronoboardTimeline({
   onDraftSelect,
   onSessionSelect,
 }: ChronoboardTimelineProps) {
+  const { i18n } = useTranslation();
+
   return (
     <section className="card chrono-stage">
       <div className="admin-section__header">
@@ -95,7 +99,7 @@ export function ChronoboardTimeline({
         </div>
         <div className="stats-row">
           {candidateMovie ? (
-            <span className="badge">{candidateMovie.title}</span>
+            <span className="badge">{getLocalizedText(candidateMovie.title, i18n.language)}</span>
           ) : (
             <span className="badge">Select a movie to plan</span>
           )}
@@ -151,7 +155,9 @@ export function ChronoboardTimeline({
                 style={getSessionCardStyle(dragPreview.startTime, previewEndTime)}
               >
                 <div className="chrono-session__header">
-                  <strong title={previewMovie.title}>{previewMovie.title}</strong>
+                  <strong title={getLocalizedText(previewMovie.title, i18n.language)}>
+                    {getLocalizedText(previewMovie.title, i18n.language)}
+                  </strong>
                   <span className="badge">Preview</span>
                 </div>
                 <p className="chrono-session__time">
@@ -184,7 +190,9 @@ export function ChronoboardTimeline({
                 onClick={onDraftSelect}
               >
                 <div className="chrono-session__header">
-                  <strong title={draftMovie.title}>{draftMovie.title}</strong>
+                  <strong title={getLocalizedText(draftMovie.title, i18n.language)}>
+                    {getLocalizedText(draftMovie.title, i18n.language)}
+                  </strong>
                   <span className="badge">Draft</span>
                 </div>
                 <p className="chrono-session__time">
@@ -210,7 +218,9 @@ export function ChronoboardTimeline({
                   onClick={() => onSessionSelect(session)}
                 >
                   <div className="chrono-session__header">
-                    <strong title={session.movie.title}>{session.movie.title}</strong>
+                    <strong title={getLocalizedText(session.movie.title, i18n.language)}>
+                      {getLocalizedText(session.movie.title, i18n.language)}
+                    </strong>
                     <span className="badge">{formatStateLabel(session.status)}</span>
                   </div>
                   <p className="chrono-session__time">

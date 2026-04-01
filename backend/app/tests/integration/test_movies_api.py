@@ -7,7 +7,7 @@ import pytest
 from bson import ObjectId
 
 from app.db.collections import DatabaseCollections
-from app.tests.integration.conftest import API_PREFIX
+from app.tests.integration.conftest import API_PREFIX, build_localized_text
 
 
 @pytest.mark.asyncio
@@ -20,12 +20,12 @@ async def test_admin_can_create_list_read_and_update_movies(
         f"{API_PREFIX}/admin/movies",
         headers=admin_auth["headers"],
         json={
-            "title": "Arrival",
-            "description": "First-contact drama",
+            "title": {"uk": "Прибуття", "en": "Arrival"},
+            "description": {"uk": "Драма про перший контакт", "en": "First-contact drama"},
             "duration_minutes": 116,
             "poster_url": None,
             "age_rating": "PG-13",
-            "genres": ["Sci-Fi", "Drama"],
+            "genres": ["science_fiction", "drama"],
             "status": "planned",
         },
     )
@@ -33,10 +33,11 @@ async def test_admin_can_create_list_read_and_update_movies(
     assert create_response.status_code == 201
     created_movie = create_response.json()["data"]
     movie_id = created_movie["id"]
-    assert created_movie["title"] == "Arrival"
+    assert created_movie["title"] == {"uk": "Прибуття", "en": "Arrival"}
     assert created_movie["status"] == "planned"
+    assert created_movie["genres"] == ["science_fiction", "drama"]
 
-    stored_movie = await database[DatabaseCollections.MOVIES].find_one({"title": "Arrival"})
+    stored_movie = await database[DatabaseCollections.MOVIES].find_one({"title.uk": "Прибуття"})
     assert stored_movie is not None
     assert stored_movie["status"] == "planned"
 
@@ -52,15 +53,15 @@ async def test_admin_can_create_list_read_and_update_movies(
         f"{API_PREFIX}/admin/movies/{movie_id}",
         headers=admin_auth["headers"],
         json={
-            "description": "Updated description",
-            "genres": ["Drama", "Mystery", "Drama"],
+            "description": {"uk": "Оновлений опис", "en": "Updated description"},
+            "genres": ["drama", "mystery", "Drama"],
             "poster_url": None,
         },
     )
     assert update_response.status_code == 200
     updated_movie = update_response.json()["data"]
-    assert updated_movie["description"] == "Updated description"
-    assert updated_movie["genres"] == ["Drama", "Mystery"]
+    assert updated_movie["description"] == {"uk": "Оновлений опис", "en": "Updated description"}
+    assert updated_movie["genres"] == ["drama", "mystery"]
     assert updated_movie["poster_url"] is None
     assert updated_movie["status"] == "planned"
 
@@ -71,20 +72,21 @@ async def test_admin_can_create_and_update_movie_with_localized_fields_and_poste
     admin_auth: dict[str, object],
     database,
 ) -> None:
-    localized_title = "\u041b\u044e\u0434\u0438\u043d\u0430-\u0431\u0435\u043d\u0437\u043e\u043f\u0438\u043b\u0430: \u0420\u0435\u0437\u0435 \u0410\u0440\u043a\u0430. \u041a\u0456\u043d\u043e"
-    localized_description = (
-        "\u041d\u0430\u0439\u043f\u043e\u043f\u0443\u043b\u044f\u0440\u043d\u0456\u0448\u0435 \u0430\u043d\u0456\u043c\u0435 "
-        "\u00ab\u041b\u044e\u0434\u0438\u043d\u0430-\u0431\u0435\u043d\u0437\u043e\u043f\u0438\u043b\u0430\u00bb "
-        "\u0432\u043f\u0435\u0440\u0448\u0435 \u043d\u0430 \u0432\u0435\u043b\u0438\u043a\u043e\u043c\u0443 \u0435\u043a\u0440\u0430\u043d\u0456. "
-        "\u0414\u0435\u043d\u0434\u0436\u0456 \u0437\u0443\u0441\u0442\u0440\u0456\u0447\u0430\u0454 \u0420\u0435\u0437\u0435 "
-        "\u0456 \u0432\u0441\u0442\u0443\u043f\u0430\u0454 \u0432 \u043d\u0435\u0431\u0435\u0437\u043f\u0435\u0447\u043d\u0443 \u0431\u0438\u0442\u0432\u0443."
-    )
-    localized_genres = [
-        "\u0410\u043d\u0456\u043c\u0430\u0446\u0456\u044f",
-        "\u0424\u0430\u043d\u0442\u0430\u0441\u0442\u0438\u043a\u0430",
-        "\u0424\u0435\u043d\u0442\u0435\u0437\u0456",
-        "\u041f\u0440\u0438\u0433\u043e\u0434\u0438",
-    ]
+    localized_title = {
+        "uk": "Людина-бензопила: Резе Арка. Кіно",
+        "en": "Chainsaw Man: Reze Arc. The Movie",
+    }
+    localized_description = {
+        "uk": (
+            "Найпопулярніше аніме «Людина-бензопила» вперше на великому екрані. "
+            "Денджі зустрічає Резе і вступає в небезпечну битву."
+        ),
+        "en": (
+            "The hit anime Chainsaw Man reaches the big screen as Denji meets Reze "
+            "and is pulled into a dangerous fight."
+        ),
+    }
+    localized_genres = ["animation", "science_fiction", "fantasy", "adventure"]
     poster_url = "https://multiplex.ua/images/92/ae/92ae5046c523685edb03c8f9b0f2b854.jpeg"
     updated_poster_url = "https://example.com/posters/chainsaw-man-reze.jpg"
 
@@ -158,12 +160,12 @@ async def test_admin_cannot_create_movie_as_active_without_scheduling(
         f"{API_PREFIX}/admin/movies",
         headers=admin_auth["headers"],
         json={
-            "title": "Invalid Active",
-            "description": "Should fail",
+            "title": build_localized_text("Недозволений активний", en="Invalid Active"),
+            "description": build_localized_text("Має впасти", en="Should fail"),
             "duration_minutes": 100,
             "poster_url": None,
             "age_rating": "PG",
-            "genres": ["Drama"],
+            "genres": ["drama"],
             "status": "active",
         },
     )
@@ -172,6 +174,29 @@ async def test_admin_cannot_create_movie_as_active_without_scheduling(
     assert response.json()["error"]["message"] == (
         "New movies must start as planned or deactivated. Active status is assigned automatically after scheduling."
     )
+
+
+@pytest.mark.asyncio
+async def test_admin_rejects_unsupported_genre_code(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+) -> None:
+    response = await client.post(
+        f"{API_PREFIX}/admin/movies",
+        headers=admin_auth["headers"],
+        json={
+            "title": build_localized_text("Невалідний жанр", en="Invalid Genre"),
+            "description": build_localized_text("Тестовий опис", en="Test description"),
+            "duration_minutes": 95,
+            "genres": ["not-a-real-genre"],
+            "status": "planned",
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "request_validation_error"
+    assert body["error"]["message"] == "Request validation failed."
 
 
 @pytest.mark.asyncio
@@ -334,6 +359,7 @@ async def test_public_movie_details_can_include_planned_movies_when_requested(
     assert catalog_response.status_code == 200
     assert catalog_response.json()["data"]["id"] == planned_movie["id"]
     assert catalog_response.json()["data"]["status"] == "planned"
+    assert catalog_response.json()["data"]["title"] == planned_movie["title"]
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
 import type { SessionCreatePayload, SessionUpdatePayload } from "@/api/admin";
+import { buildGenreSearchText } from "@/shared/genres";
+import { buildLocalizedSearchText, getLocalizedText } from "@/shared/localization";
 import { isMovieScheduleReady } from "@/shared/movieStatus";
 import { formatTime } from "@/shared/presentation";
 import type { Movie, Session, SessionDetails } from "@/types/domain";
@@ -31,6 +33,7 @@ import {
 } from "@/widgets/admin/chronoboard/utils";
 
 interface UseChronoboardStateOptions {
+  language: string;
   moviesById: Record<string, Movie>;
   sortedMovies: Movie[];
   scheduleReadyMovies: Movie[];
@@ -42,6 +45,7 @@ interface UseChronoboardStateOptions {
 }
 
 export function useChronoboardState({
+  language,
   moviesById,
   sortedMovies,
   scheduleReadyMovies,
@@ -65,6 +69,10 @@ export function useChronoboardState({
   const [inspectorView, setInspectorView] = useState<InspectorView>("none");
   const [plannerNotice, setPlannerNotice] = useState<PlannerNotice | null>(null);
 
+  function getMovieLabel(movie: Pick<Movie, "title">): string {
+    return getLocalizedText(movie.title, language);
+  }
+
   const planningMovies = useMemo(() => {
     const normalizedQuery = plannerMovieQuery.trim().toLowerCase();
     return scheduleReadyMovies.filter((movie) => {
@@ -72,9 +80,12 @@ export function useChronoboardState({
         return true;
       }
 
-      return [movie.title, movie.genres.join(" ")].join(" ").toLowerCase().includes(normalizedQuery);
+      return [buildLocalizedSearchText(movie.title), movie.genres.map((genre) => buildGenreSearchText(genre)).join(" ")]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
     });
-  }, [plannerMovieQuery, scheduleReadyMovies]);
+  }, [language, plannerMovieQuery, scheduleReadyMovies]);
 
   const sessionsByMoviePrice = useMemo(() => {
     const map = new Map<string, number>();
@@ -238,7 +249,7 @@ export function useChronoboardState({
     });
 
     if (blockingSession) {
-      return `This slot overlaps with "${blockingSession.movie.title}" (${formatTime(blockingSession.start_time)}-${formatTime(blockingSession.end_time)}).`;
+      return `This slot overlaps with "${getMovieLabel(blockingSession.movie)}" (${formatTime(blockingSession.start_time)}-${formatTime(blockingSession.end_time)}).`;
     }
 
     return null;
@@ -402,7 +413,7 @@ export function useChronoboardState({
       scope: "planning",
       tone: "success",
       title: "Draft moved on the board",
-      message: `${movie.title} is now staged at ${formatLocalDateTime(startTime)}. It is still only saved after you press Create Session.`,
+      message: `${getMovieLabel(movie)} is now staged at ${formatLocalDateTime(startTime)}. It is still only saved after you press Create Session.`,
     });
   }
 
@@ -412,7 +423,7 @@ export function useChronoboardState({
       scope: "planning",
       tone: "info",
       title: "Movie ready for planning",
-      message: `Drag "${movie.title}" onto the timeline, or click a free slot to start a draft.`,
+      message: `Drag "${getMovieLabel(movie)}" onto the timeline, or click a free slot to start a draft.`,
     });
   }
 
@@ -445,7 +456,7 @@ export function useChronoboardState({
       scope: "planning",
       tone: "success",
       title: "Draft placed on the board",
-      message: `${movie.title} is now staged at ${formatLocalDateTime(startTime)}. It will only be saved after you press Create Session.`,
+      message: `${getMovieLabel(movie)} is now staged at ${formatLocalDateTime(startTime)}. It will only be saved after you press Create Session.`,
     });
   }
 
@@ -583,7 +594,7 @@ export function useChronoboardState({
       end_time: toDateTimeLocal(session.end_time),
       price: session.price,
       autoFillEndTime: false,
-      sourceLabel: `Editing ${session.movie.title}`,
+      sourceLabel: `Editing ${getMovieLabel(session.movie)}`,
     });
     setSelectedSessionId(session.id);
     setInspectorView("edit");
@@ -666,7 +677,7 @@ export function useChronoboardState({
       scope: "session",
       tone: "success",
       title: "Session created",
-      message: `${createdSession.movie.title} is now confirmed on the board at ${formatTime(createdSession.start_time)}-${formatTime(createdSession.end_time)}.`,
+      message: `${getMovieLabel(createdSession.movie)} is now confirmed on the board at ${formatTime(createdSession.start_time)}-${formatTime(createdSession.end_time)}.`,
     });
   }
 
@@ -693,7 +704,7 @@ export function useChronoboardState({
       scope: "session",
       tone: "success",
       title: "Session updated",
-      message: `${updatedSession.movie.title} now runs at ${formatTime(updatedSession.start_time)}-${formatTime(updatedSession.end_time)}.`,
+      message: `${getMovieLabel(updatedSession.movie)} now runs at ${formatTime(updatedSession.start_time)}-${formatTime(updatedSession.end_time)}.`,
     });
   }
 
@@ -702,7 +713,7 @@ export function useChronoboardState({
       return;
     }
 
-    const confirmed = window.confirm(`Cancel the session for "${selectedSession.movie.title}"?`);
+    const confirmed = window.confirm(`Cancel the session for "${getMovieLabel(selectedSession.movie)}"?`);
     if (!confirmed) {
       return;
     }
@@ -726,7 +737,7 @@ export function useChronoboardState({
       return;
     }
 
-    const confirmed = window.confirm(`Delete the session for "${selectedSession.movie.title}"?`);
+    const confirmed = window.confirm(`Delete the session for "${getMovieLabel(selectedSession.movie)}"?`);
     if (!confirmed) {
       return;
     }

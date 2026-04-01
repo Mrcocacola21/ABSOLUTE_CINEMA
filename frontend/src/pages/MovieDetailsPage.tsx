@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 
 import { getMovieRequest, getScheduleRequest } from "@/api/schedule";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { getGenreLabel } from "@/shared/genres";
+import { getLocalizedText } from "@/shared/localization";
 import { getMovieStatusTranslationKey } from "@/shared/movieStatus";
 import { formatCurrency, formatDateTime, formatTime } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
@@ -43,7 +45,7 @@ function formatSessionRange(startTime: string, endTime: string): string {
 }
 
 export function MovieDetailsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { movieId = "" } = useParams();
   const [movie, setMovie] = useState<Movie | null>(null);
   const [sessions, setSessions] = useState<ScheduleItem[]>([]);
@@ -91,26 +93,28 @@ export function MovieDetailsPage() {
   }, [sessions]);
 
   const statusLabel = movie ? t(getMovieStatusTranslationKey(movie.status)) : "--";
+  const movieTitle = movie ? getLocalizedText(movie.title, i18n.language) : "";
+  const movieDescription = movie ? getLocalizedText(movie.description, i18n.language) : "";
 
   return (
     <>
       <section className="page-header page-header--movie-detail movie-hero">
         <div className="movie-hero__copy">
           <p className="page-eyebrow">{t("movieDetailsEyebrow")}</p>
-          <h1 className="page-title">{movie?.title ?? t("movieDetails")}</h1>
+          <h1 className="page-title">{movie ? movieTitle : t("movieDetails")}</h1>
 
           {movie && movie.genres.length > 0 ? (
             <div className="meta-row movie-hero__taxonomy">
               {movie.genres.map((genre) => (
                 <span key={`${movie.id}-${genre}`} className="badge">
-                  {genre}
+                  {getGenreLabel(genre, i18n.language)}
                 </span>
               ))}
             </div>
           ) : null}
 
           <p className="page-subtitle movie-hero__description">
-            {movie?.description ?? t("movieDetailsUnavailable")}
+            {movie ? movieDescription : t("movieDetailsUnavailable")}
           </p>
         </div>
 
@@ -183,12 +187,12 @@ export function MovieDetailsPage() {
       {!isLoading && !errorMessage && movie ? (
         <section className="movie-detail-grid">
           <article className="panel movie-detail-card movie-detail-card--poster">
-            <div className="movie-detail-card__poster-shell">
+              <div className="movie-detail-card__poster-shell">
               <div className="movie-detail-poster media-tile" aria-hidden="true">
                 {movie.poster_url ? (
                   <img src={movie.poster_url} alt="" className="media-tile__image" />
                 ) : (
-                  <span>{getMovieMonogram(movie.title)}</span>
+                  <span>{getMovieMonogram(movieTitle)}</span>
                 )}
               </div>
             </div>
@@ -226,7 +230,7 @@ export function MovieDetailsPage() {
                 <div className="meta-row movie-detail-card__genres">
                   {movie.genres.map((genre) => (
                     <span key={`${movie.id}-detail-${genre}`} className="badge">
-                      {genre}
+                      {getGenreLabel(genre, i18n.language)}
                     </span>
                   ))}
                 </div>

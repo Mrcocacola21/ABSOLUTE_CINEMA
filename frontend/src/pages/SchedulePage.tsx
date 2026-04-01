@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { getMoviesRequest, getScheduleRequest } from "@/api/schedule";
 import { useScheduleQueryParams } from "@/hooks/useScheduleQueryParams";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { isGenreCode } from "@/shared/genres";
 import { isMovieActive } from "@/shared/movieStatus";
 import {
   filterBoardScheduleItems,
@@ -43,7 +44,7 @@ function normalizeSeatSort(value: string): "" | "most_occupied" | "least_occupie
 }
 
 export function SchedulePage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { values, updateParam, updateParams } = useScheduleQueryParams();
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -95,12 +96,13 @@ export function SchedulePage() {
     [items, moviesById],
   );
 
-  const boardMovieOptions = useMemo(() => getAvailableMovieOptions(items), [items]);
-  const boardGenreOptions = useMemo(() => getAvailableGenreOptions(items), [items]);
+  const boardMovieOptions = useMemo(() => getAvailableMovieOptions(items, i18n.language), [i18n.language, items]);
+  const boardGenreOptions = useMemo(() => getAvailableGenreOptions(items, i18n.language), [i18n.language, items]);
+  const selectedBoardGenre = isGenreCode(values.genre) ? values.genre : "";
 
   const boardBaseItems = useMemo(
-    () => filterBoardScheduleItems(items, values.movieId, values.genre),
-    [items, values.genre, values.movieId],
+    () => filterBoardScheduleItems(items, values.movieId, selectedBoardGenre),
+    [items, selectedBoardGenre, values.movieId],
   );
 
   const boardDayOptions = useMemo(() => getScheduleDayOptions(boardBaseItems), [boardBaseItems]);
@@ -128,13 +130,14 @@ export function SchedulePage() {
         boardBaseItems.filter((item) => toScheduleDayKey(item.start_time) === selectedBoardDay),
         "start_time",
         "asc",
+        i18n.language,
       ),
-    [boardBaseItems, selectedBoardDay],
+    [boardBaseItems, i18n.language, selectedBoardDay],
   );
 
   const listBaseItems = useMemo(
-    () => filterScheduleListItems(items, values.query, ""),
-    [items, values.query],
+    () => filterScheduleListItems(items, values.query, "", i18n.language),
+    [i18n.language, items, values.query],
   );
 
   const listDayOptions = useMemo(() => getScheduleDayOptions(listBaseItems), [listBaseItems]);
@@ -146,23 +149,23 @@ export function SchedulePage() {
   }, [listDayOptions, updateParam, values.listDay]);
 
   const listFilteredItems = useMemo(
-    () => filterScheduleListItems(items, values.query, values.listDay),
-    [items, values.listDay, values.query],
+    () => filterScheduleListItems(items, values.query, values.listDay, i18n.language),
+    [i18n.language, items, values.listDay, values.query],
   );
 
   const listSuggestionPool = useMemo(
-    () => filterScheduleListItems(items, "", values.listDay),
-    [items, values.listDay],
+    () => filterScheduleListItems(items, "", values.listDay, i18n.language),
+    [i18n.language, items, values.listDay],
   );
 
   const listQuerySuggestions = useMemo(
-    () => getScheduleTitleSuggestions(listSuggestionPool, values.query),
-    [listSuggestionPool, values.query],
+    () => getScheduleTitleSuggestions(listSuggestionPool, values.query, i18n.language),
+    [i18n.language, listSuggestionPool, values.query],
   );
 
   const listItems = useMemo(
-    () => sortPublicScheduleListItems(listFilteredItems, dateSort, seatSort),
-    [dateSort, listFilteredItems, seatSort],
+    () => sortPublicScheduleListItems(listFilteredItems, dateSort, seatSort, i18n.language),
+    [dateSort, i18n.language, listFilteredItems, seatSort],
   );
 
   const boardResultsLabel = t("scheduleDayResultsLabel", {
@@ -271,7 +274,7 @@ export function SchedulePage() {
             selectedDay={selectedBoardDay}
             dayOptions={boardDayOptions}
             movieId={values.movieId}
-            genre={values.genre}
+            genre={selectedBoardGenre}
             movies={boardMovieOptions}
             genres={boardGenreOptions}
             resultsLabel={boardResultsLabel}

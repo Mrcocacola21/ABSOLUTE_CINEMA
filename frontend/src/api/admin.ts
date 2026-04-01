@@ -1,7 +1,9 @@
 import { apiClient } from "@/api/client";
+import type { GenreCode } from "@/shared/genres";
 import type { ApiResponse } from "@/types/api";
 import type {
   AttendanceReport,
+  LocalizedText,
   Movie,
   MovieStatus,
   Session,
@@ -11,22 +13,22 @@ import type {
 } from "@/types/domain";
 
 export interface MovieCreatePayload {
-  title: string;
-  description: string;
+  title: LocalizedText;
+  description: LocalizedText;
   duration_minutes: number;
   poster_url?: string;
   age_rating?: string;
-  genres: string[];
+  genres: GenreCode[];
   status: MovieStatus;
 }
 
 export interface MovieUpdatePayload {
-  title?: string;
-  description?: string;
+  title?: Partial<LocalizedText>;
+  description?: Partial<LocalizedText>;
   duration_minutes?: number;
   poster_url?: string | null;
   age_rating?: string | null;
-  genres?: string[];
+  genres?: GenreCode[];
   status?: MovieStatus;
 }
 

@@ -7,13 +7,14 @@ from datetime import datetime
 from pydantic import Field
 
 from app.schemas.common import BaseSchema
+from app.schemas.localization import LocalizedText
 
 
 class AttendanceSessionSummary(BaseSchema):
     """Summary of attendance metrics for a single session."""
 
     session_id: str
-    movie_title: str
+    movie_title: LocalizedText
     start_time: datetime
     status: str
     tickets_sold: int = Field(ge=0)

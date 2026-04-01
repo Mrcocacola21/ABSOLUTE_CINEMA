@@ -7,7 +7,7 @@ from datetime import datetime
 from app.core.constants import MovieStatuses
 from app.repositories.movies import MovieRepository
 from app.repositories.sessions import SessionRepository
-from app.schemas.movie import MovieRead
+from app.schemas.movie import MovieRead, build_movie_normalization_updates
 
 
 class MovieStatusManager:
@@ -36,11 +36,16 @@ class MovieStatusManager:
         for movie_document in movies:
             movie = MovieRead.model_validate(movie_document)
             next_status = self._resolve_next_status(movie=movie, future_movie_ids=future_movie_ids)
-            if next_status == movie.status:
+            updates = build_movie_normalization_updates(movie_document, movie)
+            if next_status != movie.status:
+                updates["status"] = next_status
+
+            if not updates:
                 continue
+
             await self.movie_repository.update_movie(
                 movie_id=movie.id,
-                updates={"status": next_status},
+                updates=updates,
                 updated_at=current_time,
             )
 

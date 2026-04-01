@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.core.constants import MOVIE_STATUS_VALUES, ORDER_STATUS_VALUES
+from app.core.genres import SUPPORTED_GENRE_CODES
 from app.db.collections import DatabaseCollections
 from app.db.validators import COLLECTION_VALIDATORS, ensure_collection_validators
 
@@ -89,6 +90,9 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
     ticket_expr = ticket_validator_clauses[1]["$expr"]["$or"]
 
     assert movie_properties["status"]["enum"] == list(MOVIE_STATUS_VALUES)
+    assert movie_properties["title"]["required"] == ["uk", "en"]
+    assert movie_properties["description"]["required"] == ["uk", "en"]
+    assert movie_properties["genres"]["items"]["enum"] == list(SUPPORTED_GENRE_CODES)
     assert order_properties["status"]["enum"] == list(ORDER_STATUS_VALUES)
     assert session_properties["movie_id"]["bsonType"] == "string"
     assert session_properties["updated_at"]["bsonType"] == ["date", "null"]

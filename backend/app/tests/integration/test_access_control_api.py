@@ -11,7 +11,7 @@ from jose import jwt
 
 from app.core.config import get_settings
 
-from app.tests.integration.conftest import API_PREFIX
+from app.tests.integration.conftest import API_PREFIX, build_localized_text
 
 
 @pytest.mark.asyncio
@@ -54,19 +54,22 @@ async def test_non_admin_cannot_mutate_admin_movies_or_sessions(
             f"{API_PREFIX}/admin/movies",
             headers=user_auth["headers"],
             json={
-                "title": "Forbidden Movie",
-                "description": "Should not be created by a non-admin user.",
+                "title": build_localized_text("Заборонений фільм", en="Forbidden Movie"),
+                "description": build_localized_text(
+                    "Не має створюватися звичайним користувачем.",
+                    en="Should not be created by a non-admin user.",
+                ),
                 "duration_minutes": 120,
                 "poster_url": None,
                 "age_rating": "PG-13",
-                "genres": ["Drama"],
+                "genres": ["drama"],
                 "is_active": True,
             },
         ),
         await client.patch(
             f"{API_PREFIX}/admin/movies/{movie['id']}",
             headers=user_auth["headers"],
-            json={"title": "Still Forbidden"},
+            json={"title": {"en": "Still Forbidden"}},
         ),
         await client.patch(
             f"{API_PREFIX}/admin/movies/{movie['id']}/deactivate",

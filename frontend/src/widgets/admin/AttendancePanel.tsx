@@ -1,3 +1,6 @@
+import { useTranslation } from "react-i18next";
+
+import { getLocalizedText } from "@/shared/localization";
 import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import type { AttendanceReport, TicketListItem, User } from "@/types/domain";
@@ -9,6 +12,7 @@ interface AttendancePanelProps {
 }
 
 export function AttendancePanel({ report, tickets, users }: AttendancePanelProps) {
+  const { i18n } = useTranslation();
   const recentTickets = [...tickets]
     .sort((left, right) => new Date(right.purchased_at).getTime() - new Date(left.purchased_at).getTime())
     .slice(0, 6);
@@ -72,7 +76,7 @@ export function AttendancePanel({ report, tickets, users }: AttendancePanelProps
                   {report.sessions.map((item) => (
                     <article key={item.session_id} className="admin-report-feed__item">
                       <div>
-                        <strong>{item.movie_title}</strong>
+                        <strong>{getLocalizedText(item.movie_title, i18n.language)}</strong>
                         <p className="muted">{formatDateTime(item.start_time)}</p>
                       </div>
                       <div className="stats-row">
@@ -109,7 +113,7 @@ export function AttendancePanel({ report, tickets, users }: AttendancePanelProps
                   {recentTickets.map((ticket) => (
                     <article key={ticket.id} className="admin-report-feed__item">
                       <div>
-                        <strong>{ticket.movie_title}</strong>
+                        <strong>{getLocalizedText(ticket.movie_title, i18n.language)}</strong>
                         <p className="muted">
                           {formatDateTime(ticket.session_start_time)} | Seat {ticket.seat_row}-{ticket.seat_number}
                         </p>

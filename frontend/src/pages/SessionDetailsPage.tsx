@@ -9,6 +9,8 @@ import {
 } from "@/api/schedule";
 import { useAuth } from "@/features/auth/useAuth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { getGenreLabel } from "@/shared/genres";
+import { getLocalizedText } from "@/shared/localization";
 import { formatCurrency, formatDateTime, formatStateLabel, formatTime } from "@/shared/presentation";
 import { toScheduleDayKey } from "@/shared/scheduleTimeline";
 import { StatePanel } from "@/shared/ui/StatePanel";
@@ -22,7 +24,7 @@ function formatSessionRange(startTime: string, endTime: string): string {
 }
 
 export function SessionDetailsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { sessionId = "" } = useParams();
   const { isAuthenticated } = useAuth();
   const [details, setDetails] = useState<SessionDetails | null>(null);
@@ -168,6 +170,9 @@ export function SessionDetailsPage() {
         ? "This session is not available for purchase."
       : undefined;
 
+  const movieTitle = details ? getLocalizedText(details.movie.title, i18n.language) : "";
+  const movieDescription = details ? getLocalizedText(details.movie.description, i18n.language) : "";
+
   return (
     <>
       {feedback ? (
@@ -206,7 +211,7 @@ export function SessionDetailsPage() {
               <div className="session-hero__main">
                 <div className="session-hero__copy">
                   <p className="page-eyebrow">{t("viewSession")}</p>
-                  <h1 className="page-title session-hero__title">{details.movie.title}</h1>
+                  <h1 className="page-title session-hero__title">{movieTitle}</h1>
                   <div className="session-hero__session-line">
                     <span className="badge session-hero__status-badge">{formatStateLabel(details.status)}</span>
                     <p className="session-hero__schedule-line">
@@ -218,13 +223,13 @@ export function SessionDetailsPage() {
                     <div className="meta-row session-hero__taxonomy">
                       {details.movie.genres.map((genre) => (
                         <span key={`${details.movie.id}-${genre}`} className="badge">
-                          {genre}
+                          {getGenreLabel(genre, i18n.language)}
                         </span>
                       ))}
                     </div>
                   ) : null}
 
-                  <p className="page-subtitle session-hero__description">{details.movie.description}</p>
+                  <p className="page-subtitle session-hero__description">{movieDescription}</p>
                 </div>
               </div>
 

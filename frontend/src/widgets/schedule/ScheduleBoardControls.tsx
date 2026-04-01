@@ -1,14 +1,15 @@
 import { useTranslation } from "react-i18next";
 
+import { getGenreLabel, type GenreCode } from "@/shared/genres";
 import type { MovieOption, ScheduleDayOption } from "@/shared/scheduleBrowse";
 
 interface ScheduleBoardControlsProps {
   selectedDay: string;
   dayOptions: ScheduleDayOption[];
   movieId: string;
-  genre: string;
+  genre: GenreCode | "";
   movies: MovieOption[];
-  genres: string[];
+  genres: GenreCode[];
   resultsLabel: string;
   onDayChange: (day: string) => void;
   onFilterChange: (key: "movieId" | "genre", value: string) => void;
@@ -27,7 +28,7 @@ export function ScheduleBoardControls({
   onFilterChange,
   onReset,
 }: ScheduleBoardControlsProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
     <section className="panel day-panel schedule-board-controls">
@@ -59,7 +60,7 @@ export function ScheduleBoardControls({
             <option value="">{t("allGenres")}</option>
             {genres.map((currentGenre) => (
               <option key={currentGenre} value={currentGenre}>
-                {currentGenre}
+                {getGenreLabel(currentGenre, i18n.language)}
               </option>
             ))}
           </select>

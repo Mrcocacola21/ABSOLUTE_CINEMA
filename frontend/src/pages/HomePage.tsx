@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { getMoviesRequest, getScheduleRequest } from "@/api/schedule";
 import { useAuth } from "@/features/auth/useAuth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { getGenreLabel } from "@/shared/genres";
+import { compareLocalizedText, getLocalizedText } from "@/shared/localization";
 import { getMovieStatusBadgeClassName } from "@/shared/movieStatus";
 import { formatCurrency, formatDateTime } from "@/shared/presentation";
 import { buildRotationMovies } from "@/shared/scheduleBrowse";
@@ -13,7 +15,7 @@ import type { Movie, ScheduleItem } from "@/types/domain";
 import { HomeMovieBanner } from "@/widgets/movies/HomeMovieBanner";
 
 export function HomePage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { role } = useAuth();
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -54,16 +56,16 @@ export function HomePage() {
   );
 
   const activeMovies = useMemo(
-    () => buildRotationMovies(items, moviesById, "start_time", "asc"),
-    [items, moviesById],
+    () => buildRotationMovies(items, moviesById, "start_time", "asc", i18n.language),
+    [i18n.language, items, moviesById],
   );
 
   const plannedMovies = useMemo(
     () =>
       [...movies]
         .filter((movie) => movie.status === "planned")
-        .sort((left, right) => left.title.localeCompare(right.title)),
-    [movies],
+        .sort((left, right) => compareLocalizedText(left.title, right.title, i18n.language)),
+    [i18n.language, movies],
   );
 
   const featuredActiveMovie = activeMovies[0] ?? null;
@@ -71,7 +73,7 @@ export function HomePage() {
   const spotlightMovie = featuredActiveMovie ? (moviesById[featuredActiveMovie.id] ?? null) : featuredPlannedMovie;
   const spotlightVariant = featuredActiveMovie ? "active" : spotlightMovie ? "planned" : "empty";
   const spotlightDescription = spotlightMovie
-    ? spotlightMovie.description ||
+    ? getLocalizedText(spotlightMovie.description, i18n.language) ||
       (featuredActiveMovie ? t("homeMovieFallback") : t("homePlannedFallback"))
     : t("comingSoonEmptyText");
   const spotlightSummary = featuredActiveMovie
@@ -83,7 +85,10 @@ export function HomePage() {
       ? t("homePlannedBannerLine")
       : t("comingSoonEmptyText");
   const spotlightMeta: string[] = spotlightMovie
-    ? [spotlightMovie.age_rating, ...spotlightMovie.genres.slice(0, 2)].filter(
+    ? [
+        spotlightMovie.age_rating,
+        ...spotlightMovie.genres.slice(0, 2).map((genre) => getGenreLabel(genre, i18n.language)),
+      ].filter(
         (item): item is string => Boolean(item),
       )
     : [];
@@ -156,7 +161,7 @@ export function HomePage() {
                 {featuredActiveMovie ? t("nowShowingEyebrow") : t("comingSoonEyebrow")}
               </p>
               <h2 className="home-hero__spotlight-title">
-                {spotlightMovie ? spotlightMovie.title : t("comingSoonEmptyTitle")}
+                {spotlightMovie ? getLocalizedText(spotlightMovie.title, i18n.language) : t("comingSoonEmptyTitle")}
               </h2>
               <p className="home-hero__spotlight-description">{spotlightDescription}</p>
             </div>

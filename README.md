@@ -62,7 +62,7 @@ The one-hall constraint is intentional. There is **no separate `Hall` entity or 
 
 ## Key Features
 
-- **Movie catalog** with active/inactive titles, genres, age rating, poster URL, and description.
+- **Movie catalog** with localized Ukrainian/English titles and descriptions, normalized genre codes, age rating, poster URL, and status.
 - **Home page rotation** that shows only active movies that already have at least one upcoming session.
 - **Public schedule browsing** in two forms: a day-based chronoboard and a filterable session list.
 - **Movie details pages** with upcoming sessions for a selected title.
@@ -215,6 +215,8 @@ The frontend is a React single-page application with route-level pages, reusable
 - `src/features/auth`: auth context, current-user loading, login/logout, and role handling.
 - `src/router`: route definitions plus `ProtectedRoute` for user/admin pages.
 - `src/shared`: formatting helpers, query param handling, local storage helpers, and shared UI states.
+- `src/shared/localization.ts`: language-aware movie text helpers with Ukrainian fallback behavior.
+- `src/shared/genres.ts`: canonical genre dictionary plus localized genre-label resolution for UI rendering.
 - `src/i18n`: English and Ukrainian UI resources with a header language switcher.
 
 Auth state is stored in `localStorage`. On app load, the frontend restores the access token, fetches `/users/me`, and clears local auth state automatically if the backend returns `401`.
@@ -231,6 +233,10 @@ Auth state is stored in `localStorage`. On app load, the frontend restores the a
 
 ### Domain constraints
 
+- `Movie.title` and `Movie.description` are localized objects with `uk` and `en`.
+- Frontend rendering chooses the current i18n language and falls back to Ukrainian when a requested movie value is empty.
+- `Movie.genres` stores only canonical codes such as `action`, `drama`, and `science_fiction`.
+- Genre labels are resolved from shared backend/frontend code dictionaries, not stored as translated labels inside movie documents.
 - There is **no `Hall` collection** in the current backend.
 - `Session.status` can be `scheduled`, `cancelled`, or `completed`.
 - `Ticket.status` can be `purchased` or `cancelled`.
@@ -259,8 +265,10 @@ Auth state is stored in `localStorage`. On app load, the frontend restores the a
 1. Register and log in with an email configured in `ADMIN_EMAILS`.
 2. Open `/admin`.
 3. Create or update movie records.
-4. Place active movies onto the chronoboard and confirm session drafts.
-5. Inspect attendance, recent bookings, and recent users from the same workspace.
+4. Fill localized movie fields directly in the admin UI: `Title (UK)`, `Title (EN)`, `Description (UK)`, `Description (EN)`.
+5. Select movie genres as canonical codes while the UI shows translated genre names.
+6. Place active movies onto the chronoboard and confirm session drafts.
+7. Inspect attendance, recent bookings, and recent users from the same workspace.
 
 ## Schedule, Booking, and Admin Planning
 
@@ -288,6 +296,7 @@ Auth state is stored in `localStorage`. On app load, the frontend restores the a
 
 - Only **active movies** can be newly scheduled.
 - Admins can drag a movie from the planning shelf onto a free slot or select a movie and click a slot.
+- The planning shelf, movie catalog, public pages, profile history, and attendance widgets all render movie titles/descriptions in the active i18n language.
 - A draft session is created in the UI first and becomes persistent only after confirmation.
 - New sessions must start in the future, begin between `09:00` and `22:00`, cover at least the selected movie duration, and avoid overlap with another non-cancelled session in the only hall.
 - Existing sessions can be edited only while they are still future scheduled sessions with **no purchased tickets**.
@@ -564,6 +573,14 @@ cd frontend
 npm run build
 ```
 
+The localized movie/genre refactor was verified by a successful frontend production build and by updating the shared frontend types/helpers that power:
+
+- movie cards and movie details
+- public schedule list and chronoboard
+- session details
+- profile order history
+- admin movie forms, catalog, planning shelf, inspector, and attendance panels
+
 ### What the backend tests cover
 
 - authentication and access control
@@ -660,6 +677,7 @@ That setup is well-suited for coursework, presentations, and local verification,
 - Ticket purchase is an **application-level reservation flow**. There is no payment gateway integration.
 - One order is intentionally limited to **one session only**. Multi-session baskets are out of scope for the current coursework model.
 - Frontend automated tests are not configured yet.
+- Legacy movie documents that still store flat string `title`/`description` values or pre-normalized genre labels should be normalized toward the canonical localized/code-based shape. The backend now normalizes legacy movie data when it is loaded through the updated services, but new writes and collection validation expect the canonical structure.
 - The booking workflow now depends on MongoDB transactions, unique indexes, and conditional updates rather than on an in-memory per-session lock.
 - Poster handling is URL-based; there is no built-in media upload pipeline.
 - The repository does not include seed/demo data scripts yet.

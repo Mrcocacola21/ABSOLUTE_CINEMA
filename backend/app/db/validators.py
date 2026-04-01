@@ -5,6 +5,7 @@ from __future__ import annotations
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.constants import MOVIE_STATUS_VALUES, ORDER_STATUS_VALUES, Roles, SessionStatuses, TicketStatuses
+from app.core.genres import SUPPORTED_GENRE_CODES
 from app.db.collections import DatabaseCollections
 
 
@@ -66,12 +67,32 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                 ],
                 "properties": {
                     "title": {
-                        "bsonType": "string",
-                        "minLength": 1,
+                        "bsonType": "object",
+                        "required": ["uk", "en"],
+                        "properties": {
+                            "uk": {
+                                "bsonType": "string",
+                                "minLength": 1,
+                            },
+                            "en": {
+                                "bsonType": "string",
+                                "minLength": 1,
+                            },
+                        },
                     },
                     "description": {
-                        "bsonType": "string",
-                        "minLength": 1,
+                        "bsonType": "object",
+                        "required": ["uk", "en"],
+                        "properties": {
+                            "uk": {
+                                "bsonType": "string",
+                                "minLength": 1,
+                            },
+                            "en": {
+                                "bsonType": "string",
+                                "minLength": 1,
+                            },
+                        },
                     },
                     "duration_minutes": {
                         "bsonType": ["int", "long"],
@@ -85,7 +106,10 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                     },
                     "genres": {
                         "bsonType": "array",
-                        "items": {"bsonType": "string"},
+                        "items": {
+                            "bsonType": "string",
+                            "enum": list(SUPPORTED_GENRE_CODES),
+                        },
                     },
                     "status": {
                         "enum": list(MOVIE_STATUS_VALUES),

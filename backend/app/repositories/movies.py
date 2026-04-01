@@ -53,9 +53,9 @@ class MovieRepository(BaseRepository):
         return result.deleted_count == 1
 
     async def list_movies(self, *, active_only: bool) -> list[dict[str, Any]]:
-        """Return movies ordered by title."""
+        """Return movies matching the requested visibility filter."""
         query: dict[str, Any] = {"status": MovieStatuses.ACTIVE} if active_only else {}
-        cursor = self.collection.find(query).sort("title", 1)
+        cursor = self.collection.find(query)
         documents = await cursor.to_list(length=500)
         return MongoDocumentAdapter.normalize_many(documents)
 

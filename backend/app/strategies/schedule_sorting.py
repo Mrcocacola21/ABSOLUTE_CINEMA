@@ -7,6 +7,7 @@ from typing import TypeVar
 
 from app.core.constants import ALLOWED_SORT_FIELDS, ALLOWED_SORT_ORDERS
 from app.core.exceptions import ValidationException
+from app.schemas.localization import LocalizedText
 
 SortableItem = TypeVar("SortableItem")
 
@@ -45,6 +46,20 @@ class SortByMovieTitleStrategy(ScheduleSortingStrategy):
     def field_name(self) -> str:
         """Return the movie title field name."""
         return "movie_title"
+
+    def sort(self, items: list[SortableItem]) -> list[SortableItem]:
+        """Return a sorted copy of schedule items by their canonical Ukrainian title."""
+        return sorted(
+            items,
+            key=lambda item: self._title_sort_key(getattr(item, self.field_name)),
+            reverse=self.reverse,
+        )
+
+    @staticmethod
+    def _title_sort_key(value: object) -> str:
+        if isinstance(value, LocalizedText):
+            return value.resolve("uk").casefold()
+        return str(value).casefold()
 
 
 class SortByAvailableSeatsStrategy(ScheduleSortingStrategy):

@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import { getGenreLabel } from "@/shared/genres";
+import { getLocalizedText } from "@/shared/localization";
 import { getMovieStatusTranslationKey } from "@/shared/movieStatus";
 import { formatDateTime } from "@/shared/presentation";
 import type { Movie, ScheduleItem } from "@/types/domain";
@@ -27,7 +29,9 @@ export function MovieCatalogCard({
   nextSession,
   lastSession,
 }: MovieCatalogCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const title = getLocalizedText(movie.title, i18n.language);
+  const description = getLocalizedText(movie.description, i18n.language);
   const statusClassName = `catalog-movie-card__status catalog-movie-card__status--${movie.status}`;
 
   return (
@@ -37,14 +41,14 @@ export function MovieCatalogCard({
           {movie.poster_url ? (
             <img src={movie.poster_url} alt="" className="media-tile__image" />
           ) : (
-            <span>{getMovieMonogram(movie.title)}</span>
+            <span>{getMovieMonogram(title)}</span>
           )}
         </Link>
 
         <div className="catalog-movie-card__body">
           <div className="catalog-movie-card__topline">
             <div className="catalog-movie-card__title-row">
-              <h3 className="catalog-movie-card__title">{movie.title}</h3>
+              <h3 className="catalog-movie-card__title">{title}</h3>
               <div className="catalog-movie-card__title-meta">
                 <span className={statusClassName}>{t(getMovieStatusTranslationKey(movie.status))}</span>
                 {movie.age_rating ? <span className="badge catalog-movie-card__age-rating">{movie.age_rating}</span> : null}
@@ -55,15 +59,15 @@ export function MovieCatalogCard({
               <div className="meta-row catalog-movie-card__taxonomy">
                 {movie.genres.map((genre) => (
                   <span key={`${movie.id}-${genre}`} className="badge">
-                    {genre}
+                    {getGenreLabel(genre, i18n.language)}
                   </span>
                 ))}
               </div>
             ) : null}
           </div>
 
-          {movie.description ? (
-            <p className="muted catalog-movie-card__description">{movie.description}</p>
+          {description ? (
+            <p className="muted catalog-movie-card__description">{description}</p>
           ) : null}
         </div>
       </div>

@@ -12,6 +12,7 @@ from app.core.constants import (
     SessionStatuses,
 )
 from app.schemas.common import BaseSchema
+from app.schemas.localization import LocalizedText
 from app.schemas.movie import MovieRead
 from app.schemas.seat import SeatAvailabilityRead
 
@@ -88,7 +89,7 @@ class ScheduleItemRead(BaseSchema):
 
     id: str
     movie_id: str
-    movie_title: str
+    movie_title: LocalizedText
     poster_url: str | None = None
     age_rating: str | None = None
     genres: list[str] = Field(default_factory=list)

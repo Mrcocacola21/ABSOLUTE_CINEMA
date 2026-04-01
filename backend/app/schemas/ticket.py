@@ -7,6 +7,7 @@ from datetime import datetime
 from pydantic import EmailStr, Field
 
 from app.schemas.common import BaseSchema
+from app.schemas.localization import LocalizedText
 
 
 class TicketPurchaseRequest(BaseSchema):
@@ -37,7 +38,7 @@ class TicketListRead(TicketRead):
     """Ticket DTO enriched with session and optional user details."""
 
     movie_id: str
-    movie_title: str
+    movie_title: LocalizedText
     session_start_time: datetime
     session_end_time: datetime
     session_status: str

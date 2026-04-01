@@ -5,9 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from pydantic import ValidationError
 
 from app.core.constants import MovieStatuses, Roles, SessionStatuses, TicketStatuses
 from app.core.exceptions import ConflictException, ValidationException
+from app.schemas.localization import LocalizedText
 from app.schemas.movie import MovieUpdate
 from app.schemas.movie import MovieRead
 from app.schemas.movie import MovieCreate
@@ -275,12 +277,12 @@ def build_movie(
     now = datetime.now(tz=timezone.utc)
     return MovieRead(
         id=movie_id,
-        title="Interstellar",
-        description="Sci-fi drama",
+        title={"uk": "Інтерстеллар", "en": "Interstellar"},
+        description={"uk": "Науково-фантастична драма", "en": "Sci-fi drama"},
         duration_minutes=duration_minutes,
         poster_url=None,
         age_rating="PG-13",
-        genres=["Sci-Fi", "Drama"],
+        genres=["science_fiction", "drama"],
         status=status,
         created_at=now,
         updated_at=None,
@@ -321,19 +323,46 @@ def build_ticket(ticket_id: str = "ticket-1") -> dict[str, object]:
     ).model_dump(mode="python")
 
 
+def test_movie_create_schema_accepts_localized_fields_and_normalizes_genres() -> None:
+    payload = MovieCreate(
+        title={"uk": "Дюна", "en": "Dune"},
+        description={"uk": "Наукова фантастика", "en": "Science fiction"},
+        duration_minutes=155,
+        genres=["Sci-Fi", " Drama "],
+        status=MovieStatuses.PLANNED,
+    )
+
+    assert payload.title == LocalizedText(uk="Дюна", en="Dune")
+    assert payload.description == LocalizedText(uk="Наукова фантастика", en="Science fiction")
+    assert payload.genres == ["science_fiction", "drama"]
+
+
 def test_movie_update_schema_normalizes_genres_and_keeps_nullables() -> None:
     payload = MovieUpdate(
-        genres=[" Drama ", "", "drama", "Comedy"],
+        title={"en": "New title"},
+        genres=[" Drama ", "", "Sci-Fi", "drama"],
         poster_url=None,
         status=MovieStatuses.DEACTIVATED,
     )
 
     dumped = payload.model_dump(exclude_unset=True)
 
-    assert dumped["genres"] == ["Drama", "Comedy"]
+    assert dumped["title"] == {"en": "New title"}
+    assert dumped["genres"] == ["drama", "science_fiction"]
     assert dumped["status"] == MovieStatuses.DEACTIVATED
     assert "poster_url" in dumped
     assert dumped["poster_url"] is None
+
+
+def test_movie_create_schema_rejects_invalid_genre_code() -> None:
+    with pytest.raises(ValidationError):
+        MovieCreate(
+            title={"uk": "Тест", "en": "Test"},
+            description={"uk": "Опис", "en": "Description"},
+            duration_minutes=100,
+            genres=["unsupported-genre"],
+            status=MovieStatuses.PLANNED,
+        )
 
 
 def test_user_update_requires_current_password_for_sensitive_fields() -> None:
@@ -398,10 +427,10 @@ async def test_admin_service_rejects_active_movie_creation_without_sessions() ->
     with pytest.raises(ValidationException):
         await service.create_movie(
             MovieCreate(
-                title="Premature Active",
-                description="Should fail",
+                title={"uk": "Передчасно активний", "en": "Premature Active"},
+                description={"uk": "Має впасти", "en": "Should fail"},
                 duration_minutes=90,
-                genres=["Drama"],
+                genres=["drama"],
                 status=MovieStatuses.ACTIVE,
             ),
             created_by=build_admin_user(),

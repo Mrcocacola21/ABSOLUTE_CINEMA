@@ -31,7 +31,10 @@ class MovieService:
         now = datetime.now(tz=timezone.utc)
         await self.movie_status_manager.refresh_statuses(current_time=now)
         movies = await self.movie_repository.list_movies(active_only=not include_inactive)
-        return [MovieRead.model_validate(movie) for movie in movies]
+        return sorted(
+            (MovieRead.model_validate(movie) for movie in movies),
+            key=lambda movie: movie.title.resolve("uk").casefold(),
+        )
 
     async def get_movie(self, movie_id: str, *, include_inactive: bool = False) -> MovieRead:
         """Return a movie for public views."""

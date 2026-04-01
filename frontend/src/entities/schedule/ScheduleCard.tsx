@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import { getGenreLabel } from "@/shared/genres";
+import { getLocalizedText } from "@/shared/localization";
 import { formatCurrency, formatTime } from "@/shared/presentation";
 import type { ScheduleItem } from "@/types/domain";
 import { formatScheduleDayLabel, getMovieMonogram, toScheduleDayKey } from "@/shared/scheduleTimeline";
@@ -11,6 +13,7 @@ interface ScheduleCardProps {
 
 export function ScheduleCard({ item }: ScheduleCardProps) {
   const { t, i18n } = useTranslation();
+  const title = getLocalizedText(item.movie_title, i18n.language);
   const dayLabel = formatScheduleDayLabel(toScheduleDayKey(item.start_time));
   const timeRange = `${formatTime(item.start_time)} - ${formatTime(item.end_time)}`;
   const dateLabel = i18n.language.startsWith("uk") ? "\u0414\u0430\u0442\u0430" : "Date";
@@ -23,13 +26,13 @@ export function ScheduleCard({ item }: ScheduleCardProps) {
           {item.poster_url ? (
             <img src={item.poster_url} alt="" className="media-tile__image" />
           ) : (
-            <span>{getMovieMonogram(item.movie_title)}</span>
+            <span>{getMovieMonogram(title)}</span>
           )}
         </div>
         <div className="schedule-card__body">
           <div className="schedule-card__topline">
             <div className="schedule-card__title-row">
-              <h3 className="schedule-card__title">{item.movie_title}</h3>
+              <h3 className="schedule-card__title">{title}</h3>
               {item.age_rating ? <span className="badge schedule-card__age-rating">{item.age_rating}</span> : null}
             </div>
 
@@ -37,7 +40,7 @@ export function ScheduleCard({ item }: ScheduleCardProps) {
               <div className="meta-row schedule-card__taxonomy">
                 {item.genres.map((genre) => (
                   <span key={`${item.id}-${genre}`} className="badge">
-                    {genre}
+                    {getGenreLabel(genre, i18n.language)}
                   </span>
                 ))}
               </div>

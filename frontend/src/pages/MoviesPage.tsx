@@ -3,7 +3,10 @@ import { useTranslation } from "react-i18next";
 
 import { getMoviesRequest, getScheduleRequest } from "@/api/schedule";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { getGenreLabel, type GenreCode } from "@/shared/genres";
+import { compareLocalizedText } from "@/shared/localization";
 import { getMovieStatusPriority } from "@/shared/movieStatus";
+import { buildMovieSearchText } from "@/shared/scheduleBrowse";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, MovieStatus, ScheduleItem } from "@/types/domain";
 import { MovieCatalogCard } from "@/widgets/movies/MovieCatalogCard";
@@ -11,12 +14,12 @@ import { MovieCatalogCard } from "@/widgets/movies/MovieCatalogCard";
 type StatusFilter = "all" | MovieStatus;
 
 export function MoviesPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [movies, setMovies] = useState<Movie[]>([]);
   const [items, setItems] = useState<ScheduleItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [genre, setGenre] = useState("");
+  const [genre, setGenre] = useState<GenreCode | "">("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -67,7 +70,7 @@ export function MoviesPage() {
   }, [items]);
 
   const genreOptions = useMemo(() => {
-    const normalizedGenres = new Set<string>();
+    const normalizedGenres = new Set<GenreCode>();
 
     for (const movie of movies) {
       for (const currentGenre of movie.genres) {
@@ -75,8 +78,10 @@ export function MoviesPage() {
       }
     }
 
-    return [...normalizedGenres].sort((left, right) => left.localeCompare(right));
-  }, [movies]);
+    return [...normalizedGenres].sort((left, right) =>
+      getGenreLabel(left, i18n.language).localeCompare(getGenreLabel(right, i18n.language)),
+    );
+  }, [i18n.language, movies]);
 
   const filteredMovies = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -92,16 +97,16 @@ export function MoviesPage() {
         if (!normalizedQuery) {
           return true;
         }
-        return movie.title.toLowerCase().includes(normalizedQuery);
+        return buildMovieSearchText(movie).includes(normalizedQuery);
       })
       .sort((left, right) => {
         const statusComparison = getMovieStatusPriority(left.status) - getMovieStatusPriority(right.status);
         if (statusComparison !== 0) {
           return statusComparison;
         }
-        return left.title.localeCompare(right.title);
+        return compareLocalizedText(left.title, right.title, i18n.language);
       });
-  }, [genre, movies, query, status]);
+  }, [genre, i18n.language, movies, query, status]);
 
   function resetFilters() {
     setQuery("");
@@ -162,11 +167,11 @@ export function MoviesPage() {
             </label>
             <label className="field">
               <span>{t("genre")}</span>
-              <select value={genre} onChange={(event) => setGenre(event.target.value)}>
+              <select value={genre} onChange={(event) => setGenre(event.target.value as GenreCode | "")}>
                 <option value="">{t("allGenres")}</option>
                 {genreOptions.map((currentGenre) => (
                   <option key={currentGenre} value={currentGenre}>
-                    {currentGenre}
+                    {getGenreLabel(currentGenre, i18n.language)}
                   </option>
                 ))}
               </select>

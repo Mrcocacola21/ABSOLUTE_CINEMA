@@ -7,6 +7,7 @@ import { cancelTicketRequest } from "@/api/tickets";
 import { deactivateCurrentUserRequest, updateCurrentUserRequest } from "@/api/users";
 import { useAuth } from "@/features/auth/useAuth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { getLocalizedText } from "@/shared/localization";
 import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
@@ -25,7 +26,7 @@ const emptySensitiveFields = {
 };
 
 export function ProfilePage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { currentUser, isAuthLoading, logout, refreshCurrentUser } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [form, setForm] = useState<ProfileFormState>({
@@ -167,8 +168,9 @@ export function ProfilePage() {
   }
 
   async function handleCancelTicket(order: Order, ticket: OrderTicket) {
+    const movieTitle = getLocalizedText(order.movie_title, i18n.language);
     const confirmed = window.confirm(
-      `Cancel the ticket for ${order.movie_title} at seat ${ticket.seat_row}-${ticket.seat_number}?`,
+      `Cancel the ticket for ${movieTitle} at seat ${ticket.seat_row}-${ticket.seat_number}?`,
     );
     if (!confirmed) {
       return;
@@ -358,7 +360,7 @@ export function ProfilePage() {
                 <article key={order.id} className="card order-history__order">
                   <div className="order-history__order-head">
                     <div>
-                      <strong>{order.movie_title}</strong>
+                      <strong>{getLocalizedText(order.movie_title, i18n.language)}</strong>
                       <p className="muted">
                         {formatDateTime(order.session_start_time)} | {formatStateLabel(order.session_status)}
                       </p>

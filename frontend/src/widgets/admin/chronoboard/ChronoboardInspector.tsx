@@ -1,3 +1,7 @@
+import { useTranslation } from "react-i18next";
+
+import { getGenreLabels } from "@/shared/genres";
+import { getLocalizedText } from "@/shared/localization";
 import { formatCurrency, formatDateTime, formatStateLabel, formatTime } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, SessionDetails } from "@/types/domain";
@@ -49,6 +53,8 @@ export function ChronoboardInspector({
   onDeleteSelectedSession,
   onJumpToToday,
 }: ChronoboardInspectorProps) {
+  const { i18n } = useTranslation();
+
   return (
     <section className="card inspector-panel">
       <div className="admin-section__header">
@@ -103,7 +109,7 @@ export function ChronoboardInspector({
                 <option value="">Select a movie</option>
                 {movieOptionsForSessionForms.map((movie) => (
                   <option key={movie.id} value={movie.id}>
-                    {movie.title}
+                    {getLocalizedText(movie.title, i18n.language)}
                   </option>
                 ))}
               </select>
@@ -185,7 +191,7 @@ export function ChronoboardInspector({
                 <option value="">Select a movie</option>
                 {movieOptionsForSessionForms.map((movie) => (
                   <option key={movie.id} value={movie.id}>
-                    {movie.title}
+                    {getLocalizedText(movie.title, i18n.language)}
                   </option>
                 ))}
               </select>
@@ -249,11 +255,11 @@ export function ChronoboardInspector({
               {selectedSession.movie.poster_url ? (
                 <img src={selectedSession.movie.poster_url} alt="" className="media-tile__image" />
               ) : (
-                <span>{getMovieMonogram(selectedSession.movie.title)}</span>
+                <span>{getMovieMonogram(getLocalizedText(selectedSession.movie.title, i18n.language))}</span>
               )}
             </div>
             <div>
-              <strong>{selectedSession.movie.title}</strong>
+              <strong>{getLocalizedText(selectedSession.movie.title, i18n.language)}</strong>
               <p className="muted">
                 {formatDateTime(selectedSession.start_time)} to {formatTime(selectedSession.end_time)}
               </p>
@@ -269,12 +275,14 @@ export function ChronoboardInspector({
             </span>
           </div>
 
-          <p className="muted">{selectedSession.movie.description}</p>
+          <p className="muted">{getLocalizedText(selectedSession.movie.description, i18n.language)}</p>
 
           <div className="stats-row">
             {selectedSession.movie.age_rating ? <span className="badge">{selectedSession.movie.age_rating}</span> : null}
             {selectedSession.movie.genres.length > 0 ? (
-              <span className="badge">{selectedSession.movie.genres.join(", ")}</span>
+              <span className="badge">
+                {getGenreLabels(selectedSession.movie.genres, i18n.language).join(", ")}
+              </span>
             ) : null}
           </div>
 

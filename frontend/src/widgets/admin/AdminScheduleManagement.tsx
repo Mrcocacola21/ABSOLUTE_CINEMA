@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type {
   MovieCreatePayload,
@@ -6,6 +7,12 @@ import type {
   SessionCreatePayload,
   SessionUpdatePayload,
 } from "@/api/admin";
+import { buildGenreSearchText } from "@/shared/genres";
+import {
+  buildLocalizedSearchText,
+  compareLocalizedText,
+  getLocalizedText,
+} from "@/shared/localization";
 import { isMovieScheduleReady } from "@/shared/movieStatus";
 import type { Movie, Session, SessionDetails } from "@/types/domain";
 import { ChronoboardHeader } from "@/widgets/admin/chronoboard/ChronoboardHeader";
@@ -31,8 +38,14 @@ interface AdminScheduleManagementProps {
 }
 
 const emptyMovieForm: MovieCreatePayload = {
-  title: "",
-  description: "",
+  title: {
+    uk: "",
+    en: "",
+  },
+  description: {
+    uk: "",
+    en: "",
+  },
   duration_minutes: 120,
   genres: [],
   status: "planned",
@@ -52,8 +65,8 @@ export function AdminScheduleManagement({
   onCancelSession,
   onDeleteSession,
 }: AdminScheduleManagementProps) {
+  const { i18n } = useTranslation();
   const [movieForm, setMovieForm] = useState<MovieCreatePayload>(emptyMovieForm);
-  const [genresInput, setGenresInput] = useState("");
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
   const [movieQuery, setMovieQuery] = useState("");
 
@@ -67,8 +80,8 @@ export function AdminScheduleManagement({
   );
 
   const sortedMovies = useMemo(
-    () => [...movies].sort((left, right) => left.title.localeCompare(right.title)),
-    [movies],
+    () => [...movies].sort((left, right) => compareLocalizedText(left.title, right.title, i18n.language)),
+    [i18n.language, movies],
   );
 
   const scheduleReadyMovies = useMemo(
@@ -93,10 +106,10 @@ export function AdminScheduleManagement({
       }
 
       const haystack = [
-        movie.title,
-        movie.description,
+        buildLocalizedSearchText(movie.title),
+        buildLocalizedSearchText(movie.description),
         movie.age_rating ?? "",
-        movie.genres.join(" "),
+        movie.genres.map((genre) => buildGenreSearchText(genre)).join(" "),
       ]
         .join(" ")
         .toLowerCase();
@@ -106,6 +119,7 @@ export function AdminScheduleManagement({
   }, [movieQuery, sortedMovies]);
 
   const chronoboard = useChronoboardState({
+    language: i18n.language,
     moviesById,
     sortedMovies,
     scheduleReadyMovies,
@@ -120,37 +134,61 @@ export function AdminScheduleManagement({
     setMovieForm((current) => ({ ...current, [field]: value }));
   }
 
+  function updateLocalizedMovieFormField(
+    field: "title" | "description",
+    locale: "uk" | "en",
+    value: string,
+  ) {
+    setMovieForm((current) => ({
+      ...current,
+      [field]: {
+        ...current[field],
+        [locale]: value,
+      },
+    }));
+  }
+
+  function toggleMovieGenre(genre: MovieCreatePayload["genres"][number]) {
+    setMovieForm((current) => ({
+      ...current,
+      genres: current.genres.includes(genre)
+        ? current.genres.filter((currentGenre) => currentGenre !== genre)
+        : [...current.genres, genre],
+    }));
+  }
+
   function resetMovieForm() {
     setMovieForm(emptyMovieForm);
-    setGenresInput("");
     setEditingMovieId(null);
   }
 
   function handleMovieCatalogEdit(movie: Movie) {
     setEditingMovieId(movie.id);
     setMovieForm({
-      title: movie.title,
-      description: movie.description,
+      title: { ...movie.title },
+      description: { ...movie.description },
       duration_minutes: movie.duration_minutes,
       poster_url: movie.poster_url ?? undefined,
       age_rating: movie.age_rating ?? undefined,
-      genres: movie.genres,
+      genres: [...movie.genres],
       status: movie.status,
     });
-    setGenresInput(movie.genres.join(", "));
   }
 
   async function handleMovieSubmit() {
     const normalizedPayload: MovieCreatePayload = {
       ...movieForm,
-      title: movieForm.title.trim(),
-      description: movieForm.description.trim(),
+      title: {
+        uk: movieForm.title.uk.trim(),
+        en: movieForm.title.en.trim(),
+      },
+      description: {
+        uk: movieForm.description.uk.trim(),
+        en: movieForm.description.en.trim(),
+      },
       poster_url: movieForm.poster_url?.trim() || undefined,
       age_rating: movieForm.age_rating?.trim() || undefined,
-      genres: genresInput
-        .split(",")
-        .map((genre) => genre.trim())
-        .filter(Boolean),
+      genres: [...new Set(movieForm.genres)],
     };
 
     if (editingMovieId) {
@@ -174,8 +212,9 @@ export function AdminScheduleManagement({
   }
 
   async function handleDeactivateManagedMovie(movie: Movie) {
+    const movieLabel = getLocalizedText(movie.title, i18n.language);
     const confirmed = window.confirm(
-      `Deactivate "${movie.title}"? The movie will stay in the catalog but will no longer be available for new scheduling.`,
+      `Deactivate "${movieLabel}"? The movie will stay in the catalog but will no longer be available for new scheduling.`,
     );
     if (!confirmed) {
       return;
@@ -192,8 +231,9 @@ export function AdminScheduleManagement({
   }
 
   async function handleReturnMovieToPlanned(movie: Movie) {
+    const movieLabel = getLocalizedText(movie.title, i18n.language);
     const confirmed = window.confirm(
-      `Return "${movie.title}" to planned? The movie will become available for future scheduling again.`,
+      `Return "${movieLabel}" to planned? The movie will become available for future scheduling again.`,
     );
     if (!confirmed) {
       return;
@@ -206,8 +246,9 @@ export function AdminScheduleManagement({
   }
 
   async function handleDeleteManagedMovie(movie: Movie) {
+    const movieLabel = getLocalizedText(movie.title, i18n.language);
     const confirmed = window.confirm(
-      `Delete "${movie.title}"? This only succeeds when no sessions reference it.`,
+      `Delete "${movieLabel}"? This only succeeds when no sessions reference it.`,
     );
     if (!confirmed) {
       return;
@@ -236,11 +277,11 @@ export function AdminScheduleManagement({
         isBusy={isBusy}
         busyActionLabel={busyActionLabel}
         movieForm={movieForm}
-        genresInput={genresInput}
         editingMovieId={editingMovieId}
         movieQuery={movieQuery}
         onMovieFormChange={updateMovieFormField}
-        onGenresInputChange={setGenresInput}
+        onLocalizedMovieFormChange={updateLocalizedMovieFormField}
+        onToggleGenre={toggleMovieGenre}
         onMovieQueryChange={setMovieQuery}
         onSubmit={handleMovieSubmit}
         onResetForm={resetMovieForm}

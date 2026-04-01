@@ -1,4 +1,8 @@
+import { useTranslation } from "react-i18next";
+
 import type { MovieCreatePayload } from "@/api/admin";
+import { GENRE_OPTIONS, getGenreLabel, getGenreLabels } from "@/shared/genres";
+import { getLocalizedText } from "@/shared/localization";
 import {
   getMovieStatusBadgeClassName,
   isMovieScheduleReady,
@@ -19,11 +23,15 @@ interface MovieCatalogPanelProps {
   isBusy: boolean;
   busyActionLabel?: string;
   movieForm: MovieCreatePayload;
-  genresInput: string;
   editingMovieId: string | null;
   movieQuery: string;
   onMovieFormChange: <K extends keyof MovieCreatePayload>(field: K, value: MovieCreatePayload[K]) => void;
-  onGenresInputChange: (value: string) => void;
+  onLocalizedMovieFormChange: (
+    field: "title" | "description",
+    locale: "uk" | "en",
+    value: string,
+  ) => void;
+  onToggleGenre: (genre: MovieCreatePayload["genres"][number]) => void;
   onMovieQueryChange: (value: string) => void;
   onSubmit: () => Promise<void> | void;
   onResetForm: () => void;
@@ -42,11 +50,11 @@ export function MovieCatalogPanel({
   isBusy,
   busyActionLabel,
   movieForm,
-  genresInput,
   editingMovieId,
   movieQuery,
   onMovieFormChange,
-  onGenresInputChange,
+  onLocalizedMovieFormChange,
+  onToggleGenre,
   onMovieQueryChange,
   onSubmit,
   onResetForm,
@@ -56,6 +64,7 @@ export function MovieCatalogPanel({
   onReturnToPlanned,
   onDeleteMovie,
 }: MovieCatalogPanelProps) {
+  const { i18n } = useTranslation();
   const statusOptions =
     editingMovieId && movieForm.status === "active"
       ? [
@@ -113,12 +122,21 @@ export function MovieCatalogPanel({
 
           <div className="form-grid">
             <label className="field">
-              <span>Title</span>
+              <span>Title (UK)</span>
               <input
                 required
                 disabled={isBusy}
-                value={movieForm.title}
-                onChange={(event) => onMovieFormChange("title", event.target.value)}
+                value={movieForm.title.uk}
+                onChange={(event) => onLocalizedMovieFormChange("title", "uk", event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Title (EN)</span>
+              <input
+                required
+                disabled={isBusy}
+                value={movieForm.title.en}
+                onChange={(event) => onLocalizedMovieFormChange("title", "en", event.target.value)}
               />
             </label>
             <label className="field">
@@ -133,21 +151,30 @@ export function MovieCatalogPanel({
                 onChange={(event) => onMovieFormChange("duration_minutes", Number(event.target.value))}
               />
             </label>
-            <label className="field field--wide">
-              <span>Description</span>
-              <textarea
-                required
-                disabled={isBusy}
-                value={movieForm.description}
-                onChange={(event) => onMovieFormChange("description", event.target.value)}
-              />
-            </label>
             <label className="field">
               <span>Age rating</span>
               <input
                 disabled={isBusy}
                 value={movieForm.age_rating ?? ""}
                 onChange={(event) => onMovieFormChange("age_rating", event.target.value || undefined)}
+              />
+            </label>
+            <label className="field field--wide">
+              <span>Description (UK)</span>
+              <textarea
+                required
+                disabled={isBusy}
+                value={movieForm.description.uk}
+                onChange={(event) => onLocalizedMovieFormChange("description", "uk", event.target.value)}
+              />
+            </label>
+            <label className="field field--wide">
+              <span>Description (EN)</span>
+              <textarea
+                required
+                disabled={isBusy}
+                value={movieForm.description.en}
+                onChange={(event) => onLocalizedMovieFormChange("description", "en", event.target.value)}
               />
             </label>
             <label className="field">
@@ -157,15 +184,6 @@ export function MovieCatalogPanel({
                 disabled={isBusy}
                 value={movieForm.poster_url ?? ""}
                 onChange={(event) => onMovieFormChange("poster_url", event.target.value || undefined)}
-              />
-            </label>
-            <label className="field field--wide">
-              <span>Genres</span>
-              <input
-                disabled={isBusy}
-                value={genresInput}
-                onChange={(event) => onGenresInputChange(event.target.value)}
-                placeholder="Drama, Comedy, Thriller"
               />
             </label>
             <label className="field">
@@ -182,6 +200,22 @@ export function MovieCatalogPanel({
                 ))}
               </select>
             </label>
+            <div className="field field--wide">
+              <span>Genres</span>
+              <div className="stats-row">
+                {GENRE_OPTIONS.map((option) => (
+                  <label key={option.code} className="badge">
+                    <input
+                      type="checkbox"
+                      disabled={isBusy}
+                      checked={movieForm.genres.includes(option.code)}
+                      onChange={() => onToggleGenre(option.code)}
+                    />{" "}
+                    {getGenreLabel(option.code, i18n.language)}
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
 
           <p className="field__hint">
@@ -215,76 +249,82 @@ export function MovieCatalogPanel({
           </label>
 
           <div className="admin-catalog__list">
-            {catalogMovies.map((movie) => (
-              <article key={movie.id} className="card admin-catalog__card">
-                <div className="admin-card__header">
-                  <div className="admin-catalog__media">
-                    <div className="media-tile" aria-hidden="true">
-                      {movie.poster_url ? (
-                        <img src={movie.poster_url} alt="" className="media-tile__image" />
-                      ) : (
-                        <span>{getMovieMonogram(movie.title)}</span>
-                      )}
-                    </div>
-                    <div className="admin-catalog__copy">
-                      <strong className="admin-catalog__title">{movie.title}</strong>
-                      <div className="admin-catalog__badges">
-                        {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
-                        {movie.genres.length > 0 ? <span className="badge">{movie.genres.join(", ")}</span> : null}
-                      </div>
-                      <p className="muted">{movie.description}</p>
-                    </div>
-                  </div>
-                  <div className="admin-catalog__status-panel">
-                    <span className={getMovieStatusBadgeClassName(movie.status)}>
-                      {formatStateLabel(movie.status)}
-                    </span>
-                    <span className="admin-catalog__duration">{movie.duration_minutes} min</span>
-                  </div>
-                </div>
+            {catalogMovies.map((movie) => {
+              const movieTitle = getLocalizedText(movie.title, i18n.language);
+              const movieDescription = getLocalizedText(movie.description, i18n.language);
+              const genreLabel = getGenreLabels(movie.genres, i18n.language).join(", ");
 
-                <div className="actions-row">
-                  <button className="button--ghost" type="button" disabled={isBusy} onClick={() => onEditMovie(movie)}>
-                    Edit movie
-                  </button>
-                  <button
-                    className="button--ghost"
-                    type="button"
-                    disabled={isBusy || !isMovieScheduleReady(movie)}
-                    onClick={() => onQueueMovie(movie)}
-                  >
-                    Queue for board
-                  </button>
-                  {movie.status === "deactivated" ? (
+              return (
+                <article key={movie.id} className="card admin-catalog__card">
+                  <div className="admin-card__header">
+                    <div className="admin-catalog__media">
+                      <div className="media-tile" aria-hidden="true">
+                        {movie.poster_url ? (
+                          <img src={movie.poster_url} alt="" className="media-tile__image" />
+                        ) : (
+                          <span>{getMovieMonogram(movieTitle)}</span>
+                        )}
+                      </div>
+                      <div className="admin-catalog__copy">
+                        <strong className="admin-catalog__title">{movieTitle}</strong>
+                        <div className="admin-catalog__badges">
+                          {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
+                          {movie.genres.length > 0 ? <span className="badge">{genreLabel}</span> : null}
+                        </div>
+                        <p className="muted">{movieDescription}</p>
+                      </div>
+                    </div>
+                    <div className="admin-catalog__status-panel">
+                      <span className={getMovieStatusBadgeClassName(movie.status)}>
+                        {formatStateLabel(movie.status)}
+                      </span>
+                      <span className="admin-catalog__duration">{movie.duration_minutes} min</span>
+                    </div>
+                  </div>
+
+                  <div className="actions-row">
+                    <button className="button--ghost" type="button" disabled={isBusy} onClick={() => onEditMovie(movie)}>
+                      Edit movie
+                    </button>
                     <button
                       className="button--ghost"
                       type="button"
-                      disabled={isBusy}
-                      onClick={() => void onReturnToPlanned(movie)}
+                      disabled={isBusy || !isMovieScheduleReady(movie)}
+                      onClick={() => onQueueMovie(movie)}
                     >
-                      Return to planned
+                      Queue for board
                     </button>
-                  ) : (
+                    {movie.status === "deactivated" ? (
+                      <button
+                        className="button--ghost"
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => void onReturnToPlanned(movie)}
+                      >
+                        Return to planned
+                      </button>
+                    ) : (
+                      <button
+                        className="button--ghost"
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => void onDeactivateMovie(movie)}
+                      >
+                        Deactivate
+                      </button>
+                    )}
                     <button
-                      className="button--ghost"
+                      className="button--danger"
                       type="button"
                       disabled={isBusy}
-                      onClick={() => void onDeactivateMovie(movie)}
+                      onClick={() => void onDeleteMovie(movie)}
                     >
-                      Deactivate
+                      Delete movie
                     </button>
-                  )}
-                  <button
-                    className="button--danger"
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => void onDeleteMovie(movie)}
-                  >
-                    Delete movie
-                  </button>
-                </div>
-              </article>
-            ))}
+                  </div>
+                </article>
+              );
+            })}
 
             {catalogMovies.length === 0 ? (
               <section className="empty-state empty-state--panel">

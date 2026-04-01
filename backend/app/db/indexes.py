@@ -17,7 +17,7 @@ COLLECTION_INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("role", ASCENDING)], name="users_role_idx"),
     ],
     DatabaseCollections.MOVIES: [
-        IndexModel([("title", ASCENDING)], name="movies_title_idx"),
+        IndexModel([("title.uk", ASCENDING)], name="movies_title_uk_idx"),
         IndexModel([("status", ASCENDING)], name="movies_status_idx"),
     ],
     DatabaseCollections.SESSIONS: [

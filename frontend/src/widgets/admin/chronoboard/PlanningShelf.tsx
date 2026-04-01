@@ -1,5 +1,8 @@
 import type { DragEvent } from "react";
+import { useTranslation } from "react-i18next";
 
+import { getGenreLabels } from "@/shared/genres";
+import { getLocalizedText } from "@/shared/localization";
 import { getMovieStatusBadgeClassName } from "@/shared/movieStatus";
 import { formatStateLabel } from "@/shared/presentation";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
@@ -33,6 +36,8 @@ export function PlanningShelf({
   onDragStart,
   onDragEnd,
 }: PlanningShelfProps) {
+  const { i18n } = useTranslation();
+
   return (
     <section className="card planning-shelf">
       <div className="admin-section__header">
@@ -57,7 +62,7 @@ export function PlanningShelf({
         <StatusBanner
           tone="info"
           title="Selected movie"
-          message={`${selectedMovie.title} is queued for board placement. Drag it or click a free slot on the timeline.`}
+          message={`${getLocalizedText(selectedMovie.title, i18n.language)} is queued for board placement. Drag it or click a free slot on the timeline.`}
           action={
             <button className="button--ghost" type="button" onClick={onClearPlanningSelection}>
               Clear
@@ -69,6 +74,7 @@ export function PlanningShelf({
       <div className="planning-shelf__grid">
         {planningMovies.map((movie) => {
           const isSelected = movie.id === pinnedMovieId || movie.id === draggedMovieId;
+          const movieTitle = getLocalizedText(movie.title, i18n.language);
 
           return (
             <article
@@ -83,11 +89,11 @@ export function PlanningShelf({
                   {movie.poster_url ? (
                     <img src={movie.poster_url} alt="" className="media-tile__image" />
                   ) : (
-                    <span>{getMovieMonogram(movie.title)}</span>
+                    <span>{getMovieMonogram(movieTitle)}</span>
                   )}
                 </div>
                 <div className="admin-source-card__copy">
-                  <strong className="admin-source-card__title">{movie.title}</strong>
+                  <strong className="admin-source-card__title">{movieTitle}</strong>
                   <div className="admin-source-card__meta">
                     <span className={getMovieStatusBadgeClassName(movie.status)}>
                       {formatStateLabel(movie.status)}
@@ -97,7 +103,9 @@ export function PlanningShelf({
                   </div>
                   {movie.genres.length > 0 ? (
                     <div className="admin-source-card__genres">
-                      <span className="badge admin-source-card__genres-badge">{movie.genres.join(", ")}</span>
+                      <span className="badge admin-source-card__genres-badge">
+                        {getGenreLabels(movie.genres, i18n.language).join(", ")}
+                      </span>
                     </div>
                   ) : null}
                 </div>

@@ -38,6 +38,8 @@ async def test_public_schedule_supports_listing_sorting_filtering_and_excludes_c
     assert schedule_response.status_code == 200
     schedule_items = schedule_response.json()["data"]
     assert [item["id"] for item in schedule_items] == [second_session["id"]]
+    assert schedule_items[0]["movie_title"] == second_movie["title"]
+    assert schedule_items[0]["genres"] == second_movie["genres"]
 
     filter_response = await client.get(
         f"{API_PREFIX}/schedule",
@@ -52,6 +54,7 @@ async def test_public_schedule_supports_listing_sorting_filtering_and_excludes_c
     assert filter_response.status_code == 200
     filtered_items = filter_response.json()["data"]
     assert [item["movie_id"] for item in filtered_items] == [second_movie["id"]]
+    assert filtered_items[0]["movie_title"] == second_movie["title"]
 
 
 @pytest.mark.asyncio
@@ -80,6 +83,8 @@ async def test_session_details_and_seats_endpoints_return_expected_structure(
     details = details_response.json()["data"]
     assert details["id"] == session["id"]
     assert details["movie"]["id"] == movie["id"]
+    assert details["movie"]["title"] == movie["title"]
+    assert details["movie"]["genres"] == movie["genres"]
     assert details["available_seats"] == details["total_seats"] - 1
 
     seats_response = await client.get(f"{API_PREFIX}/sessions/{session['id']}/seats")

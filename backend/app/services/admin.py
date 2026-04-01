@@ -18,7 +18,13 @@ from app.repositories.orders import OrderRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.tickets import TicketRepository
 from app.schemas.common import DeleteResultRead
-from app.schemas.movie import MovieCreate, MovieRead, MovieUpdate
+from app.schemas.movie import (
+    MovieCreate,
+    MovieRead,
+    MovieUpdate,
+    build_movie_normalization_updates,
+    merge_movie_localized_updates,
+)
 from app.schemas.report import AttendanceReportRead, AttendanceSessionSummary
 from app.schemas.session import SessionCreate, SessionDetailsRead, SessionRead, SessionUpdate
 from app.schemas.user import UserRead
@@ -51,7 +57,10 @@ class AdminService:
         now = datetime.now(tz=timezone.utc)
         await self.movie_status_manager.refresh_statuses(current_time=now)
         movies = await self.movie_repository.list_movies(active_only=False)
-        return [MovieRead.model_validate(movie) for movie in movies]
+        return sorted(
+            (MovieRead.model_validate(movie) for movie in movies),
+            key=lambda movie: movie.title.resolve("uk").casefold(),
+        )
 
     async def get_movie(self, movie_id: str, requested_by: UserRead) -> MovieRead:
         """Return a movie for administration views."""
@@ -84,11 +93,21 @@ class AdminService:
         _ = updated_by
         now = datetime.now(tz=timezone.utc)
         await self.movie_status_manager.refresh_statuses(current_time=now)
-        updates = self._normalize_movie_document(payload.model_dump(mode="python", exclude_unset=True))
+        movie_document = await self.movie_repository.get_by_id(movie_id)
+        if movie_document is None:
+            raise NotFoundException("Movie was not found.")
+        movie = MovieRead.model_validate(movie_document)
+        updates = merge_movie_localized_updates(
+            movie,
+            self._normalize_movie_document(payload.model_dump(mode="python", exclude_unset=True)),
+        )
+        updates = {
+            **build_movie_normalization_updates(movie_document, movie),
+            **updates,
+        }
         if not updates:
             raise ValidationException("At least one movie field must be provided for update.")
 
-        movie = await self._get_movie_or_not_found(movie_id)
         if "status" in updates:
             await self._validate_requested_movie_status(
                 movie_id=movie_id,
@@ -415,7 +434,7 @@ class AdminService:
             raise ValidationException("Session slot must be at least as long as the selected movie duration.")
 
     def _normalize_movie_document(self, document: dict[str, object]) -> dict[str, object]:
-        """Convert Pydantic URL values into plain strings before sending them to MongoDB."""
+        """Convert Pydantic values into plain MongoDB-friendly data."""
         normalized = dict(document)
         if normalized.get("poster_url") is not None:
             normalized["poster_url"] = str(normalized["poster_url"])

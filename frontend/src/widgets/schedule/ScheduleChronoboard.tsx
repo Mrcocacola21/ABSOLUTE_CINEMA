@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import { getLocalizedText } from "@/shared/localization";
 import { formatCurrency, formatTime } from "@/shared/presentation";
 import {
   PUBLIC_SCHEDULE_BOARD_WIDTH,
@@ -61,7 +62,7 @@ function getPosterBackgroundValue(posterUrl?: string | null): string {
 }
 
 export function ScheduleChronoboard({ items, selectedDay, highlightedSessionId = "" }: ScheduleChronoboardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const frameRef = useRef<HTMLDivElement | null>(null);
   const anchorRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -234,7 +235,7 @@ export function ScheduleChronoboard({ items, selectedDay, highlightedSessionId =
           >
             <div className="public-chrono-menu__header">
               <div>
-                <strong>{activeMenuItem.movie_title}</strong>
+                <strong>{getLocalizedText(activeMenuItem.movie_title, i18n.language)}</strong>
                 <p>
                   {formatTime(activeMenuItem.start_time)} - {formatTime(activeMenuItem.end_time)}
                 </p>
@@ -324,7 +325,9 @@ export function ScheduleChronoboard({ items, selectedDay, highlightedSessionId =
                     aria-pressed={activeSessionId === item.id}
                   >
                     <div className="public-chrono-session__header">
-                      <strong title={item.movie_title}>{item.movie_title}</strong>
+                      <strong title={getLocalizedText(item.movie_title, i18n.language)}>
+                        {getLocalizedText(item.movie_title, i18n.language)}
+                      </strong>
                     </div>
                     <p className="public-chrono-session__time">
                       {formatTime(item.start_time)} - {formatTime(item.end_time)}

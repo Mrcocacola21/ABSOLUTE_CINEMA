@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
+from bson import ObjectId
 from jose import jwt
 
 from app.core.config import get_settings
@@ -183,22 +184,40 @@ async def test_invalid_tokens_return_standardized_401(
 
 
 @pytest.mark.asyncio
-async def test_unauthenticated_user_cannot_purchase_tickets(
+@pytest.mark.parametrize(
+    ("method", "path", "payload"),
+    [
+        ("get", f"{API_PREFIX}/tickets/me", None),
+        ("get", f"{API_PREFIX}/users/me/orders", None),
+        (
+            "post",
+            f"{API_PREFIX}/tickets/purchase",
+            {
+                "session_id": str(ObjectId()),
+                "seat_row": 1,
+                "seat_number": 1,
+            },
+        ),
+        (
+            "post",
+            f"{API_PREFIX}/orders/purchase",
+            {
+                "session_id": str(ObjectId()),
+                "seats": [{"seat_row": 1, "seat_number": 1}],
+            },
+        ),
+        ("patch", f"{API_PREFIX}/tickets/{ObjectId()}/cancel", None),
+        ("patch", f"{API_PREFIX}/orders/{ObjectId()}/cancel", None),
+    ],
+)
+async def test_unauthenticated_booking_endpoints_return_standardized_401(
     client: httpx.AsyncClient,
-    create_movie,
-    create_session,
+    method: str,
+    path: str,
+    payload: dict[str, object] | None,
 ) -> None:
-    movie = await create_movie(title="Protected Purchase Movie", duration_minutes=120)
-    session = await create_session(movie_id=movie["id"], start_hour=19, duration_minutes=160)
-
-    response = await client.post(
-        f"{API_PREFIX}/tickets/purchase",
-        json={
-            "session_id": session["id"],
-            "seat_row": 1,
-            "seat_number": 1,
-        },
-    )
+    request = getattr(client, method)
+    response = await request(path, json=payload) if payload is not None else await request(path)
 
     assert response.status_code == 401
     body = response.json()

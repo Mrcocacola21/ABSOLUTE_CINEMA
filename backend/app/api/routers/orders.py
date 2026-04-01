@@ -24,3 +24,14 @@ async def purchase_order(
     """Purchase one or more seats for the same session as one order."""
     order = await order_service.purchase_order(payload=payload, current_user=current_user)
     return ApiResponseFactory.created(data=order, message="Order purchased successfully.")
+
+
+@router.patch("/{order_id}/cancel", response_model=ApiResponse[OrderDetailsRead])
+async def cancel_order(
+    order_id: str,
+    current_user: UserRead = Depends(get_current_user),
+    order_service: OrderService = Depends(get_order_service),
+) -> ApiResponse[OrderDetailsRead]:
+    """Cancel all active tickets in one order."""
+    order = await order_service.cancel_order(order_id=order_id, current_user=current_user)
+    return ApiResponseFactory.success(data=order, message="Order cancelled successfully.")

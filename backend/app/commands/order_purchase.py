@@ -16,7 +16,7 @@ from app.core.exceptions import (
     ValidationException,
 )
 from app.core.logging import get_logger
-from app.db.transactions import mongo_transaction
+from app.db.transactions import run_transaction_with_retry
 from app.observers.events import EventPublisher, new_ticket_purchased_event
 from app.repositories.orders import OrderRepository
 from app.repositories.sessions import SessionRepository
@@ -62,11 +62,9 @@ class OrderPurchaseCommand:
         await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
 
         try:
-            order_id = str(ObjectId())
-            created_order: dict[str, object] | None = None
-            created_tickets: list[dict[str, object]] = []
+            order_id = await self.order_repository.build_order_id()
 
-            async with mongo_transaction() as db_session:
+            async def purchase_transaction(db_session) -> OrderPurchaseResult:
                 session = await self.session_repository.get_by_id(payload.session_id, db_session=db_session)
                 if session is None:
                     raise NotFoundException("Session was not found.")
@@ -113,29 +111,43 @@ class OrderPurchaseCommand:
                     db_session=db_session,
                 )
 
+                created_tickets: list[dict[str, object]] = []
                 for seat in payload.seats:
-                    created_ticket = await self.ticket_repository.create_ticket(
-                        {
-                            "order_id": order_id,
-                            "session_id": payload.session_id,
-                            "user_id": current_user.id,
-                            "seat_row": seat.seat_row,
-                            "seat_number": seat.seat_number,
-                            "price": session["price"],
-                            "status": TicketStatuses.PURCHASED,
-                            "purchased_at": now,
-                            "updated_at": None,
-                            "cancelled_at": None,
-                        },
-                        db_session=db_session,
-                    )
+                    try:
+                        created_ticket = await self.ticket_repository.create_ticket(
+                            {
+                                "order_id": order_id,
+                                "session_id": payload.session_id,
+                                "user_id": current_user.id,
+                                "seat_row": seat.seat_row,
+                                "seat_number": seat.seat_number,
+                                "price": session["price"],
+                                "status": TicketStatuses.PURCHASED,
+                                "purchased_at": now,
+                                "updated_at": None,
+                                "cancelled_at": None,
+                            },
+                            db_session=db_session,
+                        )
+                    except ConflictException as exc:
+                        raise ConflictException(self._seat_conflict_message(len(payload.seats))) from exc
                     created_tickets.append(created_ticket)
+
+                return {
+                    "order": created_order,
+                    "tickets": created_tickets,
+                }
+
+            result = await run_transaction_with_retry(
+                purchase_transaction,
+                operation_name="purchase_order",
+            )
         except Exception as exc:
             if isinstance(exc, (ConflictException, ValidationException, NotFoundException, DatabaseException)):
                 raise
             raise DatabaseException("Unable to complete the ticket purchase order.") from exc
 
-        for ticket in created_tickets:
+        for ticket in result["tickets"]:
             try:
                 await self.event_publisher.publish(
                     new_ticket_purchased_event(
@@ -150,10 +162,7 @@ class OrderPurchaseCommand:
             except Exception as exc:  # pragma: no cover - defensive logging path
                 logger.exception("Ticket purchase event publication failed", exc_info=exc)
 
-        return {
-            "order": created_order or {},
-            "tickets": created_tickets,
-        }
+        return result
 
     def _validate_seat_coordinates(
         self,

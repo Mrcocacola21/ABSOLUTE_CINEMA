@@ -166,6 +166,70 @@ class TicketRepository(BaseRepository):
         )
         return MongoDocumentAdapter.normalize(updated)
 
+    async def update_many_status_by_order(
+        self,
+        order_id: str,
+        *,
+        status: str,
+        updated_at: datetime,
+        cancelled_at: datetime | None = None,
+        current_status: str | None = None,
+        db_session: AsyncIOMotorClientSession | None = None,
+    ) -> int:
+        """Update all tickets in one order and return the number of modified documents."""
+        set_payload: dict[str, Any] = {
+            "status": status,
+            "updated_at": updated_at,
+        }
+        update_payload: dict[str, Any] = {"$set": set_payload}
+        if cancelled_at is not None:
+            set_payload["cancelled_at"] = cancelled_at
+        else:
+            update_payload["$unset"] = {"cancelled_at": ""}
+
+        query: dict[str, Any] = {"order_id": order_id}
+        if current_status is not None:
+            query["status"] = current_status
+
+        result = await self.collection.update_many(
+            query,
+            update_payload,
+            session=db_session,
+        )
+        return result.modified_count
+
+    async def update_many_status_by_session(
+        self,
+        session_id: str,
+        *,
+        status: str,
+        updated_at: datetime,
+        cancelled_at: datetime | None = None,
+        current_status: str | None = None,
+        db_session: AsyncIOMotorClientSession | None = None,
+    ) -> int:
+        """Update all tickets in one session and return the number of modified documents."""
+        set_payload: dict[str, Any] = {
+            "status": status,
+            "updated_at": updated_at,
+        }
+        update_payload: dict[str, Any] = {"$set": set_payload}
+        if cancelled_at is not None:
+            set_payload["cancelled_at"] = cancelled_at
+        else:
+            update_payload["$unset"] = {"cancelled_at": ""}
+
+        query: dict[str, Any] = {"session_id": session_id}
+        if current_status is not None:
+            query["status"] = current_status
+
+        result = await self.collection.update_many(
+            query,
+            update_payload,
+            session=db_session,
+        )
+        return result.modified_count
+
     async def count_by_session(
         self,
         session_id: str,

@@ -13,7 +13,7 @@ It covers the full flow from public browsing to authenticated ticket booking and
 | Architecture | `frontend/` + `backend/` monorepo |
 | Backend | FastAPI, Pydantic Settings, Motor, PyMongo |
 | Frontend | React, Vite, TypeScript, React Router, Axios, i18next |
-| Database | MongoDB single-node replica set with collection validators, indexes, and transactions |
+| Database | MongoDB single-node replica set with collection validators, indexes, and retry-aware transactions |
 | Cinema model | One hall, fixed seat grid from backend settings |
 | Public flows | Home, movie catalog, movie details, schedule, session details with multi-seat booking |
 | User flows | Registration, login, profile editing, grouped order history, multi-ticket purchase, ticket cancellation |
@@ -29,6 +29,7 @@ It covers the full flow from public browsing to authenticated ticket booking and
 - [Technology Stack](#technology-stack)
 - [Architecture](#architecture)
 - [Backend Overview](#backend-overview)
+- [Transactional Consistency Layer](#transactional-consistency-layer)
 - [Frontend Overview](#frontend-overview)
 - [Core Domain Model](#core-domain-model)
 - [Roles and Main Flows](#roles-and-main-flows)
@@ -71,7 +72,7 @@ The one-hall constraint is intentional. There is **no separate `Hall` entity or 
 - **Admin movie management** for creating, editing, deactivating, and conditionally deleting movies.
 - **Admin session management** through a drag-and-drop chronoboard/planner for the single hall.
 - **Attendance reporting** plus recent tickets and recent users in the admin workspace.
-- **Seat integrity protections** through validation rules, unique ticket-seat indexing, MongoDB transactions, and per-session in-process contention guards.
+- **Production-like booking consistency** through MongoDB transactions, bounded retry handling, conditional seat-counter updates, and unique active-seat indexing.
 
 ## Technology Stack
 
@@ -133,7 +134,60 @@ Browser
 - **One-hall enforcement**: overlapping non-cancelled sessions are rejected.
 - **Seat uniqueness**: MongoDB keeps a unique partial index on `(session_id, seat_row, seat_number)` for active purchased tickets.
 - **Grouped purchases**: one order belongs to one user and one session and contains one or more seat-specific tickets.
-- **Transactional booking writes**: order creation, ticket creation, ticket cancellation, and `Session.available_seats` updates run inside MongoDB multi-document transactions.
+- **Transactional booking writes**: critical booking and destructive session writes now go through one shared retry-aware MongoDB transaction runner.
+
+## Transactional Consistency Layer
+
+The current backend treats MongoDB as the primary source of booking correctness. Critical write flows no longer depend on an in-memory per-session lock or on best-effort cleanup after partial failures.
+
+### Why replica set support is required
+
+- MongoDB multi-document transactions require replica set support.
+- For local development and demos, this repository runs MongoDB as a **single-node replica set** (`rs0`) rather than as a standalone server.
+- That keeps the setup lightweight while still exercising real transaction semantics, commit rules, and rollback behavior.
+
+### Unified transactional flows
+
+- `POST /api/v1/orders/purchase` runs as one transaction: create the `Order`, create all `Ticket` documents, and decrement `Session.available_seats`.
+- `PATCH /api/v1/orders/{order_id}/cancel` now runs as one transaction: cancel all still-active tickets in the order, restore the session seat counter by the exact number of newly cancelled seats, and recompute the stored order aggregate.
+- `POST /api/v1/tickets/purchase` is now strictly a compatibility wrapper around the same order-based transactional path.
+- `PATCH /api/v1/tickets/{ticket_id}/cancel` runs as one transaction: mark the `Ticket` cancelled, increment `Session.available_seats`, and recompute the parent `Order` aggregate.
+- `PATCH /api/v1/admin/sessions/{session_id}/cancel` now runs as one transaction: cancel the session, cancel all still-active purchased tickets for that session, restore the seat counter exactly once, and recompute every affected order.
+- `DELETE /api/v1/admin/sessions/{session_id}` now verifies ticket absence and deletes the session inside one transaction, so correctness does not depend on a process-local lock during admin cleanup flows.
+
+Because one order belongs to exactly one session in this domain model, a session cancellation now effectively cancels the full order contents of that session. The explicit order-cancel endpoint is still useful for user-driven cancellation before the session starts.
+
+### Retry policy and conflict handling
+
+- All critical transaction bodies now go through one reusable helper: `run_transaction_with_retry(...)`.
+- The helper opens a fresh client session per attempt, uses snapshot read concern plus majority write concern, and applies a small bounded backoff between retries.
+- `TransientTransactionError` triggers a full transaction retry with a fresh session.
+- `UnknownTransactionCommitResult` triggers commit retry handling without rerunning the transaction body.
+- Non-retryable business exceptions such as `404`, `409`, and `422` are propagated immediately instead of being swallowed or silently retried.
+
+### Practical guarantees
+
+- Multi-document booking writes are atomic: either every related document update commits or none do.
+- Failed purchases do not leave behind partial orders, partial tickets, or partially decremented seat counters.
+- Failed ticket cancellations do not leave behind half-cancelled tickets, stale order aggregates, or over-restored seat counters.
+- Failed full-order cancellations do not leave behind a mix of cancelled tickets and unreconciled session/order state.
+- Failed session-cancellation cascades do not leave behind cancelled sessions with still-active tickets or stale orders.
+- Seat conflicts are ultimately resolved by MongoDB itself through the unique partial index on active purchased seats.
+- `Session.available_seats` is protected by conditional updates and collection validation, so it cannot validly drop below `0` or rise above `total_seats`.
+- Cancelled tickets stop blocking seats because the uniqueness constraint applies only to active purchased tickets.
+
+### Why this is stronger than the old model
+
+- The older consistency story mixed MongoDB transactions with an in-memory `session_write_lock`.
+- That lock only serialized writes inside one backend process, which is not a real correctness mechanism for multi-instance or restart scenarios.
+- The hardened design now relies on database-native guarantees: transactions, unique indexes, conditional updates, and bounded retry handling for transient write/commit failures.
+- This is more production-like than application-level best-effort reconciliation because the database, not local process memory, decides whether a write set commits.
+
+### Remaining limitations
+
+- The repository still uses a **single-node** replica set for coursework/demo convenience. It supports transactions, but it is not equivalent to a production MongoDB cluster.
+- The retry policy is intentionally bounded. It improves resilience to transient conflicts and uncertain commit acknowledgements, but it does not hide persistent infrastructure failures or logic bugs.
+- The domain is still intentionally limited to **one hall** with a fixed seat grid and no distributed coordination beyond MongoDB itself.
 
 ## Frontend Overview
 
@@ -222,11 +276,13 @@ Auth state is stored in `localStorage`. On app load, the frontend restores the a
 - The seat map comes from `GET /api/v1/sessions/{session_id}/seats`.
 - Seat availability is derived from the configured hall grid and active tickets for that session.
 - The main booking flow is `POST /api/v1/orders/purchase`, which buys one or more seats for the same session in one order.
+- Users and admins can now cancel a whole order through `PATCH /api/v1/orders/{order_id}/cancel` instead of cancelling each ticket one by one.
 - `POST /api/v1/tickets/purchase` remains available as a backward-compatible single-seat wrapper around the new order flow.
-- Order creation, nested ticket creation, cancellation, and session seat-counter updates commit atomically inside MongoDB transactions.
+- Order creation, full-order cancellation, ticket cancellation, session-cancellation cascade, order aggregate refresh, and session seat-counter updates now run through one shared retry-aware transaction pattern.
 - Ticket cancellation is allowed only before the session starts, and individual tickets from a multi-ticket order can be cancelled independently.
 - Regular users can cancel their own eligible tickets from the profile page.
-- The backend also allows an admin to cancel any ticket through authorized API access, although the current admin dashboard focuses on monitoring rather than a dedicated ticket-cancel UI.
+- The backend also allows an admin to cancel any ticket or order through authorized API access, although the current admin dashboard focuses on monitoring rather than a dedicated cancel-order UI.
+- When an admin cancels a future session, the backend now automatically cancels all still-active tickets for that session, refreshes the related orders, and frees the affected seats atomically.
 
 ### Admin scheduling and chronoboard behavior
 
@@ -472,7 +528,31 @@ pytest app/tests/integration -o addopts=
 If you are using the Docker Compose MongoDB replica set, run the integration suite from the backend container so `mongodb:27017` remains reachable inside the same Docker network:
 
 ```bash
+docker compose up -d mongodb mongodb-init-replica
 docker compose run --rm -e TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0\&directConnection=true backend pytest app/tests/integration -o addopts=
+```
+
+PowerShell:
+
+```powershell
+docker compose up -d mongodb mongodb-init-replica
+docker compose run --rm -e 'TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true' backend pytest app/tests/integration -o addopts=
+```
+
+The transaction-heavy verification command used for the booking consistency flows is:
+
+```powershell
+docker compose run --rm -e 'TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true' backend pytest app/tests/integration/test_orders_api.py app/tests/integration/test_tickets_api.py app/tests/integration/test_sessions_api.py -o addopts=
+```
+
+For the strongest booking-consistency verification, run the retry-helper unit tests locally and the booking-focused integration suite against the Docker replica set:
+
+```powershell
+cd backend
+pytest app/tests/test_transactions.py -q
+cd ..
+docker compose up -d mongodb mongodb-init-replica
+docker compose run --rm -e 'TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true' backend pytest app/tests/integration/test_access_control_api.py app/tests/integration/test_schedule_api.py app/tests/integration/test_orders_api.py app/tests/integration/test_tickets_api.py app/tests/integration/test_sessions_api.py -o addopts=
 ```
 
 ### Frontend verification
@@ -491,9 +571,13 @@ npm run build
 - movie CRUD and visibility behavior
 - schedule filtering, sorting, and validation
 - session overlap and edit/cancel restrictions
-- order-based multi-ticket purchase and partial ticket cancellation
+- order-based multi-ticket purchase, full-order cancellation, and partial ticket cancellation
+- session-cancellation cascade into dependent ticket and order state
 - transactional commit/rollback behavior for critical booking flows
+- retry handling for transient transaction failures
 - concurrent purchase protection for the same seat
+- overlapping multi-seat order conflict handling
+- cancelled-seat reuse and seat-counter invariants
 - pagination, password hashing, validators, and indexes
 
 ### Integration test database behavior
@@ -545,6 +629,7 @@ Admin access is determined **during registration** by the backend setting `ADMIN
 - `GET /api/v1/schedule/{session_id}`
 - `GET /api/v1/sessions/{session_id}/seats`
 - `POST /api/v1/orders/purchase`
+- `PATCH /api/v1/orders/{order_id}/cancel`
 - `POST /api/v1/tickets/purchase`
 - `GET /api/v1/tickets/me`
 - `PATCH /api/v1/tickets/{ticket_id}/cancel`
@@ -575,7 +660,7 @@ That setup is well-suited for coursework, presentations, and local verification,
 - Ticket purchase is an **application-level reservation flow**. There is no payment gateway integration.
 - One order is intentionally limited to **one session only**. Multi-session baskets are out of scope for the current coursework model.
 - Frontend automated tests are not configured yet.
-- The booking workflow now uses MongoDB multi-document transactions, but the extra in-memory per-session lock still only coordinates contention inside one backend process.
+- The booking workflow now depends on MongoDB transactions, unique indexes, and conditional updates rather than on an in-memory per-session lock.
 - Poster handling is URL-based; there is no built-in media upload pipeline.
 - The repository does not include seed/demo data scripts yet.
 
@@ -583,6 +668,6 @@ That setup is well-suited for coursework, presentations, and local verification,
 
 - Add frontend tests for route flows, auth, and booking interactions.
 - Introduce seeded demo content for faster presentations and coursework demos.
-- Harden booking consistency further for multi-instance deployments with retry logic and coordination beyond the current single-process lock.
+- Extend the current transaction/retry model toward multi-instance deployments and richer operational observability.
 - Add a production frontend build + reverse proxy deployment path.
 - Add an explicit admin bootstrap or seed command instead of relying only on `ADMIN_EMAILS` registration.

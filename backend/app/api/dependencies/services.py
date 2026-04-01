@@ -97,4 +97,5 @@ def get_admin_service() -> AdminService:
         movie_repository=get_movie_repository(),
         session_repository=get_session_repository(),
         ticket_repository=get_ticket_repository(),
+        order_repository=get_order_repository(),
     )

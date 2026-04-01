@@ -8,6 +8,7 @@ import httpx
 import pytest
 from bson import ObjectId
 
+from app.core.exceptions import DatabaseException
 from app.db.collections import DatabaseCollections
 
 from app.tests.integration.conftest import API_PREFIX, build_session_window
@@ -259,3 +260,137 @@ async def test_session_cancellation_succeeds_and_repeated_cancellation_is_reject
     assert body["error"]["code"] == "conflict"
     assert body["error"]["message"] == "Session has already been cancelled."
 
+
+@pytest.mark.asyncio
+async def test_session_cancellation_cascades_to_tickets_orders_and_seat_map(
+    client: httpx.AsyncClient,
+    database,
+    admin_auth: dict[str, object],
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Cascade Cancel Session Movie", duration_minutes=100)
+    session = await create_session(movie_id=movie["id"], start_hour=19, duration_minutes=140)
+
+    purchase_response = await client.post(
+        f"{API_PREFIX}/orders/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seats": [
+                {"seat_row": 3, "seat_number": 1},
+                {"seat_row": 3, "seat_number": 2},
+            ],
+        },
+    )
+    assert purchase_response.status_code == 201
+    order = purchase_response.json()["data"]
+
+    cancel_response = await client.patch(
+        f"{API_PREFIX}/admin/sessions/{session['id']}/cancel",
+        headers=admin_auth["headers"],
+    )
+    assert cancel_response.status_code == 200, cancel_response.text
+    cancelled_session = cancel_response.json()["data"]
+    assert cancelled_session["status"] == "cancelled"
+    assert cancelled_session["available_seats"] == cancelled_session["total_seats"]
+
+    stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
+    stored_order = await database[DatabaseCollections.ORDERS].find_one({"_id": ObjectId(order["id"])})
+    stored_tickets = await database[DatabaseCollections.TICKETS].find({"order_id": order["id"]}).to_list(length=10)
+    assert stored_session is not None
+    assert stored_order is not None
+    assert stored_session["status"] == "cancelled"
+    assert stored_session["available_seats"] == stored_session["total_seats"]
+    assert stored_order["status"] == "cancelled"
+    assert {ticket["status"] for ticket in stored_tickets} == {"cancelled"}
+
+    order_response = await client.get(
+        f"{API_PREFIX}/users/me/orders/{order['id']}",
+        headers=user_auth["headers"],
+    )
+    assert order_response.status_code == 200
+    order_payload = order_response.json()["data"]
+    assert order_payload["status"] == "cancelled"
+    assert order_payload["active_tickets_count"] == 0
+    assert order_payload["cancelled_tickets_count"] == 2
+
+    seats_response = await client.get(f"{API_PREFIX}/sessions/{session['id']}/seats")
+    assert seats_response.status_code == 200
+    seats_payload = seats_response.json()["data"]
+    assert seats_payload["available_seats"] == seats_payload["total_seats"]
+    assert next(
+        seat for seat in seats_payload["seats"] if seat["row"] == 3 and seat["number"] == 1
+    )["is_available"] is True
+    assert next(
+        seat for seat in seats_payload["seats"] if seat["row"] == 3 and seat["number"] == 2
+    )["is_available"] is True
+
+    repeat_response = await client.patch(
+        f"{API_PREFIX}/admin/sessions/{session['id']}/cancel",
+        headers=admin_auth["headers"],
+    )
+    assert repeat_response.status_code == 409
+    assert repeat_response.json()["error"]["message"] == "Session has already been cancelled."
+
+
+@pytest.mark.asyncio
+async def test_session_cancellation_cascade_rolls_back_when_order_refresh_fails(
+    client: httpx.AsyncClient,
+    database,
+    monkeypatch: pytest.MonkeyPatch,
+    admin_auth: dict[str, object],
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Cascade Rollback Session Movie", duration_minutes=100)
+    session = await create_session(movie_id=movie["id"], start_hour=20, duration_minutes=140)
+
+    purchase_response = await client.post(
+        f"{API_PREFIX}/orders/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seats": [
+                {"seat_row": 4, "seat_number": 1},
+                {"seat_row": 4, "seat_number": 2},
+            ],
+        },
+    )
+    assert purchase_response.status_code == 201
+    order = purchase_response.json()["data"]
+
+    async def fail_update_order(
+        self,
+        order_id: str,
+        *,
+        updates: dict[str, object],
+        updated_at: datetime,
+        db_session=None,
+    ) -> dict[str, object] | None:
+        _ = (self, order_id, updates, updated_at, db_session)
+        raise DatabaseException("Simulated session-cancellation order refresh failure.")
+
+    monkeypatch.setattr(
+        "app.repositories.orders.OrderRepository.update_order",
+        fail_update_order,
+    )
+
+    cancel_response = await client.patch(
+        f"{API_PREFIX}/admin/sessions/{session['id']}/cancel",
+        headers=admin_auth["headers"],
+    )
+    assert cancel_response.status_code == 503
+    assert cancel_response.json()["error"]["message"] == "Simulated session-cancellation order refresh failure."
+
+    stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
+    stored_order = await database[DatabaseCollections.ORDERS].find_one({"_id": ObjectId(order["id"])})
+    stored_tickets = await database[DatabaseCollections.TICKETS].find({"order_id": order["id"]}).to_list(length=10)
+    assert stored_session is not None
+    assert stored_order is not None
+    assert stored_session["status"] == "scheduled"
+    assert stored_session["available_seats"] == stored_session["total_seats"] - 2
+    assert stored_order["status"] == "completed"
+    assert {ticket["status"] for ticket in stored_tickets} == {"purchased"}

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from app.commands.order_cancellation import OrderCancellationCommand
 from app.commands.order_purchase import OrderPurchaseCommand
-from app.core.constants import OrderStatuses, Roles, SessionStatuses, TicketStatuses
+from app.core.constants import Roles, SessionStatuses, TicketStatuses
 from app.core.exceptions import AuthorizationException, NotFoundException
 from app.observers.events import build_default_event_publisher
 from app.repositories.movies import MovieRepository
@@ -22,7 +23,7 @@ from app.schemas.order import (
 )
 from app.schemas.session import SessionRead
 from app.schemas.user import UserRead
-from app.utils.session_locks import session_write_lock
+from app.utils.order_aggregates import build_order_aggregate_updates
 
 
 class OrderService:
@@ -43,14 +44,13 @@ class OrderService:
 
     async def purchase_order(self, payload: OrderPurchaseRequest, current_user: UserRead) -> OrderDetailsRead:
         """Purchase multiple seats for one session as a single order."""
-        async with session_write_lock(payload.session_id):
-            command = OrderPurchaseCommand(
-                session_repository=self.session_repository,
-                ticket_repository=self.ticket_repository,
-                order_repository=self.order_repository,
-                event_publisher=self.event_publisher,
-            )
-            result = await command.execute(payload=payload, current_user=current_user)
+        command = OrderPurchaseCommand(
+            session_repository=self.session_repository,
+            ticket_repository=self.ticket_repository,
+            order_repository=self.order_repository,
+            event_publisher=self.event_publisher,
+        )
+        result = await command.execute(payload=payload, current_user=current_user)
 
         session_document = await self.session_repository.get_by_id(payload.session_id)
         if session_document is None:
@@ -67,6 +67,16 @@ class OrderService:
             now=datetime.now(tz=timezone.utc),
         )
         return OrderDetailsRead.model_validate(built_order.model_dump(mode="python"))
+
+    async def cancel_order(self, order_id: str, current_user: UserRead) -> OrderDetailsRead:
+        """Cancel all active tickets contained in one order."""
+        command = OrderCancellationCommand(
+            order_repository=self.order_repository,
+            ticket_repository=self.ticket_repository,
+            session_repository=self.session_repository,
+        )
+        await command.execute(order_id=order_id, current_user=current_user)
+        return await self.get_current_user_order(order_id=order_id, current_user=current_user)
 
     async def list_current_user_orders(self, current_user: UserRead) -> list[OrderListRead]:
         """Return orders belonging to the authenticated user."""
@@ -152,23 +162,10 @@ class OrderService:
         updated_at: datetime,
     ) -> dict[str, object]:
         """Keep stored order aggregate fields aligned with nested tickets."""
-        active_tickets_count = sum(
-            1 for ticket in ticket_documents if ticket["status"] == TicketStatuses.PURCHASED
+        updates = build_order_aggregate_updates(
+            order_document=order_document,
+            ticket_documents=ticket_documents,
         )
-        derived_status = self._derive_order_status(
-            active_tickets_count=active_tickets_count,
-            total_tickets_count=len(ticket_documents),
-        )
-        derived_total_price = float(sum(float(ticket["price"]) for ticket in ticket_documents))
-
-        updates: dict[str, object] = {}
-        if order_document.get("status") != derived_status:
-            updates["status"] = derived_status
-        if int(order_document.get("tickets_count", 0)) != len(ticket_documents):
-            updates["tickets_count"] = len(ticket_documents)
-        if float(order_document.get("total_price", 0)) != derived_total_price:
-            updates["total_price"] = derived_total_price
-
         if not updates:
             return order_document
 
@@ -233,14 +230,6 @@ class OrderService:
             cancelled_at=ticket_document.get("cancelled_at"),
             is_cancellable=self._is_ticket_cancellable(ticket_document=ticket_document, session_document=session, now=now),
         )
-
-    def _derive_order_status(self, *, active_tickets_count: int, total_tickets_count: int) -> str:
-        """Compute order status from nested ticket statuses."""
-        if active_tickets_count <= 0:
-            return OrderStatuses.CANCELLED
-        if active_tickets_count == total_tickets_count:
-            return OrderStatuses.COMPLETED
-        return OrderStatuses.PARTIALLY_CANCELLED
 
     def _is_ticket_cancellable(
         self,

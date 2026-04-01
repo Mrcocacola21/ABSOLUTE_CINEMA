@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -131,10 +130,11 @@ class FakeSessionRepository:
         session_id: str,
         *,
         updated_at: datetime,
+        quantity: int = 1,
         db_session=None,
     ) -> bool:
         _ = (session_id, updated_at, db_session)
-        self.available_seats += 1
+        self.available_seats += quantity
         return True
 
     async def set_available_seats(
@@ -160,8 +160,9 @@ class FakeSessionRepository:
         *,
         current_time: datetime,
         updated_at: datetime,
+        db_session=None,
     ) -> dict[str, object] | None:
-        _ = (current_time, updated_at)
+        _ = (current_time, updated_at, db_session)
         if self.session is None or self.session["id"] != session_id:
             return None
         self.session = {
@@ -194,8 +195,8 @@ class FakeTicketRepository:
     def __init__(self, ticket: dict[str, object] | None = None) -> None:
         self.ticket = ticket
 
-    async def count_by_session(self, session_id: str, *, active_only: bool = True) -> int:
-        _ = (session_id, active_only)
+    async def count_by_session(self, session_id: str, *, active_only: bool = True, db_session=None) -> int:
+        _ = (session_id, active_only, db_session)
         return 0
 
     async def get_by_id(self, ticket_id: str, *, db_session=None) -> dict[str, object] | None:
@@ -234,9 +235,9 @@ class FakeUserRepository:
         return []
 
 
-@asynccontextmanager
-async def fake_mongo_transaction():
-    yield object()
+async def fake_run_transaction_with_retry(callback, *, operation_name: str, **_: object):
+    _ = operation_name
+    return await callback(object())
 
 
 def build_admin_user() -> UserRead:
@@ -349,6 +350,7 @@ async def test_admin_service_prevents_deleting_movie_with_sessions() -> None:
         movie_repository=movie_repository,
         session_repository=session_repository,
         ticket_repository=ticket_repository,
+        order_repository=FakeOrderRepository(),
     )
 
     with pytest.raises(ConflictException):
@@ -366,6 +368,7 @@ async def test_admin_service_requires_session_slot_long_enough_for_movie() -> No
         movie_repository=movie_repository,
         session_repository=session_repository,
         ticket_repository=ticket_repository,
+        order_repository=FakeOrderRepository(),
     )
     now = datetime.now(tz=timezone.utc) + timedelta(days=1)
     start_time = now.replace(hour=10, minute=0, second=0, microsecond=0)
@@ -389,6 +392,7 @@ async def test_admin_service_rejects_active_movie_creation_without_sessions() ->
         movie_repository=FakeMovieRepository(),
         session_repository=FakeSessionRepository(),
         ticket_repository=FakeTicketRepository(),
+        order_repository=FakeOrderRepository(),
     )
 
     with pytest.raises(ValidationException):
@@ -413,6 +417,7 @@ async def test_admin_service_promotes_planned_movie_to_active_after_session_crea
         movie_repository=movie_repository,
         session_repository=session_repository,
         ticket_repository=ticket_repository,
+        order_repository=FakeOrderRepository(),
     )
     now = datetime.now(tz=timezone.utc) + timedelta(days=1)
     start_time = now.replace(hour=10, minute=0, second=0, microsecond=0)
@@ -437,7 +442,10 @@ async def test_admin_service_promotes_planned_movie_to_active_after_session_crea
 async def test_ticket_service_cancellation_restores_seat_counter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.services.ticket.mongo_transaction", fake_mongo_transaction)
+    monkeypatch.setattr(
+        "app.commands.ticket_cancellation.run_transaction_with_retry",
+        fake_run_transaction_with_retry,
+    )
     session_repository = FakeSessionRepository(session=build_session())
     ticket_repository = FakeTicketRepository(ticket=build_ticket())
     service = TicketService(

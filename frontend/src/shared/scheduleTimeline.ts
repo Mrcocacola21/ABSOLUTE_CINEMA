@@ -1,3 +1,6 @@
+import i18n from "@/i18n";
+import { getIntlLocale } from "@/shared/localization";
+
 export const PUBLIC_SCHEDULE_START_HOUR = 9;
 export const PUBLIC_SCHEDULE_END_HOUR = 24;
 export const PUBLIC_SCHEDULE_PIXELS_PER_MINUTE = 1.35;
@@ -16,7 +19,7 @@ export function toScheduleDayKey(value: string | Date): string {
 
 export function formatScheduleDayLabel(value: string): string {
   const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString([], {
+  return new Date(year, month - 1, day).toLocaleDateString(getIntlLocale(i18n.resolvedLanguage ?? i18n.language), {
     weekday: "short",
     day: "2-digit",
     month: "short",

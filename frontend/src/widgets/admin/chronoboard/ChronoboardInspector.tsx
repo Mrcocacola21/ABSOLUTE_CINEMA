@@ -53,35 +53,35 @@ export function ChronoboardInspector({
   onDeleteSelectedSession,
   onJumpToToday,
 }: ChronoboardInspectorProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
     <section className="card inspector-panel">
       <div className="admin-section__header">
         <div>
-          <p className="page-eyebrow">Inspector</p>
+          <p className="page-eyebrow">{t("chronoboard.inspector.eyebrow")}</p>
           <h3 className="section-title">
             {inspectorView === "draft"
-              ? "Pending draft"
+              ? t("chronoboard.inspector.pendingDraftTitle")
               : inspectorView === "edit"
-                ? "Edit session"
+                ? t("chronoboard.inspector.editTitle")
                 : inspectorView === "session"
-                  ? "Confirmed session"
-                  : "Control center"}
+                  ? t("chronoboard.inspector.confirmedSessionTitle")
+                  : t("chronoboard.inspector.idleTitle")}
           </h3>
           <p className="muted">
             {inspectorView === "draft"
-              ? "Review the draft, adjust the fields, and explicitly confirm it."
+              ? t("chronoboard.inspector.pendingDraftIntro")
               : inspectorView === "session"
-                ? "Inspect the saved session and manage it here."
+                ? t("chronoboard.inspector.confirmedSessionIntro")
                 : inspectorView === "edit"
-                  ? "Update the selected session without leaving the board."
-                  : "Select a draft or a session on the board to inspect it."}
+                  ? t("chronoboard.inspector.editIntro")
+                  : t("chronoboard.inspector.idleIntro")}
           </p>
         </div>
         {draftPlacement && inspectorView === "draft" ? (
           <button className="button--ghost" type="button" onClick={onDiscardDraft}>
-            Discard draft
+            {t("common.actions.discardDraft")}
           </button>
         ) : null}
       </div>
@@ -99,14 +99,14 @@ export function ChronoboardInspector({
           <p className="muted">{draftPlacement.sourceLabel}</p>
           <div className="form-grid">
             <label className="field field--wide">
-              <span>Movie</span>
+              <span>{t("common.labels.movie")}</span>
               <select
                 required
                 disabled={isBusy}
                 value={draftPlacement.movie_id}
                 onChange={(event) => onUpdateDraftField("movie_id", event.target.value)}
               >
-                <option value="">Select a movie</option>
+                <option value="">{t("chronoboard.inspector.selectMovieOption")}</option>
                 {movieOptionsForSessionForms.map((movie) => (
                   <option key={movie.id} value={movie.id}>
                     {getLocalizedText(movie.title, i18n.language)}
@@ -115,7 +115,7 @@ export function ChronoboardInspector({
               </select>
             </label>
             <label className="field">
-              <span>Planned start</span>
+              <span>{t("chronoboard.inspector.plannedStart")}</span>
               <input
                 required
                 type="datetime-local"
@@ -125,7 +125,7 @@ export function ChronoboardInspector({
               />
             </label>
             <label className="field">
-              <span>Calculated end</span>
+              <span>{t("chronoboard.inspector.calculatedEnd")}</span>
               <input
                 required
                 type="datetime-local"
@@ -135,7 +135,7 @@ export function ChronoboardInspector({
               />
             </label>
             <label className="field">
-              <span>Price</span>
+              <span>{t("common.labels.price")}</span>
               <input
                 required
                 min={0}
@@ -149,8 +149,10 @@ export function ChronoboardInspector({
 
           {draftMovie ? (
             <div className="inspector-panel__summary">
-              <span className="badge">Draft</span>
-              <span className="badge">{draftMovie.duration_minutes} min</span>
+              <span className="badge">{t("chronoboard.inspector.draftBadge")}</span>
+              <span className="badge">
+                {draftMovie.duration_minutes} {t("common.units.minutesShort")}
+              </span>
               {draftMovie.age_rating ? <span className="badge">{draftMovie.age_rating}</span> : null}
               <span className="badge">{formatLocalDateTime(draftPlacement.start_time)}</span>
             </div>
@@ -158,13 +160,13 @@ export function ChronoboardInspector({
 
           {!draftPlacement.autoFillEndTime && draftMovie ? (
             <button className="button--ghost" type="button" disabled={isBusy} onClick={onResetDraftEndTime}>
-              Reset to the recommended end time
+              {t("chronoboard.inspector.resetEndTime")}
             </button>
           ) : null}
 
           <div className="actions-row">
             <button className="button" type="submit" disabled={isBusy}>
-              Create Session
+              {t("common.actions.createSession")}
             </button>
           </div>
         </form>
@@ -181,14 +183,14 @@ export function ChronoboardInspector({
           <p className="muted">{editingDraft.sourceLabel}</p>
           <div className="form-grid">
             <label className="field field--wide">
-              <span>Movie</span>
+              <span>{t("common.labels.movie")}</span>
               <select
                 required
                 disabled={isBusy}
                 value={editingDraft.movie_id}
                 onChange={(event) => onUpdateEditingDraftField("movie_id", event.target.value)}
               >
-                <option value="">Select a movie</option>
+                <option value="">{t("chronoboard.inspector.selectMovieOption")}</option>
                 {movieOptionsForSessionForms.map((movie) => (
                   <option key={movie.id} value={movie.id}>
                     {getLocalizedText(movie.title, i18n.language)}
@@ -197,7 +199,7 @@ export function ChronoboardInspector({
               </select>
             </label>
             <label className="field">
-              <span>Starts at</span>
+              <span>{t("common.labels.startsAt")}</span>
               <input
                 required
                 type="datetime-local"
@@ -207,7 +209,7 @@ export function ChronoboardInspector({
               />
             </label>
             <label className="field">
-              <span>Ends at</span>
+              <span>{t("common.labels.endsAt")}</span>
               <input
                 required
                 type="datetime-local"
@@ -217,7 +219,7 @@ export function ChronoboardInspector({
               />
             </label>
             <label className="field">
-              <span>Price</span>
+              <span>{t("common.labels.price")}</span>
               <input
                 required
                 min={0}
@@ -231,18 +233,20 @@ export function ChronoboardInspector({
 
           {editingMovie ? (
             <div className="inspector-panel__summary">
-              <span className="badge">Editing saved session</span>
-              <span className="badge">{editingMovie.duration_minutes} min</span>
+              <span className="badge">{t("chronoboard.inspector.editingSavedSession")}</span>
+              <span className="badge">
+                {editingMovie.duration_minutes} {t("common.units.minutesShort")}
+              </span>
               <span className="badge">{formatLocalDateTime(editingDraft.start_time)}</span>
             </div>
           ) : null}
 
           <div className="actions-row">
             <button className="button" type="submit" disabled={isBusy}>
-              Save session changes
+              {t("common.actions.saveSessionChanges")}
             </button>
             <button className="button--ghost" type="button" disabled={isBusy} onClick={onBackToSession}>
-              Back to session
+              {t("common.actions.backToSession")}
             </button>
           </div>
         </form>
@@ -260,18 +264,23 @@ export function ChronoboardInspector({
             </div>
             <div>
               <strong>{getLocalizedText(selectedSession.movie.title, i18n.language)}</strong>
-              <p className="muted">
-                {formatDateTime(selectedSession.start_time)} to {formatTime(selectedSession.end_time)}
-              </p>
+              <p className="muted">{formatDateTime(selectedSession.start_time)} - {formatTime(selectedSession.end_time)}</p>
             </div>
           </div>
 
           <div className="stats-row">
             <span className="badge">{formatStateLabel(selectedSession.status)}</span>
             <span className="badge">{formatCurrency(selectedSession.price)}</span>
-            <span className="badge">{selectedSession.total_seats - selectedSession.available_seats} sold</span>
             <span className="badge">
-              {selectedSession.available_seats}/{selectedSession.total_seats} left
+              {t("chronoboard.inspector.soldCount", {
+                count: selectedSession.total_seats - selectedSession.available_seats,
+              })}
+            </span>
+            <span className="badge">
+              {t("chronoboard.inspector.leftCount", {
+                available: selectedSession.available_seats,
+                total: selectedSession.total_seats,
+              })}
             </span>
           </div>
 
@@ -293,7 +302,7 @@ export function ChronoboardInspector({
               disabled={isBusy}
               onClick={() => onOpenEditSessionDraft(selectedSession)}
             >
-              Edit session
+              {t("common.actions.editSession")}
             </button>
             <button
               className="button--ghost"
@@ -301,7 +310,7 @@ export function ChronoboardInspector({
               disabled={isBusy || selectedSession.status !== "scheduled"}
               onClick={() => void onCancelSelectedSession()}
             >
-              Cancel session
+              {t("common.actions.cancelSession")}
             </button>
             <button
               className="button--danger"
@@ -309,7 +318,7 @@ export function ChronoboardInspector({
               disabled={isBusy}
               onClick={() => void onDeleteSelectedSession()}
             >
-              Delete session
+              {t("common.actions.deleteSession")}
             </button>
           </div>
         </div>
@@ -317,11 +326,11 @@ export function ChronoboardInspector({
 
       {inspectorView === "none" ? (
         <StatePanel
-          title="Use the inspector as the control center"
-          message="Drag a movie from the Planning Shelf onto the board to stage a gray draft, or select an existing session card to inspect it."
+          title={t("chronoboard.inspector.idlePanelTitle")}
+          message={t("chronoboard.inspector.idlePanelMessage")}
           action={
             <button className="button--ghost" type="button" onClick={onJumpToToday}>
-              Jump to today
+              {t("common.actions.jumpToToday")}
             </button>
           }
         />

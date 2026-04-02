@@ -69,7 +69,7 @@ export function SchedulePage() {
     } catch (error) {
       setItems([]);
       setMovies([]);
-      setErrorMessage(extractApiErrorMessage(error, t("backendScheduleUnavailable")));
+      setErrorMessage(extractApiErrorMessage(error, t("schedule.errors.unavailable")));
     } finally {
       setIsLoading(false);
     }
@@ -168,13 +168,13 @@ export function SchedulePage() {
     [dateSort, i18n.language, listFilteredItems, seatSort],
   );
 
-  const boardResultsLabel = t("scheduleDayResultsLabel", {
+  const boardResultsLabel = t("schedule.board.resultsLabel", {
     sessions: boardItems.length,
     movies: new Set(boardItems.map((item) => item.movie_id)).size,
     day: selectedBoardDay ? formatScheduleDayLabel(selectedBoardDay) : "-",
   });
 
-  const listResultsLabel = t("scheduleResultsLabel", {
+  const listResultsLabel = t("schedule.list.resultsLabel", {
     sessions: listItems.length,
     movies: new Set(listItems.map((item) => item.movie_id)).size,
   });
@@ -223,19 +223,19 @@ export function SchedulePage() {
     <>
       <section className="page-header">
         <div>
-          <p className="page-eyebrow">{t("scheduleEyebrow")}</p>
-          <h1 className="page-title">{t("schedule")}</h1>
-          <p className="page-subtitle">{t("scheduleIntro")}</p>
+          <p className="page-eyebrow">{t("schedule.page.eyebrow")}</p>
+          <h1 className="page-title">{t("schedule.page.title")}</h1>
+          <p className="page-subtitle">{t("schedule.page.intro")}</p>
         </div>
         <div className="stats-row">
           <span className="badge">
-            {allDayOptions.length} {t("chooseDay")}
+            {allDayOptions.length} {t("schedule.board.dayLabel")}
           </span>
           <span className="badge">
-            {rotationMovieCount} {t("currentlyShowing")}
+            {rotationMovieCount} {t("common.labels.activeNow")}
           </span>
           <span className="badge">
-            {items.length} {t("upcomingSessions")}
+            {items.length} {t("common.labels.upcomingSessions")}
           </span>
         </div>
       </section>
@@ -243,19 +243,19 @@ export function SchedulePage() {
       {isLoading ? (
         <StatePanel
           tone="loading"
-          title="Loading the schedule"
-          message="Fetching upcoming sessions, available days, and public movie filters."
+          title={t("schedule.loading.title")}
+          message={t("schedule.loading.message")}
         />
       ) : null}
 
       {!isLoading && errorMessage ? (
         <StatePanel
           tone="error"
-          title="Unable to load the schedule"
+          title={t("schedule.errors.title")}
           message={errorMessage}
           action={
             <button className="button--ghost" type="button" onClick={() => void loadSchedule()}>
-              Try again
+              {t("common.actions.retry")}
             </button>
           }
         />
@@ -263,8 +263,8 @@ export function SchedulePage() {
 
       {!isLoading && !errorMessage && items.length === 0 ? (
         <section className="empty-state empty-state--panel">
-          <h2>{t("noSessionsYet")}</h2>
-          <p>{t("scheduleQueryHint")}</p>
+          <h2>{t("schedule.list.noSessionsYetTitle")}</h2>
+          <p>{t("schedule.list.queryHint")}</p>
         </section>
       ) : null}
 
@@ -285,10 +285,10 @@ export function SchedulePage() {
 
           {boardDayOptions.length === 0 || !selectedBoardDay || boardItems.length === 0 ? (
             <section className="empty-state empty-state--panel">
-              <h2>{t("noMatchingSessions")}</h2>
-              <p>{t("scheduleDayHint")}</p>
+              <h2>{t("schedule.list.noMatchingTitle")}</h2>
+              <p>{t("schedule.board.hint")}</p>
               <button className="button--ghost" type="button" onClick={resetBoardFilters}>
-                {t("resetFilters")}
+                {t("common.actions.resetFilters")}
               </button>
             </section>
           ) : (
@@ -320,16 +320,16 @@ export function SchedulePage() {
           <section className="panel public-schedule-list-panel">
             <div className="toolbar-panel__header">
               <div>
-                <p className="page-eyebrow">{t("browseSchedule")}</p>
-                <h2 className="section-title">{t("upcomingSessions")}</h2>
-                <p className="toolbar-panel__summary">{t("scheduleQueryHint")}</p>
+                <p className="page-eyebrow">{t("common.actions.browseSchedule")}</p>
+                <h2 className="section-title">{t("common.labels.upcomingSessions")}</h2>
+                <p className="toolbar-panel__summary">{t("schedule.list.queryHint")}</p>
               </div>
               <div className="stats-row">
                 <span className="badge">
-                  {listItems.length} {t("upcomingSessions")}
+                  {listItems.length} {t("common.labels.upcomingSessions")}
                 </span>
                 <span className="badge">
-                  {new Set(listItems.map((item) => item.movie_id)).size} {t("movies")}
+                  {new Set(listItems.map((item) => item.movie_id)).size} {t("common.labels.movies")}
                 </span>
               </div>
             </div>

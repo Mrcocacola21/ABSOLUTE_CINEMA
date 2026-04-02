@@ -18,7 +18,7 @@ export const GENRE_CATALOG = {
   musical: { uk: "Мюзикл", en: "Musical" },
   mystery: { uk: "Містика", en: "Mystery" },
   romance: { uk: "Романтика", en: "Romance" },
-  science_fiction: { uk: "Наукова фантастика", en: "Science Fiction" },
+  science_fiction: { uk: "Фантастика", en: "Science Fiction" },
   sport: { uk: "Спортивний", en: "Sport" },
   thriller: { uk: "Трилер", en: "Thriller" },
   war: { uk: "Воєнний", en: "War" },

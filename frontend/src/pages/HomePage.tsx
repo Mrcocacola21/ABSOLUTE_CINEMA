@@ -40,7 +40,7 @@ export function HomePage() {
     } catch (error) {
       setItems([]);
       setMovies([]);
-      setErrorMessage(extractApiErrorMessage(error, t("backendScheduleUnavailable")));
+      setErrorMessage(extractApiErrorMessage(error, t("schedule.errors.unavailable")));
     } finally {
       setIsLoading(false);
     }
@@ -74,16 +74,16 @@ export function HomePage() {
   const spotlightVariant = featuredActiveMovie ? "active" : spotlightMovie ? "planned" : "empty";
   const spotlightDescription = spotlightMovie
     ? getLocalizedText(spotlightMovie.description, i18n.language) ||
-      (featuredActiveMovie ? t("homeMovieFallback") : t("homePlannedFallback"))
-    : t("comingSoonEmptyText");
+      (featuredActiveMovie ? t("home.spotlight.movieFallback") : t("home.spotlight.plannedFallback"))
+    : t("home.sections.comingSoon.emptyText");
   const spotlightSummary = featuredActiveMovie
-    ? t("homeActiveBannerLine", {
+    ? t("home.spotlight.activeSummary", {
         sessions: featuredActiveMovie.upcomingSessions,
         price: formatCurrency(featuredActiveMovie.minPrice),
       })
     : spotlightMovie
-      ? t("homePlannedBannerLine")
-      : t("comingSoonEmptyText");
+      ? t("home.spotlight.plannedSummary")
+      : t("home.sections.comingSoon.emptyText");
   const spotlightMeta: string[] = spotlightMovie
     ? [
         spotlightMovie.age_rating,
@@ -98,36 +98,39 @@ export function HomePage() {
       <section className="page-header page-header--home home-hero">
         <div className="home-hero__copy">
           <div className="home-hero__topline">
-            <p className="page-eyebrow">{t("brand")}</p>
-            <p className="home-hero__tagline">{t("brandTagline")}</p>
+            <p className="page-eyebrow">{t("common.brand.title")}</p>
+            <p className="home-hero__tagline">{t("common.brand.tagline")}</p>
           </div>
 
           <div className="home-hero__lead">
-            <h1 className="page-title">{t("homeHeroTitle")}</h1>
-            <p className="page-subtitle">{t("homeHeroIntro")}</p>
+            <h1 className="page-title">{t("home.hero.title")}</h1>
+            <p className="page-subtitle">{t("home.hero.intro")}</p>
           </div>
 
           <div className="actions-row home-hero__actions">
             <Link to="/movies" className="button--ghost">
-              {t("browseMovies")}
+              {t("common.actions.browseMovies")}
             </Link>
             <Link to={role === "admin" ? "/admin" : "/schedule"} className="button">
-              {role === "admin" ? t("openAdmin") : t("browseSchedule")}
+              {role === "admin" ? t("common.actions.openAdmin") : t("common.actions.browseSchedule")}
             </Link>
           </div>
 
-          <div className="home-hero__summary" aria-label={t("homeResultsLabel", { movies: movies.length, sessions: items.length })}>
+          <div
+            className="home-hero__summary"
+            aria-label={t("movies.catalog.resultsLabel", { movies: movies.length, genres: items.length })}
+          >
             <div className="home-hero__summary-item">
               <span className="home-hero__summary-value">{activeMovies.length}</span>
-              <span className="home-hero__summary-label">{t("activeLabel")}</span>
+              <span className="home-hero__summary-label">{t("common.states.active")}</span>
             </div>
             <div className="home-hero__summary-item">
               <span className="home-hero__summary-value">{plannedMovies.length}</span>
-              <span className="home-hero__summary-label">{t("plannedLabel")}</span>
+              <span className="home-hero__summary-label">{t("common.states.planned")}</span>
             </div>
             <div className="home-hero__summary-item">
               <span className="home-hero__summary-value">{items.length}</span>
-              <span className="home-hero__summary-label">{t("upcomingSessions")}</span>
+              <span className="home-hero__summary-label">{t("common.labels.upcomingSessions")}</span>
             </div>
           </div>
         </div>
@@ -146,7 +149,7 @@ export function HomePage() {
             {spotlightMovie ? (
               <div className="home-hero__spotlight-topline">
                 <span className={getMovieStatusBadgeClassName(spotlightMovie.status)}>
-                  {t(`${spotlightMovie.status}Label`)}
+                  {t(`common.states.${spotlightMovie.status}`)}
                 </span>
                 {featuredActiveMovie ? (
                   <span className="badge home-hero__spotlight-session">
@@ -158,10 +161,12 @@ export function HomePage() {
 
             <div className="home-hero__spotlight-copy">
               <p className="page-eyebrow">
-                {featuredActiveMovie ? t("nowShowingEyebrow") : t("comingSoonEyebrow")}
+                {featuredActiveMovie ? t("home.sections.nowShowing.eyebrow") : t("home.sections.comingSoon.eyebrow")}
               </p>
               <h2 className="home-hero__spotlight-title">
-                {spotlightMovie ? getLocalizedText(spotlightMovie.title, i18n.language) : t("comingSoonEmptyTitle")}
+                {spotlightMovie
+                  ? getLocalizedText(spotlightMovie.title, i18n.language)
+                  : t("home.sections.comingSoon.emptyTitle")}
               </h2>
               <p className="home-hero__spotlight-description">{spotlightDescription}</p>
             </div>
@@ -189,10 +194,10 @@ export function HomePage() {
                 className="button--ghost home-hero__spotlight-action"
               >
                 {featuredActiveMovie
-                  ? t("viewNextSession")
+                  ? t("common.actions.viewNextSession")
                   : spotlightMovie
-                    ? t("movieDetailsAction")
-                    : t("browseMovies")}
+                    ? t("common.actions.viewMovieDetails")
+                    : t("common.actions.browseMovies")}
               </Link>
             </div>
           </div>
@@ -202,19 +207,19 @@ export function HomePage() {
       {isLoading ? (
         <StatePanel
           tone="loading"
-          title="Loading the home page"
-          message="Fetching active, planned, and upcoming movie data."
+          title={t("home.loading.title")}
+          message={t("home.loading.message")}
         />
       ) : null}
 
       {!isLoading && errorMessage ? (
         <StatePanel
           tone="error"
-          title="Unable to load the home page"
+          title={t("home.errors.title")}
           message={errorMessage}
           action={
             <button className="button--ghost" type="button" onClick={() => void loadHomeData()}>
-              Try again
+              {t("common.actions.retry")}
             </button>
           }
         />
@@ -225,16 +230,16 @@ export function HomePage() {
           <section className="panel home-section">
             <div className="home-section__header">
               <div>
-                <p className="page-eyebrow">{t("nowShowingEyebrow")}</p>
-                <h2 className="section-title">{t("nowShowingTitle")}</h2>
-                <p className="home-section__intro">{t("nowShowingIntro")}</p>
+                <p className="page-eyebrow">{t("home.sections.nowShowing.eyebrow")}</p>
+                <h2 className="section-title">{t("home.sections.nowShowing.title")}</h2>
+                <p className="home-section__intro">{t("home.sections.nowShowing.intro")}</p>
               </div>
               <div className="stats-row">
                 <span className="badge">
-                  {activeMovies.length} {t("movies")}
+                  {activeMovies.length} {t("common.labels.movies")}
                 </span>
                 <span className="badge">
-                  {items.length} {t("upcomingSessions")}
+                  {items.length} {t("common.labels.upcomingSessions")}
                 </span>
               </div>
             </div>
@@ -262,8 +267,8 @@ export function HomePage() {
               </div>
             ) : (
               <section className="empty-state empty-state--panel">
-                <h2>{t("homeActiveEmptyTitle")}</h2>
-                <p>{t("homeActiveEmptyText")}</p>
+                <h2>{t("home.sections.nowShowing.emptyTitle")}</h2>
+                <p>{t("home.sections.nowShowing.emptyText")}</p>
               </section>
             )}
           </section>
@@ -271,13 +276,13 @@ export function HomePage() {
           <section className="panel home-section home-section--planned">
             <div className="home-section__header">
               <div>
-                <p className="page-eyebrow">{t("comingSoonEyebrow")}</p>
-                <h2 className="section-title">{t("comingSoonTitle")}</h2>
-                <p className="home-section__intro">{t("comingSoonIntro")}</p>
+                <p className="page-eyebrow">{t("home.sections.comingSoon.eyebrow")}</p>
+                <h2 className="section-title">{t("home.sections.comingSoon.title")}</h2>
+                <p className="home-section__intro">{t("home.sections.comingSoon.intro")}</p>
               </div>
               <div className="stats-row">
                 <span className="badge">
-                  {plannedMovies.length} {t("plannedLabel")}
+                  {plannedMovies.length} {t("common.states.planned")}
                 </span>
               </div>
             </div>
@@ -290,8 +295,8 @@ export function HomePage() {
               </div>
             ) : (
               <section className="empty-state empty-state--panel">
-                <h2>{t("comingSoonEmptyTitle")}</h2>
-                <p>{t("comingSoonEmptyText")}</p>
+                <h2>{t("home.sections.comingSoon.emptyTitle")}</h2>
+                <p>{t("home.sections.comingSoon.emptyText")}</p>
               </section>
             )}
           </section>

@@ -6,9 +6,9 @@ export function NotFoundPage() {
 
   return (
     <section className="panel">
-      <h1 className="page-title">{t("notFound")}</h1>
+      <h1 className="page-title">{t("common.empty.notFound")}</h1>
       <Link to="/" className="button">
-        {t("backHome")}
+        {t("common.navigation.home")}
       </Link>
     </section>
   );

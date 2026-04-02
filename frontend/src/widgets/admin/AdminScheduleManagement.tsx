@@ -65,7 +65,7 @@ export function AdminScheduleManagement({
   onCancelSession,
   onDeleteSession,
 }: AdminScheduleManagementProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [movieForm, setMovieForm] = useState<MovieCreatePayload>(emptyMovieForm);
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
   const [movieQuery, setMovieQuery] = useState("");
@@ -213,9 +213,7 @@ export function AdminScheduleManagement({
 
   async function handleDeactivateManagedMovie(movie: Movie) {
     const movieLabel = getLocalizedText(movie.title, i18n.language);
-    const confirmed = window.confirm(
-      `Deactivate "${movieLabel}"? The movie will stay in the catalog but will no longer be available for new scheduling.`,
-    );
+    const confirmed = window.confirm(t("admin.confirmations.deactivateMovie", { movie: movieLabel }));
     if (!confirmed) {
       return;
     }
@@ -232,9 +230,7 @@ export function AdminScheduleManagement({
 
   async function handleReturnMovieToPlanned(movie: Movie) {
     const movieLabel = getLocalizedText(movie.title, i18n.language);
-    const confirmed = window.confirm(
-      `Return "${movieLabel}" to planned? The movie will become available for future scheduling again.`,
-    );
+    const confirmed = window.confirm(t("admin.confirmations.returnMovie", { movie: movieLabel }));
     if (!confirmed) {
       return;
     }
@@ -247,9 +243,7 @@ export function AdminScheduleManagement({
 
   async function handleDeleteManagedMovie(movie: Movie) {
     const movieLabel = getLocalizedText(movie.title, i18n.language);
-    const confirmed = window.confirm(
-      `Delete "${movieLabel}"? This only succeeds when no sessions reference it.`,
-    );
+    const confirmed = window.confirm(t("admin.confirmations.deleteMovie", { movie: movieLabel }));
     if (!confirmed) {
       return;
     }

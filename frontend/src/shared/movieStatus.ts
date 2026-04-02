@@ -24,11 +24,11 @@ export function getMovieStatusPriority(status: MovieStatus): number {
 export function getMovieStatusTranslationKey(status: MovieStatus): string {
   switch (status) {
     case "active":
-      return "activeLabel";
+      return "common.states.active";
     case "planned":
-      return "plannedLabel";
+      return "common.states.planned";
     case "deactivated":
-      return "deactivatedLabel";
+      return "common.states.deactivated";
     default:
       return status;
   }

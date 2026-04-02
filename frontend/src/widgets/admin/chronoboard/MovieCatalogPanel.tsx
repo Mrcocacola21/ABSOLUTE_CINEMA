@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { MovieCreatePayload } from "@/api/admin";
-import { GENRE_OPTIONS, getGenreLabel, getGenreLabels } from "@/shared/genres";
+import { buildGenreSearchText, GENRE_OPTIONS, getGenreLabel, getGenreLabels } from "@/shared/genres";
 import { getLocalizedText } from "@/shared/localization";
 import {
   getMovieStatusBadgeClassName,
@@ -64,35 +65,39 @@ export function MovieCatalogPanel({
   onReturnToPlanned,
   onDeleteMovie,
 }: MovieCatalogPanelProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [genreQuery, setGenreQuery] = useState("");
+  const selectedGenresCount = movieForm.genres.length;
+  const normalizedGenreQuery = genreQuery.trim().toLowerCase();
+  const visibleGenreOptions = GENRE_OPTIONS.filter((option) =>
+    normalizedGenreQuery ? buildGenreSearchText(option.code).includes(normalizedGenreQuery) : true,
+  );
   const statusOptions =
     editingMovieId && movieForm.status === "active"
       ? [
-          { value: "planned", label: "Planned" },
-          { value: "active", label: "Active (automatic)" },
-          { value: "deactivated", label: "Deactivated" },
+          { value: "planned", label: t("admin.movies.statusOptions.planned") },
+          { value: "active", label: t("admin.movies.statusOptions.activeAutomatic") },
+          { value: "deactivated", label: t("admin.movies.statusOptions.deactivated") },
         ]
       : [
-          { value: "planned", label: "Planned" },
-          { value: "deactivated", label: "Deactivated" },
+          { value: "planned", label: t("admin.movies.statusOptions.planned") },
+          { value: "deactivated", label: t("admin.movies.statusOptions.deactivated") },
         ];
 
   return (
     <section className="form-card admin-zone">
       <div className="admin-section__header">
         <div>
-          <p className="page-eyebrow">Movie Management</p>
-          <h2 className="section-title">Maintain the movie catalog</h2>
-          <p className="muted">
-            Build the lineup here first. Planned and active titles stay available in the planning shelf.
-          </p>
+          <p className="page-eyebrow">{t("admin.movies.eyebrow")}</p>
+          <h2 className="section-title">{t("admin.movies.title")}</h2>
+          <p className="muted">{t("admin.movies.intro")}</p>
         </div>
         <div className="stats-row">
-          <span className="badge">{scheduleReadyMoviesCount} schedule-ready</span>
-          <span className="badge">{statusCounts.planned} planned</span>
-          <span className="badge">{statusCounts.active} active</span>
-          <span className="badge">{statusCounts.deactivated} deactivated</span>
-          <span className="badge">{totalMoviesCount} total titles</span>
+          <span className="badge">{scheduleReadyMoviesCount} {t("common.stats.scheduleReady")}</span>
+          <span className="badge">{statusCounts.planned} {t("common.states.planned")}</span>
+          <span className="badge">{statusCounts.active} {t("common.states.active")}</span>
+          <span className="badge">{statusCounts.deactivated} {t("common.states.deactivated")}</span>
+          <span className="badge">{totalMoviesCount} {t("common.stats.totalTitles")}</span>
         </div>
       </div>
 
@@ -106,14 +111,16 @@ export function MovieCatalogPanel({
         >
           <div className="admin-section__header">
             <div>
-              <p className="page-eyebrow">{editingMovieId ? "Editing movie" : "New movie"}</p>
+              <p className="page-eyebrow">
+                {editingMovieId ? t("admin.movies.form.editEyebrow") : t("admin.movies.form.newEyebrow")}
+              </p>
               <h3 className="section-title">
-                {editingMovieId ? "Update movie details" : "Add a title to the catalog"}
+                {editingMovieId ? t("admin.movies.form.editTitle") : t("admin.movies.form.createTitle")}
               </h3>
             </div>
             {editingMovieId ? (
               <button className="button--ghost" type="button" disabled={isBusy} onClick={onResetForm}>
-                Clear form
+                {t("common.actions.clearForm")}
               </button>
             ) : null}
           </div>
@@ -122,7 +129,7 @@ export function MovieCatalogPanel({
 
           <div className="form-grid">
             <label className="field">
-              <span>Title (UK)</span>
+              <span>{t("common.labels.titleUk")}</span>
               <input
                 required
                 disabled={isBusy}
@@ -131,7 +138,7 @@ export function MovieCatalogPanel({
               />
             </label>
             <label className="field">
-              <span>Title (EN)</span>
+              <span>{t("common.labels.titleEn")}</span>
               <input
                 required
                 disabled={isBusy}
@@ -140,7 +147,7 @@ export function MovieCatalogPanel({
               />
             </label>
             <label className="field">
-              <span>Duration, min</span>
+              <span>{t("common.labels.durationMinutes")}</span>
               <input
                 required
                 min={1}
@@ -152,7 +159,7 @@ export function MovieCatalogPanel({
               />
             </label>
             <label className="field">
-              <span>Age rating</span>
+              <span>{t("common.labels.ageRating")}</span>
               <input
                 disabled={isBusy}
                 value={movieForm.age_rating ?? ""}
@@ -160,7 +167,7 @@ export function MovieCatalogPanel({
               />
             </label>
             <label className="field field--wide">
-              <span>Description (UK)</span>
+              <span>{t("common.labels.descriptionUk")}</span>
               <textarea
                 required
                 disabled={isBusy}
@@ -169,7 +176,7 @@ export function MovieCatalogPanel({
               />
             </label>
             <label className="field field--wide">
-              <span>Description (EN)</span>
+              <span>{t("common.labels.descriptionEn")}</span>
               <textarea
                 required
                 disabled={isBusy}
@@ -178,7 +185,7 @@ export function MovieCatalogPanel({
               />
             </label>
             <label className="field">
-              <span>Poster URL</span>
+              <span>{t("common.labels.posterUrl")}</span>
               <input
                 type="url"
                 disabled={isBusy}
@@ -187,7 +194,7 @@ export function MovieCatalogPanel({
               />
             </label>
             <label className="field">
-              <span>Status</span>
+              <span>{t("common.labels.status")}</span>
               <select
                 disabled={isBusy}
                 value={movieForm.status}
@@ -201,31 +208,74 @@ export function MovieCatalogPanel({
               </select>
             </label>
             <div className="field field--wide">
-              <span>Genres</span>
-              <div className="stats-row">
-                {GENRE_OPTIONS.map((option) => (
-                  <label key={option.code} className="badge">
-                    <input
-                      type="checkbox"
-                      disabled={isBusy}
-                      checked={movieForm.genres.includes(option.code)}
-                      onChange={() => onToggleGenre(option.code)}
-                    />{" "}
-                    {getGenreLabel(option.code, i18n.language)}
-                  </label>
-                ))}
+              <div className="admin-form__field-header">
+                <span>{t("common.labels.genres")}</span>
+                <span className="badge">{t("admin.movies.selectedCount", { count: selectedGenresCount })}</span>
+              </div>
+              <div className="admin-form__genre-toolbar">
+                <label className="field admin-form__genre-search">
+                  <span>{t("admin.movies.form.findGenreLabel")}</span>
+                  <input
+                    disabled={isBusy}
+                    value={genreQuery}
+                    onChange={(event) => setGenreQuery(event.target.value)}
+                    placeholder={t("admin.movies.form.findGenrePlaceholder")}
+                  />
+                </label>
+                <div className="admin-form__genre-selected">
+                  <span className="admin-form__genre-selected-label">{t("common.labels.selectedGenres")}</span>
+                  {selectedGenresCount > 0 ? (
+                    <div className="admin-form__genre-tags">
+                      {movieForm.genres.map((genre) => (
+                        <button
+                          key={genre}
+                          className="admin-form__genre-tag"
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => onToggleGenre(genre)}
+                        >
+                          {getGenreLabel(genre, i18n.language)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="field__hint">{t("common.hints.selectedGenresAppearHere")}</p>
+                  )}
+                </div>
+              </div>
+              <div className="admin-form__genre-picker">
+                {visibleGenreOptions.length > 0 ? (
+                  visibleGenreOptions.map((option) => (
+                    <label
+                      key={option.code}
+                      className={`admin-form__genre-option${movieForm.genres.includes(option.code) ? " is-selected" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={isBusy}
+                        checked={movieForm.genres.includes(option.code)}
+                        onChange={() => onToggleGenre(option.code)}
+                      />
+                      <span className="admin-form__genre-check" aria-hidden="true" />
+                      <span>{getGenreLabel(option.code, i18n.language)}</span>
+                    </label>
+                  ))
+                ) : (
+                  <p className="admin-form__genre-empty">{t("common.hints.noGenresMatch")}</p>
+                )}
               </div>
             </div>
           </div>
 
-          <p className="field__hint">
-            Planned titles are ready for scheduling. A movie becomes active automatically after it gets a future
-            session. Deactivated titles stay in the catalog but are excluded from planning.
-          </p>
+          <p className="field__hint">{t("admin.movies.form.statusHint")}</p>
 
           <div className="actions-row">
             <button className="button" type="submit" disabled={isBusy}>
-              {isBusy ? "Saving..." : editingMovieId ? "Save movie changes" : "Create movie"}
+              {isBusy
+                ? `${t("common.actions.saveChanges")}...`
+                : editingMovieId
+                  ? t("common.actions.saveMovieChanges")
+                  : t("common.actions.createMovie")}
             </button>
           </div>
         </form>
@@ -233,18 +283,18 @@ export function MovieCatalogPanel({
         <section className="admin-zone__catalog">
           <div className="admin-section__header">
             <div>
-              <p className="page-eyebrow">Catalog</p>
-              <h3 className="section-title">Current lineup</h3>
+              <p className="page-eyebrow">{t("admin.movies.catalogEyebrow")}</p>
+              <h3 className="section-title">{t("common.labels.currentLineup")}</h3>
             </div>
             <span className="badge">{catalogMovies.length}</span>
           </div>
 
           <label className="field">
-            <span>Filter movies</span>
+            <span>{t("admin.movies.filterLabel")}</span>
             <input
               value={movieQuery}
               onChange={(event) => onMovieQueryChange(event.target.value)}
-              placeholder="Search by title, genre, rating, or description"
+              placeholder={t("admin.movies.filterPlaceholder")}
             />
           </label>
 
@@ -278,13 +328,15 @@ export function MovieCatalogPanel({
                       <span className={getMovieStatusBadgeClassName(movie.status)}>
                         {formatStateLabel(movie.status)}
                       </span>
-                      <span className="admin-catalog__duration">{movie.duration_minutes} min</span>
+                      <span className="admin-catalog__duration">
+                        {movie.duration_minutes} {t("common.units.minutesShort")}
+                      </span>
                     </div>
                   </div>
 
                   <div className="actions-row">
                     <button className="button--ghost" type="button" disabled={isBusy} onClick={() => onEditMovie(movie)}>
-                      Edit movie
+                      {t("common.actions.editMovie")}
                     </button>
                     <button
                       className="button--ghost"
@@ -292,7 +344,7 @@ export function MovieCatalogPanel({
                       disabled={isBusy || !isMovieScheduleReady(movie)}
                       onClick={() => onQueueMovie(movie)}
                     >
-                      Queue for board
+                      {t("common.actions.queueForBoard")}
                     </button>
                     {movie.status === "deactivated" ? (
                       <button
@@ -301,7 +353,7 @@ export function MovieCatalogPanel({
                         disabled={isBusy}
                         onClick={() => void onReturnToPlanned(movie)}
                       >
-                        Return to planned
+                        {t("common.actions.returnToPlanned")}
                       </button>
                     ) : (
                       <button
@@ -310,7 +362,7 @@ export function MovieCatalogPanel({
                         disabled={isBusy}
                         onClick={() => void onDeactivateMovie(movie)}
                       >
-                        Deactivate
+                        {t("common.actions.deactivate")}
                       </button>
                     )}
                     <button
@@ -319,7 +371,7 @@ export function MovieCatalogPanel({
                       disabled={isBusy}
                       onClick={() => void onDeleteMovie(movie)}
                     >
-                      Delete movie
+                      {t("common.actions.deleteMovie")}
                     </button>
                   </div>
                 </article>
@@ -328,8 +380,8 @@ export function MovieCatalogPanel({
 
             {catalogMovies.length === 0 ? (
               <section className="empty-state empty-state--panel">
-                <h2>No movies found</h2>
-                <p>Adjust the filter or create a new movie to begin scheduling.</p>
+                <h2>{t("admin.movies.emptyTitle")}</h2>
+                <p>{t("admin.movies.emptyText")}</p>
               </section>
             ) : null}
           </div>

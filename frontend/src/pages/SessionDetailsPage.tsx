@@ -71,11 +71,11 @@ export function SessionDetailsPage() {
         );
       });
     } catch (error) {
-      const message = extractApiErrorMessage(error, t("sessionDataUnavailable"));
+      const message = extractApiErrorMessage(error, t("session.errors.unavailable"));
       if (background) {
         setFeedback({
           tone: "error",
-          title: "Unable to refresh session data",
+          title: t("session.errors.refreshTitle"),
           message,
         });
       } else {
@@ -135,18 +135,21 @@ export function SessionDetailsPage() {
       const selectedSeatLabels = selectedSeats.map((seat) => `${seat.row}-${seat.number}`).join(", ");
       setFeedback({
         tone: "success",
-        title: selectedSeats.length > 1 ? "Tickets purchased" : "Ticket purchased",
+        title:
+          selectedSeats.length > 1
+            ? t("session.purchase.successMultipleTitle")
+            : t("session.purchase.successSingleTitle"),
         message:
           selectedSeats.length > 1
-            ? `Seats ${selectedSeatLabels} are now reserved for you.`
-            : `Seat ${selectedSeatLabels} is now reserved for you.`,
+            ? t("session.purchase.successMultipleMessage", { seats: selectedSeatLabels })
+            : t("session.purchase.successSingleMessage", { seats: selectedSeatLabels }),
       });
       setSelectedSeats([]);
     } catch (error) {
       setFeedback({
         tone: "error",
-        title: "Ticket purchase failed",
-        message: extractApiErrorMessage(error, t("ticketPurchaseFailed")),
+        title: t("session.purchase.failedTitle"),
+        message: extractApiErrorMessage(error, t("session.purchase.failedMessage")),
       });
     } finally {
       setIsSubmitting(false);
@@ -163,12 +166,12 @@ export function SessionDetailsPage() {
   );
 
   const purchaseHint = !isAuthenticated
-    ? "Sign in to purchase a ticket for this session."
+    ? t("session.purchase.signInRequired")
     : seats && seats.available_seats === 0
-      ? "This session is sold out."
+      ? t("session.purchase.soldOut")
       : details && !isSessionPurchasable
-        ? "This session is not available for purchase."
-      : undefined;
+        ? t("session.purchase.unavailable")
+        : undefined;
 
   const movieTitle = details ? getLocalizedText(details.movie.title, i18n.language) : "";
   const movieDescription = details ? getLocalizedText(details.movie.description, i18n.language) : "";
@@ -186,19 +189,19 @@ export function SessionDetailsPage() {
       {isLoading ? (
         <StatePanel
           tone="loading"
-          title="Loading session details"
-          message="Fetching session info, seat availability, and ticket options."
+          title={t("session.loading.title")}
+          message={t("session.loading.message")}
         />
       ) : null}
 
       {!isLoading && errorMessage ? (
         <StatePanel
           tone="error"
-          title="Unable to load this session"
+          title={t("session.errors.title")}
           message={errorMessage}
           action={
             <button className="button--ghost" type="button" onClick={() => void loadSessionData()}>
-              Try again
+              {t("common.actions.retry")}
             </button>
           }
         />
@@ -210,7 +213,7 @@ export function SessionDetailsPage() {
             <section className="page-header page-header--movie-detail session-hero">
               <div className="session-hero__main">
                 <div className="session-hero__copy">
-                  <p className="page-eyebrow">{t("viewSession")}</p>
+                  <p className="page-eyebrow">{t("session.detailsEyebrow")}</p>
                   <h1 className="page-title session-hero__title">{movieTitle}</h1>
                   <div className="session-hero__session-line">
                     <span className="badge session-hero__status-badge">{formatStateLabel(details.status)}</span>
@@ -236,10 +239,11 @@ export function SessionDetailsPage() {
               <div className="session-hero__aside">
                 <div className="session-hero__aside-head">
                   <div className="session-hero__section-copy">
-                    <p className="page-eyebrow">{t("dateTime")}</p>
+                    <p className="page-eyebrow">{t("common.labels.dateTime")}</p>
                     <h2 className="section-title session-hero__aside-title">{formatDateTime(details.start_time)}</h2>
                     <p className="session-hero__aside-subtitle">
-                      {t("startsAt")}: {formatTime(details.start_time)} | {t("endsAt")}: {formatTime(details.end_time)}
+                      {t("common.labels.startsAt")}: {formatTime(details.start_time)} | {t("common.labels.endsAt")}:{" "}
+                      {formatTime(details.end_time)}
                     </p>
                   </div>
                   <button
@@ -248,40 +252,42 @@ export function SessionDetailsPage() {
                     disabled={isLoading || isRefreshing || isSubmitting}
                     onClick={() => void loadSessionData({ background: Boolean(details || seats) })}
                   >
-                    {isRefreshing ? "Refreshing..." : "Refresh"}
+                    {isRefreshing ? t("session.refresh.loading") : t("session.refresh.idle")}
                   </button>
                 </div>
 
                 <div className="session-hero__facts">
                   <div className="session-hero__fact">
-                    <span>{t("price")}</span>
+                    <span>{t("common.labels.price")}</span>
                     <strong>{formatCurrency(details.price)}</strong>
                   </div>
                   <div className="session-hero__fact">
-                    <span>{t("availableSeats")}</span>
+                    <span>{t("common.labels.availableSeats")}</span>
                     <strong>
                       {details.available_seats}/{details.total_seats}
                     </strong>
                   </div>
                   <div className="session-hero__fact">
-                    <span>{t("duration")}</span>
-                    <strong>{details.movie.duration_minutes} min</strong>
+                    <span>{t("common.labels.duration")}</span>
+                    <strong>
+                      {details.movie.duration_minutes} {t("common.units.minutesShort")}
+                    </strong>
                   </div>
                   <div className="session-hero__fact">
-                    <span>{details.movie.age_rating ? t("ageRating") : t("endsAt")}</span>
+                    <span>{details.movie.age_rating ? t("common.labels.ageRating") : t("common.labels.endsAt")}</span>
                     <strong>{details.movie.age_rating ?? formatTime(details.end_time)}</strong>
                   </div>
                 </div>
 
                 <div className="actions-row session-hero__actions">
                   <Link to={`/movies/${details.movie.id}`} className="button">
-                    {t("viewMovieDetailsAction")}
+                    {t("common.actions.viewMovieDetails")}
                   </Link>
                   <Link
                     to={`/schedule?day=${toScheduleDayKey(details.start_time)}&movieId=${details.movie.id}&sessionId=${details.id}`}
                     className="button--ghost"
                   >
-                    {t("viewInScheduleAction")}
+                    {t("common.actions.viewInSchedule")}
                   </Link>
                 </div>
               </div>
@@ -292,34 +298,43 @@ export function SessionDetailsPage() {
             <div className="booking-module__header">
               <div className="booking-module__copy">
                 <h2 className="section-title">
-                  {t("seatMap")} | {t("ticketPurchase")}
+                  {t("booking.module.title")}
                 </h2>
                 <p className="muted">
                   {selectedSeats.length > 0
-                    ? `${selectedSeats.length} seat${selectedSeats.length > 1 ? "s are" : " is"} selected. Review the summary and confirm the booking in the same flow.`
-                    : "Choose seats from the map, review the ticket summary, and complete the purchase without leaving this booking module."}
+                    ? t("booking.module.introSelected", {
+                        count: selectedSeats.length,
+                        seatLabel:
+                          selectedSeats.length === 1
+                            ? t("common.labels.selectedSeat").toLowerCase()
+                            : t("common.labels.selectedSeats").toLowerCase(),
+                      })
+                    : t("booking.module.introEmpty")}
                 </p>
               </div>
               <div className="booking-module__stats">
                 {seats ? (
                   <span className="badge">
-                    {seats.available_seats}/{seats.total_seats} {t("availableSeats")}
+                    {seats.available_seats}/{seats.total_seats} {t("common.labels.availableSeats")}
                   </span>
                 ) : null}
                 {details?.price !== undefined ? (
                   <span className="badge">
-                    {t("price")}: {formatCurrency(details.price)}
+                    {t("common.labels.price")}: {formatCurrency(details.price)}
                   </span>
                 ) : null}
                 {selectedSeats.length > 0 ? (
                   <span className="badge">
-                    {selectedSeats.length === 1 ? t("selectedSeat") : "Selected seats"}:{" "}
+                    {selectedSeats.length === 1
+                      ? t("common.labels.selectedSeat")
+                      : t("common.labels.selectedSeats")}
+                    :{" "}
                     {selectedSeats.map((seat) => `${seat.row}-${seat.number}`).join(", ")}
                   </span>
                 ) : null}
                 {selectedSeats.length > 1 && details?.price !== undefined ? (
                   <span className="badge">
-                    Total: {formatCurrency(details.price * selectedSeats.length)}
+                    {t("booking.module.totalLabel")}: {formatCurrency(details.price * selectedSeats.length)}
                   </span>
                 ) : null}
               </div>

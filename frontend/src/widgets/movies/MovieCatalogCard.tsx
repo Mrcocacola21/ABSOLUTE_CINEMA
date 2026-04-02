@@ -74,11 +74,13 @@ export function MovieCatalogCard({
 
       <div className="catalog-movie-card__facts">
         <div className="catalog-movie-card__fact">
-          <span>{t("duration")}</span>
-          <strong>{movie.duration_minutes} min</strong>
+          <span>{t("common.labels.duration")}</span>
+          <strong>
+            {movie.duration_minutes} {t("common.units.minutesShort")}
+          </strong>
         </div>
         <div className="catalog-movie-card__fact">
-          <span>{t("sessionsCount")}</span>
+          <span>{t("common.labels.sessions")}</span>
           <strong>{sessionsCount}</strong>
         </div>
       </div>
@@ -87,26 +89,26 @@ export function MovieCatalogCard({
         {nextSession && lastSession ? (
           <div className="catalog-movie-card__sessions">
             <div className="catalog-movie-card__session">
-              <span className="muted">{t("nextSession")}</span>
+              <span className="muted">{t("movie.sessionWindow.nextSession")}</span>
               <strong>{formatDateTime(nextSession.start_time)}</strong>
             </div>
             <div className="catalog-movie-card__session">
-              <span className="muted">{t("lastUpcomingSession")}</span>
+              <span className="muted">{t("movie.sessionWindow.lastUpcomingSession")}</span>
               <strong>{formatDateTime(lastSession.start_time)}</strong>
             </div>
           </div>
         ) : (
-          <p className="muted">{t("noUpcomingSessionsShort")}</p>
+          <p className="muted">{t("movie.noUpcomingSessions.short")}</p>
         )}
       </div>
 
       <div className="actions-row">
         <Link to={`/movies/${movie.id}`} className="button">
-          {t("movieDetailsAction")}
+          {t("common.actions.viewMovieDetails")}
         </Link>
         {nextSession ? (
           <Link to={`/schedule?movieId=${movie.id}`} className="button--ghost">
-            {t("browseMovieSessions")}
+            {t("common.actions.browseMovieSessions")}
           </Link>
         ) : null}
       </div>

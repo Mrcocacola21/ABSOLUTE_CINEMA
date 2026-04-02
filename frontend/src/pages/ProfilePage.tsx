@@ -77,7 +77,7 @@ export function ProfilePage() {
       setOrdersErrorMessage("");
     } catch (error) {
       setOrders([]);
-      setOrdersErrorMessage(extractApiErrorMessage(error, "Orders are currently unavailable."));
+      setOrdersErrorMessage(extractApiErrorMessage(error, t("profile.orders.unavailableMessage")));
     } finally {
       if (!background) {
         setIsOrdersLoading(false);
@@ -108,7 +108,7 @@ export function ProfilePage() {
     if (Object.keys(payload).length === 0) {
       setFeedback({
         tone: "info",
-        message: "There are no profile changes to save.",
+        message: t("profile.form.noChanges"),
       });
       return;
     }
@@ -116,12 +116,12 @@ export function ProfilePage() {
     setIsSavingProfile(true);
     setFeedback(null);
     try {
-      const response = await updateCurrentUserRequest(payload);
+      await updateCurrentUserRequest(payload);
       await refreshCurrentUser();
       setFeedback({
         tone: "success",
-        title: "Profile updated",
-        message: response.message,
+        title: t("profile.form.updatedTitle"),
+        message: t("profile.form.updatedMessage"),
       });
       setForm((current) => ({
         ...current,
@@ -130,8 +130,8 @@ export function ProfilePage() {
     } catch (error) {
       setFeedback({
         tone: "error",
-        title: "Profile update failed",
-        message: extractApiErrorMessage(error, "Profile update failed."),
+        title: t("profile.form.updateFailedTitle"),
+        message: extractApiErrorMessage(error, t("profile.form.updateFailedMessage")),
       });
     } finally {
       setIsSavingProfile(false);
@@ -139,9 +139,7 @@ export function ProfilePage() {
   }
 
   async function handleDeactivateAccount() {
-    const confirmed = window.confirm(
-      "Deactivate this account? You will be signed out immediately after the request succeeds.",
-    );
+    const confirmed = window.confirm(t("profile.form.deactivateConfirm"));
     if (!confirmed) {
       return;
     }
@@ -149,18 +147,18 @@ export function ProfilePage() {
     setIsDeactivatingAccount(true);
     setFeedback(null);
     try {
-      const response = await deactivateCurrentUserRequest();
+      await deactivateCurrentUserRequest();
       setFeedback({
         tone: "success",
-        title: "Account deactivated",
-        message: response.message,
+        title: t("profile.form.deactivatedTitle"),
+        message: t("profile.form.deactivatedMessage"),
       });
       logout();
     } catch (error) {
       setFeedback({
         tone: "error",
-        title: "Account deactivation failed",
-        message: extractApiErrorMessage(error, "Account deactivation failed."),
+        title: t("profile.form.deactivationFailedTitle"),
+        message: extractApiErrorMessage(error, t("profile.form.deactivationFailedMessage")),
       });
     } finally {
       setIsDeactivatingAccount(false);
@@ -170,7 +168,10 @@ export function ProfilePage() {
   async function handleCancelTicket(order: Order, ticket: OrderTicket) {
     const movieTitle = getLocalizedText(order.movie_title, i18n.language);
     const confirmed = window.confirm(
-      `Cancel the ticket for ${movieTitle} at seat ${ticket.seat_row}-${ticket.seat_number}?`,
+      t("profile.orders.cancelConfirm", {
+        movie: movieTitle,
+        seat: `${ticket.seat_row}-${ticket.seat_number}`,
+      }),
     );
     if (!confirmed) {
       return;
@@ -179,18 +180,18 @@ export function ProfilePage() {
     setCancellingTicketId(ticket.id);
     setFeedback(null);
     try {
-      const response = await cancelTicketRequest(ticket.id);
+      await cancelTicketRequest(ticket.id);
       await refreshOrders({ background: true });
       setFeedback({
         tone: "success",
-        title: "Ticket cancelled",
-        message: `${response.message} Order ${order.id} was refreshed.`,
+        title: t("profile.orders.cancelSuccessTitle"),
+        message: t("profile.orders.cancelSuccessMessage"),
       });
     } catch (error) {
       setFeedback({
         tone: "error",
-        title: "Ticket cancellation failed",
-        message: extractApiErrorMessage(error, "Ticket cancellation failed."),
+        title: t("profile.orders.cancelFailedTitle"),
+        message: extractApiErrorMessage(error, t("profile.orders.cancelFailedMessage")),
       });
     } finally {
       setCancellingTicketId(null);
@@ -201,8 +202,8 @@ export function ProfilePage() {
     return (
       <StatePanel
         tone="loading"
-        title="Loading your profile"
-        message="Fetching your account details and ticket history."
+        title={t("profile.page.loadingTitle")}
+        message={t("profile.page.loadingMessage")}
       />
     );
   }
@@ -211,11 +212,11 @@ export function ProfilePage() {
     return (
       <StatePanel
         tone="error"
-        title="Profile is unavailable"
-        message="Your account details could not be loaded."
+        title={t("profile.page.unavailableTitle")}
+        message={t("profile.page.unavailableMessage")}
         action={
           <Link to="/login" className="button--ghost">
-            Sign in again
+            {t("common.actions.signInAgain")}
           </Link>
         }
       />
@@ -225,8 +226,8 @@ export function ProfilePage() {
   return (
     <>
       <section className="panel">
-        <h1 className="page-title">{t("profile")}</h1>
-        <p className="muted">Manage your account details and ticket activity in one place.</p>
+        <h1 className="page-title">{t("profile.page.title")}</h1>
+        <p className="muted">{t("profile.page.intro")}</p>
         <div className="stats-row">
           <span className="badge">{currentUser.name}</span>
           <span className="badge">{currentUser.email}</span>
@@ -249,13 +250,13 @@ export function ProfilePage() {
         <form className="form-card" onSubmit={handleProfileUpdate}>
           <div className="toolbar-panel__header">
             <div>
-              <h3>Edit profile</h3>
-              <p className="muted">Update your name, email, or password.</p>
+              <h3>{t("profile.form.title")}</h3>
+              <p className="muted">{t("profile.form.intro")}</p>
             </div>
           </div>
           <div className="form-grid">
             <label className="field">
-              <span>Name</span>
+              <span>{t("common.labels.name")}</span>
               <input
                 required
                 disabled={isSavingProfile || isDeactivatingAccount}
@@ -264,7 +265,7 @@ export function ProfilePage() {
               />
             </label>
             <label className="field">
-              <span>Email</span>
+              <span>{t("common.labels.email")}</span>
               <input
                 required
                 disabled={isSavingProfile || isDeactivatingAccount}
@@ -274,7 +275,7 @@ export function ProfilePage() {
               />
             </label>
             <label className="field">
-              <span>New password</span>
+              <span>{t("common.labels.newPassword")}</span>
               <input
                 minLength={8}
                 disabled={isSavingProfile || isDeactivatingAccount}
@@ -284,7 +285,7 @@ export function ProfilePage() {
               />
             </label>
             <label className="field">
-              <span>Current password</span>
+              <span>{t("common.labels.currentPassword")}</span>
               <input
                 minLength={8}
                 disabled={isSavingProfile || isDeactivatingAccount}
@@ -298,7 +299,7 @@ export function ProfilePage() {
           </div>
           <div className="actions-row">
             <button className="button" type="submit" disabled={isSavingProfile || isDeactivatingAccount}>
-              {isSavingProfile ? "Saving changes..." : "Save changes"}
+              {isSavingProfile ? t("profile.form.saveLoading") : t("profile.form.saveIdle")}
             </button>
             <button
               className="button--danger"
@@ -308,17 +309,17 @@ export function ProfilePage() {
                 void handleDeactivateAccount();
               }}
             >
-              {isDeactivatingAccount ? "Deactivating..." : "Deactivate account"}
+              {isDeactivatingAccount ? t("profile.form.deactivating") : t("common.actions.deactivateAccount")}
             </button>
           </div>
-          <p className="muted">Changing your email or password requires the current password.</p>
+          <p className="muted">{t("profile.form.requirementHint")}</p>
         </form>
 
         <section className="form-card">
           <div className="admin-section__header">
             <div>
-              <h3>My orders</h3>
-              <p className="muted">Review grouped purchases, inspect seats, and cancel eligible tickets.</p>
+              <h3>{t("profile.orders.title")}</h3>
+              <p className="muted">{t("profile.orders.intro")}</p>
             </div>
             <span className="badge">{orders.length}</span>
           </div>
@@ -326,19 +327,19 @@ export function ProfilePage() {
           {isOrdersLoading ? (
             <StatePanel
               tone="loading"
-              title="Loading your orders"
-              message="Fetching your latest grouped purchases."
+              title={t("profile.orders.loadingTitle")}
+              message={t("profile.orders.loadingMessage")}
             />
           ) : null}
 
           {!isOrdersLoading && ordersErrorMessage ? (
             <StatePanel
               tone="error"
-              title="Unable to load your orders"
+              title={t("profile.orders.unavailableTitle")}
               message={ordersErrorMessage}
               action={
                 <button className="button--ghost" type="button" onClick={() => void refreshOrders()}>
-                  Try again
+                  {t("common.actions.retry")}
                 </button>
               }
             />
@@ -346,10 +347,10 @@ export function ProfilePage() {
 
           {!isOrdersLoading && !ordersErrorMessage && orders.length === 0 ? (
             <section className="empty-state empty-state--panel">
-              <h2>No orders yet</h2>
-              <p>Once you purchase one or more seats for a session, the grouped order will appear here.</p>
+              <h2>{t("profile.orders.emptyTitle")}</h2>
+              <p>{t("profile.orders.emptyText")}</p>
               <Link to="/schedule" className="button--ghost">
-                Browse schedule
+                {t("common.actions.browseSchedule")}
               </Link>
             </section>
           ) : null}
@@ -368,17 +369,18 @@ export function ProfilePage() {
                     <div className="stats-row">
                       <span className="badge">{formatStateLabel(order.status)}</span>
                       <span className="badge">
-                        {order.active_tickets_count}/{order.tickets_count} active
+                        {t("profile.orders.activeSummary", {
+                          active: order.active_tickets_count,
+                          total: order.tickets_count,
+                        })}
                       </span>
                       <span className="badge">{formatCurrency(order.total_price)}</span>
                     </div>
                   </div>
 
                   <div className="order-history__meta">
-                    <span className="badge">Order {order.id.slice(-6)}</span>
-                    <span className="badge">
-                      {order.tickets_count} ticket{order.tickets_count > 1 ? "s" : ""}
-                    </span>
+                    <span className="badge">{t("profile.orders.shortId", { id: order.id.slice(-6) })}</span>
+                    <span className="badge">{t("profile.orders.ticketsCount", { count: order.tickets_count })}</span>
                     {order.age_rating ? <span className="badge">{order.age_rating}</span> : null}
                   </div>
 
@@ -387,11 +389,15 @@ export function ProfilePage() {
                       <div key={ticket.id} className="order-history__ticket">
                         <div className="order-history__ticket-copy">
                           <strong>
-                            Seat {ticket.seat_row}-{ticket.seat_number}
+                            {t("common.labels.seat")} {ticket.seat_row}-{ticket.seat_number}
                           </strong>
                           <p className="muted">
-                            Purchased {formatDateTime(ticket.purchased_at)}
-                            {ticket.cancelled_at ? ` | Cancelled ${formatDateTime(ticket.cancelled_at)}` : ""}
+                            {t("profile.orders.purchasedAt", { date: formatDateTime(ticket.purchased_at) })}
+                            {ticket.cancelled_at
+                              ? ` | ${t("profile.orders.cancelledAt", {
+                                  date: formatDateTime(ticket.cancelled_at),
+                                })}`
+                              : ""}
                           </p>
                         </div>
                         <div className="stats-row">
@@ -407,7 +413,9 @@ export function ProfilePage() {
                               void handleCancelTicket(order, ticket);
                             }}
                           >
-                            {cancellingTicketId === ticket.id ? "Cancelling..." : "Cancel ticket"}
+                            {cancellingTicketId === ticket.id
+                              ? t("profile.orders.cancelLoading")
+                              : t("common.actions.cancelTicket")}
                           </button>
                         ) : null}
                       </div>

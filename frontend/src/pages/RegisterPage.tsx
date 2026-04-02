@@ -30,11 +30,11 @@ export function RegisterPage() {
       });
       navigate("/login", {
         state: {
-          statusMessage: t("registrationSuccess"),
+          statusMessage: t("auth.register.success"),
         },
       });
     } catch (error) {
-      setErrorMessage(extractApiErrorMessage(error, t("registrationFailed")));
+      setErrorMessage(extractApiErrorMessage(error, t("auth.register.failed")));
     } finally {
       setIsSubmitting(false);
     }
@@ -43,21 +43,21 @@ export function RegisterPage() {
   return (
     <section className="auth-shell">
       <section className="panel auth-aside">
-        <p className="page-eyebrow">{t("register")}</p>
-        <h1 className="page-title auth-title">{t("createAccount")}</h1>
-        <p className="page-subtitle">{t("registerIntro")}</p>
+        <p className="page-eyebrow">{t("auth.register.eyebrow")}</p>
+        <h1 className="page-title auth-title">{t("auth.register.title")}</h1>
+        <p className="page-subtitle">{t("auth.register.intro")}</p>
         <div className="actions-row">
           <Link to="/login" className="button--ghost">
-            {t("signIn")}
+            {t("common.actions.signIn")}
           </Link>
         </div>
       </section>
 
       <form className="form-card auth-form" onSubmit={handleSubmit}>
-        <h2 className="section-title">{t("createAccount")}</h2>
+        <h2 className="section-title">{t("auth.register.title")}</h2>
         <div className="form-grid">
           <label className="field">
-            <span>{t("name")}</span>
+            <span>{t("common.labels.name")}</span>
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -68,7 +68,7 @@ export function RegisterPage() {
             />
           </label>
           <label className="field">
-            <span>{t("email")}</span>
+            <span>{t("common.labels.email")}</span>
             <input
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -78,7 +78,7 @@ export function RegisterPage() {
             />
           </label>
           <label className="field">
-            <span>{t("password")}</span>
+            <span>{t("common.labels.password")}</span>
             <input
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -91,13 +91,15 @@ export function RegisterPage() {
           </label>
         </div>
         {statusMessage ? <StatusBanner tone="info" message={statusMessage} /> : null}
-        {errorMessage ? <StatusBanner tone="error" title="Unable to create the account" message={errorMessage} /> : null}
+        {errorMessage ? (
+          <StatusBanner tone="error" title={t("auth.register.errorTitle")} message={errorMessage} />
+        ) : null}
         <div className="actions-row">
           <button className="button" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Creating account..." : t("register")}
+            {isSubmitting ? t("auth.register.submitting") : t("common.navigation.register")}
           </button>
           <Link to="/login" className="button--ghost">
-            {t("loginInstead")}
+            {t("auth.prompts.haveAccount")}
           </Link>
         </div>
       </form>

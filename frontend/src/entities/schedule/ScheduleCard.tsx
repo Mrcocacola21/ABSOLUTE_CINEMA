@@ -16,8 +16,6 @@ export function ScheduleCard({ item }: ScheduleCardProps) {
   const title = getLocalizedText(item.movie_title, i18n.language);
   const dayLabel = formatScheduleDayLabel(toScheduleDayKey(item.start_time));
   const timeRange = `${formatTime(item.start_time)} - ${formatTime(item.end_time)}`;
-  const dateLabel = i18n.language.startsWith("uk") ? "\u0414\u0430\u0442\u0430" : "Date";
-  const timeLabel = i18n.language.startsWith("uk") ? "\u0427\u0430\u0441" : "Time";
 
   return (
     <article className="card schedule-card">
@@ -49,21 +47,21 @@ export function ScheduleCard({ item }: ScheduleCardProps) {
 
           <div className="schedule-card__facts">
             <div className="schedule-card__fact">
-              <span>{dateLabel}</span>
+              <span>{t("common.labels.date")}</span>
               <strong>{dayLabel}</strong>
             </div>
             <div className="schedule-card__fact">
-              <span>{timeLabel}</span>
+              <span>{t("common.labels.time")}</span>
               <strong>{timeRange}</strong>
             </div>
             <div className="schedule-card__fact">
-              <span>{t("availableSeats")}</span>
+              <span>{t("common.labels.availableSeats")}</span>
               <strong>
                 {item.available_seats} / {item.total_seats}
               </strong>
             </div>
             <div className="schedule-card__fact">
-              <span>{t("price")}</span>
+              <span>{t("common.labels.price")}</span>
               <strong>{formatCurrency(item.price)}</strong>
             </div>
           </div>
@@ -73,10 +71,10 @@ export function ScheduleCard({ item }: ScheduleCardProps) {
       <div className="schedule-card__footer">
         <div className="actions-row schedule-card__actions">
           <Link to={`/schedule/${item.id}`} className="button">
-            {t("viewSession")}
+            {t("common.actions.viewSession")}
           </Link>
           <Link to={`/movies/${item.movie_id}`} className="button--ghost">
-            {t("movieDetails")}
+            {t("common.actions.viewMovieDetails")}
           </Link>
         </div>
       </div>

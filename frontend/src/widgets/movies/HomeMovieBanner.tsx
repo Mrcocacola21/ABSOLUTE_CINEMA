@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { getGenreLabel } from "@/shared/genres";
-import { getLocalizedText } from "@/shared/localization";
+import { getIntlLocale, getLocalizedText } from "@/shared/localization";
 import { getMovieStatusBadgeClassName } from "@/shared/movieStatus";
 import { formatCurrency, formatTime } from "@/shared/presentation";
 import type { Movie, ScheduleItem } from "@/types/domain";
@@ -31,8 +31,8 @@ function getMovieMonogram(title: string): string {
     .join("");
 }
 
-function formatSessionSlot(startTime: string, endTime: string): string {
-  const dateLabel = new Date(startTime).toLocaleDateString([], {
+function formatSessionSlot(startTime: string, endTime: string, language: string): string {
+  const dateLabel = new Date(startTime).toLocaleDateString(getIntlLocale(language), {
     day: "2-digit",
     month: "short",
   });
@@ -44,20 +44,21 @@ export function HomeMovieBanner(props: HomeMovieBannerProps) {
   const { t, i18n } = useTranslation();
   const { movie, variant } = props;
   const title = getLocalizedText(movie.title, i18n.language);
-  const ribbonLabel = variant === "active" ? t("homeActiveRibbon") : t("homePlannedRibbon");
+  const ribbonLabel =
+    variant === "active" ? t("home.spotlight.activeRibbon") : t("home.spotlight.plannedRibbon");
   const visibleGenres = movie.genres.slice(0, 5);
 
   const summaryLine =
     variant === "active"
-      ? t("homeActiveBannerLine", {
+      ? t("home.spotlight.activeSummary", {
           sessions: props.upcomingSessions,
           price: formatCurrency(props.minPrice),
         })
-      : t("homePlannedBannerLine");
+      : t("home.spotlight.plannedSummary");
 
   const description =
     getLocalizedText(movie.description, i18n.language) ||
-    (variant === "active" ? t("homeMovieFallback") : t("homePlannedFallback"));
+    (variant === "active" ? t("home.spotlight.movieFallback") : t("home.spotlight.plannedFallback"));
 
   return (
     <article className={`home-poster-card home-poster-card--${variant}`}>
@@ -71,7 +72,7 @@ export function HomeMovieBanner(props: HomeMovieBannerProps) {
         </Link>
 
         <div className="home-poster-card__topline">
-          <span className={getMovieStatusBadgeClassName(movie.status)}>{t(`${movie.status}Label`)}</span>
+          <span className={getMovieStatusBadgeClassName(movie.status)}>{t(`common.states.${movie.status}`)}</span>
           {movie.age_rating ? <span className="badge home-poster-card__age-rating">{movie.age_rating}</span> : null}
         </div>
 
@@ -93,29 +94,30 @@ export function HomeMovieBanner(props: HomeMovieBannerProps) {
 
             {variant === "active" ? (
               <p className="home-poster-card__support">
-                {t("nextSession")}: {formatSessionSlot(props.nextSession.start_time, props.nextSession.end_time)}
+                {t("movie.sessionWindow.nextSession")}:{" "}
+                {formatSessionSlot(props.nextSession.start_time, props.nextSession.end_time, i18n.language)}
               </p>
             ) : (
-              <p className="home-poster-card__support">{t("homePlannedFallback")}</p>
+              <p className="home-poster-card__support">{t("home.spotlight.plannedFallback")}</p>
             )}
 
             <div className="home-poster-card__actions">
               {variant === "active" ? (
                 <>
                   <Link to={`/schedule/${props.nextSession.id}`} className="button">
-                    {t("viewNextSession")}
+                    {t("common.actions.viewNextSession")}
                   </Link>
                   <Link to={`/movies/${movie.id}`} className="button--ghost">
-                    {t("movieDetailsAction")}
+                    {t("common.actions.viewMovieDetails")}
                   </Link>
                 </>
               ) : (
                 <>
                   <Link to={`/movies/${movie.id}`} className="button">
-                    {t("movieDetailsAction")}
+                    {t("common.actions.viewMovieDetails")}
                   </Link>
                   <Link to="/movies" className="button--ghost">
-                    {t("browseMovies")}
+                    {t("common.actions.browseMovies")}
                   </Link>
                 </>
               )}
@@ -130,8 +132,8 @@ export function HomeMovieBanner(props: HomeMovieBannerProps) {
         </h3>
         <p className="home-poster-card__meta">
           {variant === "active"
-            ? formatSessionSlot(props.nextSession.start_time, props.nextSession.end_time)
-            : t("comingSoonTitle")}
+            ? formatSessionSlot(props.nextSession.start_time, props.nextSession.end_time, i18n.language)
+            : t("home.sections.comingSoon.title")}
         </p>
       </div>
     </article>

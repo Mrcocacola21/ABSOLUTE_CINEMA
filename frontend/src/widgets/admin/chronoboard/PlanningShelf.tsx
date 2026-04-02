@@ -36,36 +36,38 @@ export function PlanningShelf({
   onDragStart,
   onDragEnd,
 }: PlanningShelfProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
     <section className="card planning-shelf">
       <div className="admin-section__header">
         <div>
-          <p className="page-eyebrow">Planning Shelf</p>
-          <h3 className="section-title">Drag source / staging area</h3>
-          <p className="muted">Pick a planned or active title, then drag it onto the board to create a gray draft.</p>
+          <p className="page-eyebrow">{t("chronoboard.shelf.eyebrow")}</p>
+          <h3 className="section-title">{t("chronoboard.shelf.title")}</h3>
+          <p className="muted">{t("chronoboard.shelf.intro")}</p>
         </div>
         <span className="badge">{planningMovies.length}</span>
       </div>
 
       <label className="field">
-        <span>Find a schedule-ready movie</span>
+        <span>{t("chronoboard.shelf.searchLabel")}</span>
         <input
           value={plannerMovieQuery}
           onChange={(event) => onPlannerMovieQueryChange(event.target.value)}
-          placeholder="Search planned and active titles"
+          placeholder={t("chronoboard.shelf.searchPlaceholder")}
         />
       </label>
 
       {selectedMovie ? (
         <StatusBanner
           tone="info"
-          title="Selected movie"
-          message={`${getLocalizedText(selectedMovie.title, i18n.language)} is queued for board placement. Drag it or click a free slot on the timeline.`}
+          title={t("chronoboard.shelf.selectedMovieTitle")}
+          message={t("chronoboard.shelf.selectedMovieMessage", {
+            movie: getLocalizedText(selectedMovie.title, i18n.language),
+          })}
           action={
             <button className="button--ghost" type="button" onClick={onClearPlanningSelection}>
-              Clear
+              {t("common.actions.clear")}
             </button>
           }
         />
@@ -99,7 +101,9 @@ export function PlanningShelf({
                       {formatStateLabel(movie.status)}
                     </span>
                     {movie.age_rating ? <span className="badge">{movie.age_rating}</span> : null}
-                    <span className="badge admin-source-card__duration-badge">{movie.duration_minutes} min</span>
+                    <span className="badge admin-source-card__duration-badge">
+                      {movie.duration_minutes} {t("common.units.minutesShort")}
+                    </span>
                   </div>
                   {movie.genres.length > 0 ? (
                     <div className="admin-source-card__genres">
@@ -117,7 +121,7 @@ export function PlanningShelf({
                   disabled={isBusy}
                   onClick={() => onSelectMovie(movie)}
                 >
-                  Select
+                  {t("common.actions.select")}
                 </button>
               </div>
             </article>
@@ -126,8 +130,8 @@ export function PlanningShelf({
 
         {planningMovies.length === 0 ? (
           <section className="empty-state empty-state--panel">
-            <h2>No schedule-ready movies</h2>
-            <p>Create a planned movie or return a deactivated one to planned before placing it on the board.</p>
+            <h2>{t("chronoboard.shelf.emptyTitle")}</h2>
+            <p>{t("chronoboard.shelf.emptyText")}</p>
           </section>
         ) : null}
       </div>

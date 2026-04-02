@@ -85,23 +85,21 @@ export function ChronoboardTimeline({
   onDraftSelect,
   onSessionSelect,
 }: ChronoboardTimelineProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
     <section className="card chrono-stage">
       <div className="admin-section__header">
         <div>
-          <p className="page-eyebrow">Timeline</p>
-          <h3 className="section-title">Drag to place, then confirm</h3>
-          <p className="muted">
-            Gray blocks are drafts or previews. Only saved sessions use the normal session styling.
-          </p>
+          <p className="page-eyebrow">{t("chronoboard.timeline.eyebrow")}</p>
+          <h3 className="section-title">{t("chronoboard.timeline.title")}</h3>
+          <p className="muted">{t("chronoboard.timeline.intro")}</p>
         </div>
         <div className="stats-row">
           {candidateMovie ? (
             <span className="badge">{getLocalizedText(candidateMovie.title, i18n.language)}</span>
           ) : (
-            <span className="badge">Select a movie to plan</span>
+            <span className="badge">{t("chronoboard.timeline.selectMoviePlaceholder")}</span>
           )}
         </div>
       </div>
@@ -139,13 +137,13 @@ export function ChronoboardTimeline({
                 onClick={() => onSlotClick(slot.startTime)}
                 onDragOver={(event) => onSlotDragOver(event, slot)}
                 onDrop={(event) => onSlotDrop(event, slot)}
-                aria-label={`Plan a movie at ${slot.label}`}
+                aria-label={t("chronoboard.timeline.planAt", { time: slot.label })}
               />
             ))}
 
             {nowMarkerOffset ? (
               <div className="chrono-board__now" style={{ left: nowMarkerOffset }}>
-                <span>Now</span>
+                <span>{t("chronoboard.timeline.now")}</span>
               </div>
             ) : null}
 
@@ -158,15 +156,21 @@ export function ChronoboardTimeline({
                   <strong title={getLocalizedText(previewMovie.title, i18n.language)}>
                     {getLocalizedText(previewMovie.title, i18n.language)}
                   </strong>
-                  <span className="badge">Preview</span>
+                  <span className="badge">{t("chronoboard.timeline.preview")}</span>
                 </div>
                 <p className="chrono-session__time">
                   {formatTime(dragPreview.startTime)} - {formatTime(previewEndTime)}
                 </p>
                 <div className="chrono-session__footer">
-                  {previewDurationMinutes ? <span className="badge">{previewDurationMinutes} min</span> : null}
+                  {previewDurationMinutes ? (
+                    <span className="badge">
+                      {previewDurationMinutes} {t("common.units.minutesShort")}
+                    </span>
+                  ) : null}
                   <p className="chrono-session__meta">
-                    {dragOrigin === "draft" ? "Drop to move draft" : "Drop to stage a draft"}
+                    {dragOrigin === "draft"
+                      ? t("chronoboard.timeline.dropToMoveDraft")
+                      : t("chronoboard.timeline.dropToStageDraft")}
                   </p>
                 </div>
               </div>
@@ -193,14 +197,14 @@ export function ChronoboardTimeline({
                   <strong title={getLocalizedText(draftMovie.title, i18n.language)}>
                     {getLocalizedText(draftMovie.title, i18n.language)}
                   </strong>
-                  <span className="badge">Draft</span>
+                  <span className="badge">{t("chronoboard.timeline.draft")}</span>
                 </div>
                 <p className="chrono-session__time">
                   {formatTime(visibleDraft.start_time)} - {formatTime(visibleDraft.end_time)}
                 </p>
                 <div className="chrono-session__footer">
                   <span className="badge chrono-session__price">{formatCurrency(visibleDraft.price)}</span>
-                  <p className="chrono-session__meta">Pending confirmation</p>
+                  <p className="chrono-session__meta">{t("chronoboard.timeline.pendingConfirmation")}</p>
                 </div>
               </button>
             ) : null}
@@ -229,7 +233,11 @@ export function ChronoboardTimeline({
                   <div className="chrono-session__footer">
                     <span className="badge chrono-session__price">{formatCurrency(session.price)}</span>
                     <p className="chrono-session__meta">
-                      {soldTickets} sold / {session.available_seats}/{session.total_seats} left
+                      {t("chronoboard.timeline.soldSummary", {
+                        sold: soldTickets,
+                        available: session.available_seats,
+                        total: session.total_seats,
+                      })}
                     </p>
                   </div>
                 </button>
@@ -238,8 +246,8 @@ export function ChronoboardTimeline({
 
             {selectedDaySessions.length === 0 && !visibleDraft ? (
               <div className="chrono-board__empty">
-                <strong>No confirmed sessions on this day yet</strong>
-                <span>Drag a movie onto the timeline to stage the first draft for this board.</span>
+                <strong>{t("chronoboard.timeline.emptyTitle")}</strong>
+                <span>{t("chronoboard.timeline.emptyText")}</span>
               </div>
             ) : null}
           </div>

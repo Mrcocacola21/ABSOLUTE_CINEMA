@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { getMovieRequest, getScheduleRequest } from "@/api/schedule";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { getGenreLabel } from "@/shared/genres";
-import { getLocalizedText } from "@/shared/localization";
+import { getIntlLocale, getLocalizedText } from "@/shared/localization";
 import { getMovieStatusTranslationKey } from "@/shared/movieStatus";
 import { formatCurrency, formatDateTime, formatTime } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
@@ -20,20 +20,20 @@ function getMovieMonogram(title: string): string {
     .join("");
 }
 
-function formatSessionDayNumber(value: string): string {
-  return new Date(value).toLocaleDateString([], {
+function formatSessionDayNumber(value: string, language: string): string {
+  return new Date(value).toLocaleDateString(getIntlLocale(language), {
     day: "2-digit",
   });
 }
 
-function formatSessionMonth(value: string): string {
-  return new Date(value).toLocaleDateString([], {
+function formatSessionMonth(value: string, language: string): string {
+  return new Date(value).toLocaleDateString(getIntlLocale(language), {
     month: "short",
   });
 }
 
-function formatSessionDateLabel(value: string): string {
-  return new Date(value).toLocaleDateString([], {
+function formatSessionDateLabel(value: string, language: string): string {
+  return new Date(value).toLocaleDateString(getIntlLocale(language), {
     weekday: "short",
     day: "2-digit",
     month: "short",
@@ -71,7 +71,7 @@ export function MovieDetailsPage() {
     } catch (error) {
       setMovie(null);
       setSessions([]);
-      setErrorMessage(extractApiErrorMessage(error, t("movieDetailsUnavailable")));
+      setErrorMessage(extractApiErrorMessage(error, t("movie.errors.unavailable")));
     } finally {
       setIsLoading(false);
     }
@@ -100,8 +100,8 @@ export function MovieDetailsPage() {
     <>
       <section className="page-header page-header--movie-detail movie-hero">
         <div className="movie-hero__copy">
-          <p className="page-eyebrow">{t("movieDetailsEyebrow")}</p>
-          <h1 className="page-title">{movie ? movieTitle : t("movieDetails")}</h1>
+          <p className="page-eyebrow">{t("movie.details.eyebrow")}</p>
+          <h1 className="page-title">{movie ? movieTitle : t("movie.details.title")}</h1>
 
           {movie && movie.genres.length > 0 ? (
             <div className="meta-row movie-hero__taxonomy">
@@ -114,50 +114,50 @@ export function MovieDetailsPage() {
           ) : null}
 
           <p className="page-subtitle movie-hero__description">
-            {movie ? movieDescription : t("movieDetailsUnavailable")}
+            {movie ? movieDescription : t("movie.errors.unavailable")}
           </p>
         </div>
 
         <div className="movie-hero__aside">
           <div className="movie-hero__facts">
             <div className="movie-hero__fact">
-              <span>{t("status")}</span>
+              <span>{t("common.labels.status")}</span>
               <strong>{statusLabel}</strong>
             </div>
             <div className="movie-hero__fact">
-              <span>{t("duration")}</span>
-              <strong>{movie ? `${movie.duration_minutes} min` : "--"}</strong>
+              <span>{t("common.labels.duration")}</span>
+              <strong>{movie ? `${movie.duration_minutes} ${t("common.units.minutesShort")}` : "--"}</strong>
             </div>
             <div className="movie-hero__fact">
-              <span>{movie?.age_rating ? t("ageRating") : t("sessionsCount")}</span>
+              <span>{movie?.age_rating ? t("common.labels.ageRating") : t("common.labels.sessions")}</span>
               <strong>{movie?.age_rating ?? sessions.length}</strong>
             </div>
           </div>
 
           {sessionWindow ? (
             <div className="movie-hero__session-preview">
-              <span className="movie-hero__session-label">{t("nextSession")}</span>
-              <strong>{formatSessionDateLabel(sessionWindow.first.start_time)}</strong>
+              <span className="movie-hero__session-label">{t("movie.sessionWindow.nextSession")}</span>
+              <strong>{formatSessionDateLabel(sessionWindow.first.start_time, i18n.language)}</strong>
               <span>{formatSessionRange(sessionWindow.first.start_time, sessionWindow.first.end_time)}</span>
             </div>
           ) : (
             <div className="movie-hero__session-preview movie-hero__session-preview--empty">
-              <p className="muted">{t("noUpcomingSessionsShort")}</p>
+              <p className="muted">{t("movie.noUpcomingSessions.short")}</p>
             </div>
           )}
 
           <div className="actions-row movie-hero__actions">
             {sessions[0] ? (
               <Link to={`/schedule/${sessions[0].id}`} className="button">
-                {t("viewNextSession")}
+                {t("common.actions.viewNextSession")}
               </Link>
             ) : (
               <Link to="/schedule" className="button--ghost">
-                {t("browseSchedule")}
+                {t("common.actions.browseSchedule")}
               </Link>
             )}
             <Link to="/movies" className="button--ghost">
-              {t("backToCatalog")}
+              {t("common.actions.backToCatalog")}
             </Link>
           </div>
         </div>
@@ -166,19 +166,19 @@ export function MovieDetailsPage() {
       {isLoading ? (
         <StatePanel
           tone="loading"
-          title="Loading movie details"
-          message="Fetching the movie card and its available sessions."
+          title={t("movie.loading.title")}
+          message={t("movie.loading.message")}
         />
       ) : null}
 
       {!isLoading && errorMessage ? (
         <StatePanel
           tone="error"
-          title="Unable to load movie details"
+          title={t("movie.errors.title")}
           message={errorMessage}
           action={
             <button className="button--ghost" type="button" onClick={() => void loadMovieDetails()}>
-              Try again
+              {t("common.actions.retry")}
             </button>
           }
         />
@@ -187,7 +187,7 @@ export function MovieDetailsPage() {
       {!isLoading && !errorMessage && movie ? (
         <section className="movie-detail-grid">
           <article className="panel movie-detail-card movie-detail-card--poster">
-              <div className="movie-detail-card__poster-shell">
+            <div className="movie-detail-card__poster-shell">
               <div className="movie-detail-poster media-tile" aria-hidden="true">
                 {movie.poster_url ? (
                   <img src={movie.poster_url} alt="" className="media-tile__image" />
@@ -200,28 +200,30 @@ export function MovieDetailsPage() {
             <div className="movie-detail-card__copy">
               <div className="movie-detail-card__section-head movie-detail-card__section-head--stack">
                 <div className="movie-detail-card__section-copy">
-                  <p className="page-eyebrow">{t("movie")}</p>
-                  <h2 className="section-title">{t("movieDetails")}</h2>
+                  <p className="page-eyebrow">{t("common.labels.movie")}</p>
+                  <h2 className="section-title">{t("movie.details.title")}</h2>
                 </div>
               </div>
 
               <div className="movie-detail-card__fact-grid">
                 <div className="movie-detail-card__fact">
-                  <span>{t("status")}</span>
+                  <span>{t("common.labels.status")}</span>
                   <strong>{t(getMovieStatusTranslationKey(movie.status))}</strong>
                 </div>
                 <div className="movie-detail-card__fact">
-                  <span>{t("duration")}</span>
-                  <strong>{movie.duration_minutes} min</strong>
+                  <span>{t("common.labels.duration")}</span>
+                  <strong>
+                    {movie.duration_minutes} {t("common.units.minutesShort")}
+                  </strong>
                 </div>
                 {movie.age_rating ? (
                   <div className="movie-detail-card__fact">
-                    <span>{t("ageRating")}</span>
+                    <span>{t("common.labels.ageRating")}</span>
                     <strong>{movie.age_rating}</strong>
                   </div>
                 ) : null}
                 <div className="movie-detail-card__fact">
-                  <span>{t("sessionsCount")}</span>
+                  <span>{t("common.labels.sessions")}</span>
                   <strong>{sessions.length}</strong>
                 </div>
               </div>
@@ -239,13 +241,13 @@ export function MovieDetailsPage() {
               {sessionWindow ? (
                 <div className="movie-detail-card__window">
                   <div className="movie-detail-card__window-row">
-                    <span className="muted">{t("nextSession")}</span>
-                    <strong>{formatSessionDateLabel(sessionWindow.first.start_time)}</strong>
+                    <span className="muted">{t("movie.sessionWindow.nextSession")}</span>
+                    <strong>{formatSessionDateLabel(sessionWindow.first.start_time, i18n.language)}</strong>
                     <span>{formatSessionRange(sessionWindow.first.start_time, sessionWindow.first.end_time)}</span>
                   </div>
                   <div className="movie-detail-card__window-row">
-                    <span className="muted">{t("lastUpcomingSession")}</span>
-                    <strong>{formatSessionDateLabel(sessionWindow.last.start_time)}</strong>
+                    <span className="muted">{t("movie.sessionWindow.lastUpcomingSession")}</span>
+                    <strong>{formatSessionDateLabel(sessionWindow.last.start_time, i18n.language)}</strong>
                     <span>{formatSessionRange(sessionWindow.last.start_time, sessionWindow.last.end_time)}</span>
                   </div>
                 </div>
@@ -256,16 +258,16 @@ export function MovieDetailsPage() {
           <article className="panel movie-detail-card movie-detail-card--sessions">
             <div className="movie-detail-card__section-head">
               <div className="movie-detail-card__section-copy">
-                <p className="page-eyebrow">{t("upcomingSessions")}</p>
-                <h2 className="section-title">{t("daySessionsTitle")}</h2>
-                <p className="muted">{t("sessionCardHint")}</p>
+                <p className="page-eyebrow">{t("common.labels.upcomingSessions")}</p>
+                <h2 className="section-title">{t("schedule.board.title")}</h2>
+                <p className="muted">{t("common.hints.sessionCard")}</p>
               </div>
               <div className="movie-detail-card__section-summary">
                 <span className="badge">
-                  {sessions.length} {t("sessionsCount")}
+                  {sessions.length} {t("common.labels.sessions")}
                 </span>
                 {sessionWindow ? (
-                  <span className="badge">{formatSessionDateLabel(sessionWindow.first.start_time)}</span>
+                  <span className="badge">{formatSessionDateLabel(sessionWindow.first.start_time, i18n.language)}</span>
                 ) : null}
               </div>
             </div>
@@ -275,8 +277,8 @@ export function MovieDetailsPage() {
                 {sessions.map((session) => (
                   <article key={session.id} className="card timeline-card timeline-card--movie-detail">
                     <div className="timeline-card__date">
-                      <strong>{formatSessionDayNumber(session.start_time)}</strong>
-                      <span>{formatSessionMonth(session.start_time)}</span>
+                      <strong>{formatSessionDayNumber(session.start_time, i18n.language)}</strong>
+                      <span>{formatSessionMonth(session.start_time, i18n.language)}</span>
                     </div>
 
                     <div className="timeline-card__body">
@@ -294,12 +296,12 @@ export function MovieDetailsPage() {
                         </span>
                       </div>
 
-                      <p className="muted">{t("sessionCardHint")}</p>
+                      <p className="muted">{t("common.hints.sessionCard")}</p>
                     </div>
 
                     <div className="timeline-card__actions">
                       <Link to={`/schedule/${session.id}`} className="button">
-                        {t("viewSession")}
+                        {t("common.actions.viewSession")}
                       </Link>
                     </div>
                   </article>
@@ -307,10 +309,10 @@ export function MovieDetailsPage() {
               </div>
             ) : (
               <section className="empty-state empty-state--panel">
-                <h2>{t("noUpcomingSessionsTitle")}</h2>
-                <p>{t("noUpcomingSessionsText")}</p>
+                <h2>{t("movie.noUpcomingSessions.title")}</h2>
+                <p>{t("movie.noUpcomingSessions.text")}</p>
                 <Link to="/schedule" className="button--ghost">
-                  {t("browseSchedule")}
+                  {t("common.actions.browseSchedule")}
                 </Link>
               </section>
             )}

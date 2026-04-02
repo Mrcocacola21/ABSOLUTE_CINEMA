@@ -12,7 +12,7 @@ interface AttendancePanelProps {
 }
 
 export function AttendancePanel({ report, tickets, users }: AttendancePanelProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const recentTickets = [...tickets]
     .sort((left, right) => new Date(right.purchased_at).getTime() - new Date(left.purchased_at).getTime())
     .slice(0, 6);
@@ -25,39 +25,37 @@ export function AttendancePanel({ report, tickets, users }: AttendancePanelProps
     <section className="panel admin-reports">
       <div className="admin-section__header">
         <div>
-          <p className="page-eyebrow">Reports / Attendance</p>
-          <h2 className="section-title">Attendance and activity overview</h2>
-          <p className="muted">
-            Review session performance, latest bookings, and recent account activity in one place.
-          </p>
+          <p className="page-eyebrow">{t("admin.reports.eyebrow")}</p>
+          <h2 className="section-title">{t("admin.reports.title")}</h2>
+          <p className="muted">{t("admin.reports.intro")}</p>
         </div>
-        {report ? <span className="badge">{report.total_sessions} sessions tracked</span> : null}
+        {report ? <span className="badge">{report.total_sessions} {t("common.stats.sessionsTracked")}</span> : null}
       </div>
 
       {!report ? (
         <StatePanel
           tone="loading"
-          title="Loading reports"
-          message="Fetching attendance, bookings, and user activity."
+          title={t("admin.reports.loadingTitle")}
+          message={t("admin.reports.loadingMessage")}
         />
       ) : (
         <>
           <div className="cards-grid admin-report-summary">
             <article className="card admin-report-summary__card">
               <strong>{report.total_sessions}</strong>
-              <p className="muted">Sessions in the report</p>
+              <p className="muted">{t("admin.reports.summary.sessionsInReport")}</p>
             </article>
             <article className="card admin-report-summary__card">
               <strong>{report.total_tickets_sold}</strong>
-              <p className="muted">Tickets sold</p>
+              <p className="muted">{t("admin.reports.summary.ticketsSold")}</p>
             </article>
             <article className="card admin-report-summary__card">
               <strong>{activeUsers}</strong>
-              <p className="muted">Active accounts</p>
+              <p className="muted">{t("admin.reports.summary.activeAccounts")}</p>
             </article>
             <article className="card admin-report-summary__card">
               <strong>{formatDateTime(report.generated_at)}</strong>
-              <p className="muted">Last report refresh</p>
+              <p className="muted">{t("admin.reports.summary.lastRefresh")}</p>
             </article>
           </div>
 
@@ -65,8 +63,8 @@ export function AttendancePanel({ report, tickets, users }: AttendancePanelProps
             <section className="card admin-report-panel">
               <div className="admin-section__header">
                 <div>
-                  <p className="page-eyebrow">Attendance</p>
-                  <h3 className="section-title">Session performance</h3>
+                  <p className="page-eyebrow">{t("admin.reports.attendance.eyebrow")}</p>
+                  <h3 className="section-title">{t("admin.reports.attendance.title")}</h3>
                 </div>
                 <span className="badge">{report.sessions.length}</span>
               </div>
@@ -93,8 +91,8 @@ export function AttendancePanel({ report, tickets, users }: AttendancePanelProps
                 </div>
               ) : (
                 <section className="empty-state empty-state--panel">
-                  <h2>No attendance data yet</h2>
-                  <p>Attendance summaries appear after sessions are created and tickets start selling.</p>
+                  <h2>{t("admin.reports.attendance.emptyTitle")}</h2>
+                  <p>{t("admin.reports.attendance.emptyText")}</p>
                 </section>
               )}
             </section>
@@ -102,8 +100,8 @@ export function AttendancePanel({ report, tickets, users }: AttendancePanelProps
             <section className="card admin-report-panel">
               <div className="admin-section__header">
                 <div>
-                  <p className="page-eyebrow">Bookings</p>
-                  <h3 className="section-title">Recent ticket activity</h3>
+                  <p className="page-eyebrow">{t("admin.reports.bookings.eyebrow")}</p>
+                  <h3 className="section-title">{t("admin.reports.bookings.title")}</h3>
                 </div>
                 <span className="badge">{recentTickets.length}</span>
               </div>
@@ -115,7 +113,8 @@ export function AttendancePanel({ report, tickets, users }: AttendancePanelProps
                       <div>
                         <strong>{getLocalizedText(ticket.movie_title, i18n.language)}</strong>
                         <p className="muted">
-                          {formatDateTime(ticket.session_start_time)} | Seat {ticket.seat_row}-{ticket.seat_number}
+                          {formatDateTime(ticket.session_start_time)} |{" "}
+                          {t("admin.reports.bookingSeat", { seat: `${ticket.seat_row}-${ticket.seat_number}` })}
                         </p>
                       </div>
                       <div className="stats-row">
@@ -129,8 +128,8 @@ export function AttendancePanel({ report, tickets, users }: AttendancePanelProps
                 </div>
               ) : (
                 <section className="empty-state empty-state--panel">
-                  <h2>No ticket activity yet</h2>
-                  <p>Recent bookings will appear here once customers start reserving seats.</p>
+                  <h2>{t("admin.reports.bookings.emptyTitle")}</h2>
+                  <p>{t("admin.reports.bookings.emptyText")}</p>
                 </section>
               )}
             </section>
@@ -138,8 +137,8 @@ export function AttendancePanel({ report, tickets, users }: AttendancePanelProps
             <section className="card admin-report-panel">
               <div className="admin-section__header">
                 <div>
-                  <p className="page-eyebrow">Accounts</p>
-                  <h3 className="section-title">Newest users</h3>
+                  <p className="page-eyebrow">{t("admin.reports.accounts.eyebrow")}</p>
+                  <h3 className="section-title">{t("admin.reports.accounts.title")}</h3>
                 </div>
                 <span className="badge">{recentUsers.length}</span>
               </div>
@@ -155,7 +154,7 @@ export function AttendancePanel({ report, tickets, users }: AttendancePanelProps
                       <div className="stats-row">
                         <span className="badge">{formatStateLabel(user.role)}</span>
                         <span className="badge">
-                          {user.is_active ? "Active account" : "Inactive account"}
+                          {user.is_active ? t("common.states.activeAccount") : t("common.states.inactiveAccount")}
                         </span>
                         <span className="badge">{formatDateTime(user.created_at)}</span>
                       </div>
@@ -164,8 +163,8 @@ export function AttendancePanel({ report, tickets, users }: AttendancePanelProps
                 </div>
               ) : (
                 <section className="empty-state empty-state--panel">
-                  <h2>No registered users yet</h2>
-                  <p>User registrations will appear here after accounts are created.</p>
+                  <h2>{t("admin.reports.accounts.emptyTitle")}</h2>
+                  <p>{t("admin.reports.accounts.emptyText")}</p>
                 </section>
               )}
             </section>

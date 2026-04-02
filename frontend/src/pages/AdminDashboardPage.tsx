@@ -70,11 +70,11 @@ export function AdminDashboardPage() {
       setReport(attendanceResponse.data);
       setErrorMessage("");
     } catch (error) {
-      const message = extractApiErrorMessage(error, "Admin data is currently unavailable.");
+      const message = extractApiErrorMessage(error, t("admin.dashboard.unavailableMessage"));
       if (background) {
         setFeedback({
           tone: "error",
-          title: "Unable to refresh dashboard data",
+          title: t("admin.dashboard.refreshErrorTitle"),
           message,
         });
       } else {
@@ -95,26 +95,30 @@ export function AdminDashboardPage() {
 
   async function runAdminAction<T>(
     action: () => Promise<{ message: string; data: T }>,
-    actionLabel: string,
-    successTitle: string,
-    fallbackMessage: string,
+    options: {
+      pendingKey: string;
+      successTitleKey: string;
+      successMessageKey: string;
+      errorTitleKey: string;
+      fallbackMessageKey: string;
+    },
   ): Promise<T | null> {
-    setPendingActionLabel(actionLabel);
+    setPendingActionLabel(t(options.pendingKey));
     setFeedback(null);
     try {
       const response = await action();
       await refreshDashboard({ background: true });
       setFeedback({
         tone: "success",
-        title: successTitle,
-        message: response.message,
+        title: t(options.successTitleKey),
+        message: t(options.successMessageKey),
       });
       return response.data;
     } catch (error) {
       setFeedback({
         tone: "error",
-        title: `${successTitle} failed`,
-        message: extractApiErrorMessage(error, fallbackMessage),
+        title: t(options.errorTitleKey),
+        message: extractApiErrorMessage(error, t(options.fallbackMessageKey)),
       });
       return null;
     } finally {
@@ -125,72 +129,104 @@ export function AdminDashboardPage() {
   async function handleCreateMovie(payload: MovieCreatePayload) {
     return runAdminAction(
       () => createMovieRequest(payload),
-      "Creating movie",
-      "Movie created",
-      "Movie creation failed.",
+      {
+        pendingKey: "admin.actions.createMovieLoading",
+        successTitleKey: "admin.actions.createMovieSuccessTitle",
+        successMessageKey: "admin.actions.createMovieSuccessMessage",
+        errorTitleKey: "admin.actions.createMovieErrorTitle",
+        fallbackMessageKey: "admin.actions.createMovieFailure",
+      },
     );
   }
 
   async function handleUpdateMovie(movieId: string, payload: MovieUpdatePayload) {
     return runAdminAction(
       () => updateMovieRequest(movieId, payload),
-      "Updating movie",
-      "Movie updated",
-      "Movie update failed.",
+      {
+        pendingKey: "admin.actions.updateMovieLoading",
+        successTitleKey: "admin.actions.updateMovieSuccessTitle",
+        successMessageKey: "admin.actions.updateMovieSuccessMessage",
+        errorTitleKey: "admin.actions.updateMovieErrorTitle",
+        fallbackMessageKey: "admin.actions.updateMovieFailure",
+      },
     );
   }
 
   async function handleDeactivateMovie(movieId: string) {
     return runAdminAction(
       () => deactivateMovieRequest(movieId),
-      "Deactivating movie",
-      "Movie deactivated",
-      "Movie deactivation failed.",
+      {
+        pendingKey: "admin.actions.deactivateMovieLoading",
+        successTitleKey: "admin.actions.deactivateMovieSuccessTitle",
+        successMessageKey: "admin.actions.deactivateMovieSuccessMessage",
+        errorTitleKey: "admin.actions.deactivateMovieErrorTitle",
+        fallbackMessageKey: "admin.actions.deactivateMovieFailure",
+      },
     );
   }
 
   async function handleDeleteMovie(movieId: string) {
     return runAdminAction(
       () => deleteMovieRequest(movieId),
-      "Deleting movie",
-      "Movie deleted",
-      "Movie deletion failed.",
+      {
+        pendingKey: "admin.actions.deleteMovieLoading",
+        successTitleKey: "admin.actions.deleteMovieSuccessTitle",
+        successMessageKey: "admin.actions.deleteMovieSuccessMessage",
+        errorTitleKey: "admin.actions.deleteMovieErrorTitle",
+        fallbackMessageKey: "admin.actions.deleteMovieFailure",
+      },
     );
   }
 
   async function handleCreateSession(payload: SessionCreatePayload) {
     return runAdminAction(
       () => createSessionRequest(payload),
-      "Creating session",
-      "Session created",
-      "Session creation failed.",
+      {
+        pendingKey: "admin.actions.createSessionLoading",
+        successTitleKey: "admin.actions.createSessionSuccessTitle",
+        successMessageKey: "admin.actions.createSessionSuccessMessage",
+        errorTitleKey: "admin.actions.createSessionErrorTitle",
+        fallbackMessageKey: "admin.actions.createSessionFailure",
+      },
     );
   }
 
   async function handleUpdateSession(sessionId: string, payload: SessionUpdatePayload) {
     return runAdminAction(
       () => updateSessionRequest(sessionId, payload),
-      "Updating session",
-      "Session updated",
-      "Session update failed.",
+      {
+        pendingKey: "admin.actions.updateSessionLoading",
+        successTitleKey: "admin.actions.updateSessionSuccessTitle",
+        successMessageKey: "admin.actions.updateSessionSuccessMessage",
+        errorTitleKey: "admin.actions.updateSessionErrorTitle",
+        fallbackMessageKey: "admin.actions.updateSessionFailure",
+      },
     );
   }
 
   async function handleCancelSession(sessionId: string) {
     return runAdminAction(
       () => cancelSessionRequest(sessionId),
-      "Cancelling session",
-      "Session cancelled",
-      "Session cancellation failed.",
+      {
+        pendingKey: "admin.actions.cancelSessionLoading",
+        successTitleKey: "admin.actions.cancelSessionSuccessTitle",
+        successMessageKey: "admin.actions.cancelSessionSuccessMessage",
+        errorTitleKey: "admin.actions.cancelSessionErrorTitle",
+        fallbackMessageKey: "admin.actions.cancelSessionFailure",
+      },
     );
   }
 
   async function handleDeleteSession(sessionId: string) {
     return runAdminAction(
       () => deleteSessionRequest(sessionId),
-      "Deleting session",
-      "Session deleted",
-      "Session deletion failed.",
+      {
+        pendingKey: "admin.actions.deleteSessionLoading",
+        successTitleKey: "admin.actions.deleteSessionSuccessTitle",
+        successMessageKey: "admin.actions.deleteSessionSuccessMessage",
+        errorTitleKey: "admin.actions.deleteSessionErrorTitle",
+        fallbackMessageKey: "admin.actions.deleteSessionFailure",
+      },
     );
   }
 
@@ -203,28 +239,28 @@ export function AdminDashboardPage() {
     <>
       <section className="page-header">
         <div>
-          <p className="page-eyebrow">{t("adminWorkspaceEyebrow")}</p>
-          <h1 className="page-title">{t("dashboard")}</h1>
-          <p className="page-subtitle">{t("adminIntro")}</p>
+          <p className="page-eyebrow">{t("admin.dashboard.eyebrow")}</p>
+          <h1 className="page-title">{t("admin.dashboard.title")}</h1>
+          <p className="page-subtitle">{t("admin.dashboard.intro")}</p>
         </div>
         <div className="actions-row">
           <span className="badge">
-            {activeMoviesCount} {t("activeLabel")}
+            {activeMoviesCount} {t("common.states.active")}
           </span>
           <span className="badge">
-            {plannedMoviesCount} {t("plannedLabel")}
+            {plannedMoviesCount} {t("common.states.planned")}
           </span>
           <span className="badge">
-            {deactivatedMoviesCount} {t("deactivatedLabel")}
+            {deactivatedMoviesCount} {t("common.states.deactivated")}
           </span>
           <span className="badge">
-            {scheduledSessionsCount}/{sessions.length} {t("sessionBoardTitle")}
+            {scheduledSessionsCount}/{sessions.length} {t("common.labels.sessions")}
           </span>
           <span className="badge">
-            {tickets.length} {t("ticketsPanelTitle")}
+            {tickets.length} {t("common.labels.tickets")}
           </span>
           <span className="badge">
-            {users.length} {t("usersPanelTitle")}
+            {users.length} {t("common.labels.users")}
           </span>
           <button
             className="button--ghost"
@@ -232,44 +268,38 @@ export function AdminDashboardPage() {
             disabled={isLoading || isRefreshing || Boolean(pendingActionLabel)}
             onClick={() => void refreshDashboard({ background: true })}
           >
-            {isRefreshing ? "Refreshing..." : "Refresh data"}
+            {isRefreshing ? t("common.actions.refresh") : t("common.actions.refreshData")}
           </button>
         </div>
       </section>
 
       <section className="cards-grid admin-overview-grid">
         <article className="card admin-overview-card">
-          <p className="page-eyebrow">Movie Management</p>
-          <h2 className="section-title">Maintain the catalog</h2>
-          <p className="muted">
-            Create titles, keep planned films ready for scheduling, and archive movies that should stay out of rotation.
-          </p>
+          <p className="page-eyebrow">{t("admin.overview.movieManagementEyebrow")}</p>
+          <h2 className="section-title">{t("admin.overview.movieManagementTitle")}</h2>
+          <p className="muted">{t("admin.overview.movieManagementText")}</p>
           <div className="stats-row">
-            <span className="badge">{plannedMoviesCount} planned</span>
-            <span className="badge">{activeMoviesCount} active</span>
-            <span className="badge">{deactivatedMoviesCount} deactivated</span>
+            <span className="badge">{plannedMoviesCount} {t("common.states.planned")}</span>
+            <span className="badge">{activeMoviesCount} {t("common.states.active")}</span>
+            <span className="badge">{deactivatedMoviesCount} {t("common.states.deactivated")}</span>
           </div>
         </article>
         <article className="card admin-overview-card">
-          <p className="page-eyebrow">Session Planner</p>
-          <h2 className="section-title">Schedule on the chronoboard</h2>
-          <p className="muted">
-            Drag planned or active movies onto the board, confirm the slot, and let scheduled titles become active automatically.
-          </p>
+          <p className="page-eyebrow">{t("admin.overview.sessionPlannerEyebrow")}</p>
+          <h2 className="section-title">{t("admin.overview.sessionPlannerTitle")}</h2>
+          <p className="muted">{t("admin.overview.sessionPlannerText")}</p>
           <div className="stats-row">
-            <span className="badge">{scheduledSessionsCount} scheduled</span>
-            <span className="badge">{sessions.length - scheduledSessionsCount} closed out</span>
+            <span className="badge">{scheduledSessionsCount} {t("admin.overview.scheduled")}</span>
+            <span className="badge">{sessions.length - scheduledSessionsCount} {t("admin.overview.closedOut")}</span>
           </div>
         </article>
         <article className="card admin-overview-card">
-          <p className="page-eyebrow">Reports</p>
-          <h2 className="section-title">Track demand and attendance</h2>
-          <p className="muted">
-            Review attendance, latest bookings, and new users without leaving the admin workspace.
-          </p>
+          <p className="page-eyebrow">{t("admin.overview.reportsEyebrow")}</p>
+          <h2 className="section-title">{t("admin.overview.reportsTitle")}</h2>
+          <p className="muted">{t("admin.overview.reportsText")}</p>
           <div className="stats-row">
-            <span className="badge">{tickets.length} bookings</span>
-            <span className="badge">{users.length} accounts</span>
+            <span className="badge">{tickets.length} {t("common.stats.bookings")}</span>
+            <span className="badge">{users.length} {t("common.stats.accounts")}</span>
           </div>
         </article>
       </section>
@@ -277,8 +307,8 @@ export function AdminDashboardPage() {
       {pendingActionLabel || isRefreshing ? (
         <StatusBanner
           tone="info"
-          title="Refreshing dashboard"
-          message={pendingActionLabel ? `${pendingActionLabel}...` : "Refreshing the latest dashboard data."}
+          title={t("admin.dashboard.refreshBannerTitle")}
+          message={pendingActionLabel ? `${pendingActionLabel}...` : t("admin.dashboard.refreshBannerMessage")}
         />
       ) : null}
 
@@ -293,19 +323,19 @@ export function AdminDashboardPage() {
       {isLoading ? (
         <StatePanel
           tone="loading"
-          title="Loading the admin dashboard"
-          message="Fetching movies, sessions, tickets, users, and attendance."
+          title={t("admin.dashboard.loadingTitle")}
+          message={t("admin.dashboard.loadingMessage")}
         />
       ) : null}
 
       {!isLoading && errorMessage ? (
         <StatePanel
           tone="error"
-          title="Unable to load the admin dashboard"
+          title={t("admin.dashboard.errorTitle")}
           message={errorMessage}
           action={
             <button className="button--ghost" type="button" onClick={() => void refreshDashboard()}>
-              Try again
+              {t("common.actions.retry")}
             </button>
           }
         />

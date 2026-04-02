@@ -60,10 +60,10 @@ export function ScheduleToolbar(props: ScheduleToolbarProps) {
       <section className="panel toolbar-panel toolbar-panel--schedule">
         <div className="toolbar-panel__header toolbar-panel__header--schedule">
           <div className="toolbar-panel__intro">
-            <p className="page-eyebrow">{t("browseSchedule")}</p>
-            <h2 className="section-title">{t("upcomingSessions")}</h2>
+            <p className="page-eyebrow">{t("common.actions.browseSchedule")}</p>
+            <h2 className="section-title">{t("common.labels.upcomingSessions")}</h2>
             <p className="toolbar-panel__summary toolbar-panel__summary--schedule">
-              {t("scheduleQueryHint")}
+              {t("schedule.list.queryHint")}
             </p>
           </div>
 
@@ -74,11 +74,11 @@ export function ScheduleToolbar(props: ScheduleToolbarProps) {
 
         <div className="toolbar toolbar--schedule-list">
           <label className="field field--schedule-search">
-            <span>{t("searchByTitle")}</span>
+            <span>{t("movies.filters.searchByTitle")}</span>
             <input
               value={props.query}
               onChange={(event) => props.onChange("query", event.target.value)}
-              placeholder={t("searchPlaceholder")}
+              placeholder={t("movies.filters.searchPlaceholder")}
               list={props.querySuggestions.length > 0 ? suggestionListId : undefined}
               autoComplete="off"
             />
@@ -90,16 +90,14 @@ export function ScheduleToolbar(props: ScheduleToolbarProps) {
               </datalist>
             ) : null}
             <span className="field__hint">
-              {t("scheduleSearchSuggestHint", {
-                defaultValue: "Start typing to see matching full movie titles.",
-              })}
+              {t("schedule.list.searchSuggestHint")}
             </span>
           </label>
 
           <label className="field field--schedule-compact">
-            <span>{t("chooseDay")}</span>
+            <span>{t("schedule.board.dayLabel")}</span>
             <select value={props.listDay} onChange={(event) => props.onChange("listDay", event.target.value)}>
-              <option value="">{t("allDays")}</option>
+              <option value="">{t("common.labels.allDays")}</option>
               {props.dayOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -109,33 +107,31 @@ export function ScheduleToolbar(props: ScheduleToolbarProps) {
           </label>
 
           <label className="field field--schedule-compact">
-            <span>{t("dateSortLabel", { defaultValue: "Date order" })}</span>
+            <span>{t("schedule.list.sort.dateOrder")}</span>
             <select
               value={props.dateSort}
               onChange={(event) => props.onDateSortChange(event.target.value as ScheduleDateSortMode)}
             >
-              <option value="nearest">{t("nearestFirst")}</option>
-              <option value="farthest">{t("farthestFirst")}</option>
+              <option value="nearest">{t("schedule.list.sort.nearestFirst")}</option>
+              <option value="farthest">{t("schedule.list.sort.farthestFirst")}</option>
             </select>
           </label>
 
           <label className="field field--schedule-compact">
-            <span>{t("seatSortLabel", { defaultValue: "Free seats order" })}</span>
+            <span>{t("schedule.list.sort.freeSeatsOrder")}</span>
             <select
               value={props.seatSort}
               onChange={(event) => props.onSeatSortChange(event.target.value as ScheduleSeatSortMode)}
             >
-              <option value="">
-                {t("noSeatSorting", { defaultValue: "No seat sorting" })}
-              </option>
-              <option value="most_occupied">{t("mostOccupiedFirst")}</option>
-              <option value="least_occupied">{t("leastOccupiedFirst")}</option>
+              <option value="">{t("schedule.list.sort.noSeatSorting")}</option>
+              <option value="most_occupied">{t("schedule.list.sort.mostOccupiedFirst")}</option>
+              <option value="least_occupied">{t("schedule.list.sort.leastOccupiedFirst")}</option>
             </select>
           </label>
 
           <div className="toolbar__actions toolbar__actions--schedule">
             <button className="button--ghost" type="button" onClick={props.onReset}>
-              {t("resetFilters")}
+              {t("common.actions.resetFilters")}
             </button>
           </div>
         </div>
@@ -147,25 +143,25 @@ export function ScheduleToolbar(props: ScheduleToolbarProps) {
     <section className="panel toolbar-panel">
       <div className="toolbar-panel__header">
         <div>
-          <p className="page-eyebrow">{t("filters")}</p>
-          <h2 className="section-title">{t("browseControls")}</h2>
+          <p className="page-eyebrow">{t("common.labels.filters")}</p>
+          <h2 className="section-title">{t("common.labels.browseControls")}</h2>
         </div>
         <p className="toolbar-panel__summary">{props.resultsLabel}</p>
       </div>
 
       <div className="toolbar">
         <label className="field field--search">
-          <span>{t("searchByTitle")}</span>
+          <span>{t("movies.filters.searchByTitle")}</span>
           <input
             value={props.query}
             onChange={(event) => props.onChange("query", event.target.value)}
-            placeholder={t("searchPlaceholder")}
+            placeholder={t("movies.filters.searchPlaceholder")}
           />
         </label>
         <label className="field">
-          <span>{t("movie")}</span>
+          <span>{t("common.labels.movie")}</span>
           <select value={props.movieId} onChange={(event) => props.onChange("movieId", event.target.value)}>
-            <option value="">{t("allMovies")}</option>
+            <option value="">{t("common.labels.allMovies")}</option>
             {props.movies.map((movie) => (
               <option key={movie.id} value={movie.id}>
                 {movie.title}
@@ -174,22 +170,22 @@ export function ScheduleToolbar(props: ScheduleToolbarProps) {
           </select>
         </label>
         <label className="field">
-          <span>{t("sortBy")}</span>
+          <span>{t("common.labels.sortBy")}</span>
           <select value={props.sortBy} onChange={(event) => props.onChange("sortBy", event.target.value)}>
-            <option value="start_time">{t("dateTime")}</option>
-            <option value="available_seats">{t("availableSeats")}</option>
+            <option value="start_time">{t("common.labels.dateTime")}</option>
+            <option value="available_seats">{t("common.labels.availableSeats")}</option>
           </select>
         </label>
         <label className="field">
-          <span>{t("sortOrder")}</span>
+          <span>{t("schedule.list.sort.dateOrder")}</span>
           <select value={props.sortOrder} onChange={(event) => props.onChange("sortOrder", event.target.value)}>
-            <option value="asc">{t("ascending")}</option>
-            <option value="desc">{t("descending")}</option>
+            <option value="asc">{t("common.sort.ascending")}</option>
+            <option value="desc">{t("common.sort.descending")}</option>
           </select>
         </label>
         <div className="toolbar__actions">
           <button className="button--ghost" type="button" onClick={props.onReset}>
-            {t("resetFilters")}
+            {t("common.actions.resetFilters")}
           </button>
         </div>
       </div>

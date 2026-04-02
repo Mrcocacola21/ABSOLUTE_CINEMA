@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { StatusBanner } from "@/shared/ui/StatusBanner";
 import type { BoardStats, PlannerNotice, QuickDayOption } from "@/widgets/admin/chronoboard/types";
 import { formatDayLabel } from "@/widgets/admin/chronoboard/utils";
@@ -25,29 +27,29 @@ export function ChronoboardHeader({
   onDiscardDraft,
   onDismissNotice,
 }: ChronoboardHeaderProps) {
+  const { t } = useTranslation();
+
   return (
     <>
       <div className="admin-board-context">
         <div className="admin-board-context__hero">
           <div className="admin-board-context__copy">
-            <p className="admin-board-context__eyebrow">Board For</p>
+            <p className="admin-board-context__eyebrow">{t("chronoboard.header.eyebrow")}</p>
             <h2 className="admin-board-context__title">{formatDayLabel(selectedDay)}</h2>
-            <p className="admin-board-context__subtitle">
-              One hall, one timeline. Stage drafts on the board first, then confirm them from the inspector.
-            </p>
+            <p className="admin-board-context__subtitle">{t("chronoboard.header.subtitle")}</p>
           </div>
           <div className="admin-board-context__controls">
             <label className="field">
-              <span>Board date</span>
+              <span>{t("common.labels.boardDate")}</span>
               <input type="date" value={selectedDay} onChange={(event) => onSelectedDayChange(event.target.value)} />
             </label>
             <div className="actions-row">
               <button className="button--ghost" type="button" onClick={onJumpToToday}>
-                Today
+                {t("common.actions.today")}
               </button>
               {hasDraft ? (
                 <button className="button--ghost" type="button" onClick={onDiscardDraft}>
-                  Discard draft
+                  {t("common.actions.discardDraft")}
                 </button>
               ) : null}
             </div>
@@ -55,10 +57,10 @@ export function ChronoboardHeader({
         </div>
 
         <div className="stats-row">
-          <span className="badge">{boardStats.sessions} sessions</span>
-          <span className="badge">{boardStats.soldTickets} tickets sold</span>
-          <span className="badge">{boardStats.availableSeats} seats open</span>
-          {hasDraft ? <span className="badge">1 draft pending</span> : null}
+          <span className="badge">{boardStats.sessions} {t("common.labels.sessions")}</span>
+          <span className="badge">{boardStats.soldTickets} {t("common.labels.ticketsSold")}</span>
+          <span className="badge">{boardStats.availableSeats} {t("common.labels.availableSeats")}</span>
+          {hasDraft ? <span className="badge">{t("chronoboard.header.draftPending")}</span> : null}
         </div>
 
         <div className="day-pills">
@@ -70,7 +72,9 @@ export function ChronoboardHeader({
               onClick={() => onSelectedDayChange(option.value)}
             >
               <strong>{option.label}</strong>
-              <span>{option.count} sessions</span>
+              <span>
+                {option.count} {t("common.labels.sessions")}
+              </span>
             </button>
           ))}
         </div>
@@ -83,7 +87,7 @@ export function ChronoboardHeader({
           message={plannerNotice.message}
           action={
             <button className="button--ghost" type="button" onClick={onDismissNotice}>
-              Dismiss
+              {t("common.actions.dismiss")}
             </button>
           }
         />

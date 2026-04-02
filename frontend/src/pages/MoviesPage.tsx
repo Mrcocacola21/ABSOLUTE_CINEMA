@@ -41,7 +41,7 @@ export function MoviesPage() {
     } catch (error) {
       setMovies([]);
       setItems([]);
-      setErrorMessage(extractApiErrorMessage(error, t("movieCatalogUnavailable")));
+      setErrorMessage(extractApiErrorMessage(error, t("movies.errors.unavailable")));
     } finally {
       setIsLoading(false);
     }
@@ -118,25 +118,25 @@ export function MoviesPage() {
     <>
       <section className="page-header">
         <div>
-          <p className="page-eyebrow">{t("catalogEyebrow")}</p>
-          <h1 className="page-title">{t("movieCatalogTitle")}</h1>
-          <p className="page-subtitle">{t("catalogIntro")}</p>
+          <p className="page-eyebrow">{t("movies.catalog.eyebrow")}</p>
+          <h1 className="page-title">{t("movies.catalog.title")}</h1>
+          <p className="page-subtitle">{t("movies.catalog.intro")}</p>
         </div>
         <div className="stats-row">
           <span className="badge">
-            {movies.length} {t("movies")}
+            {movies.length} {t("common.labels.movies")}
           </span>
           <span className="badge">
-            {movies.filter((movie) => movie.status === "active").length} {t("activeLabel")}
+            {movies.filter((movie) => movie.status === "active").length} {t("common.states.active")}
           </span>
           <span className="badge">
-            {movies.filter((movie) => movie.status === "planned").length} {t("plannedLabel")}
+            {movies.filter((movie) => movie.status === "planned").length} {t("common.states.planned")}
           </span>
           <span className="badge">
-            {movies.filter((movie) => movie.status === "deactivated").length} {t("deactivatedLabel")}
+            {movies.filter((movie) => movie.status === "deactivated").length} {t("common.states.deactivated")}
           </span>
           <span className="badge">
-            {items.length} {t("upcomingSessions")}
+            {items.length} {t("common.labels.upcomingSessions")}
           </span>
         </div>
       </section>
@@ -145,11 +145,11 @@ export function MoviesPage() {
         <section className="panel toolbar-panel">
           <div className="toolbar-panel__header">
             <div>
-              <p className="page-eyebrow">{t("filters")}</p>
-              <h2 className="section-title">{t("browseControls")}</h2>
+              <p className="page-eyebrow">{t("common.labels.filters")}</p>
+              <h2 className="section-title">{t("common.labels.browseControls")}</h2>
             </div>
             <p className="toolbar-panel__summary">
-              {t("catalogResultsLabel", {
+              {t("movies.catalog.resultsLabel", {
                 movies: filteredMovies.length,
                 genres: genreOptions.length,
               })}
@@ -158,17 +158,17 @@ export function MoviesPage() {
 
           <div className="toolbar toolbar--catalog">
             <label className="field field--search">
-              <span>{t("searchByTitle")}</span>
+              <span>{t("movies.filters.searchByTitle")}</span>
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder={t("searchPlaceholder")}
+                placeholder={t("movies.filters.searchPlaceholder")}
               />
             </label>
             <label className="field">
-              <span>{t("genre")}</span>
+              <span>{t("common.labels.genre")}</span>
               <select value={genre} onChange={(event) => setGenre(event.target.value as GenreCode | "")}>
-                <option value="">{t("allGenres")}</option>
+                <option value="">{t("common.labels.allGenres")}</option>
                 {genreOptions.map((currentGenre) => (
                   <option key={currentGenre} value={currentGenre}>
                     {getGenreLabel(currentGenre, i18n.language)}
@@ -177,20 +177,20 @@ export function MoviesPage() {
               </select>
             </label>
             <label className="field">
-              <span>{t("status")}</span>
+              <span>{t("common.labels.status")}</span>
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value as StatusFilter)}
               >
-                <option value="all">{t("allStatuses")}</option>
-                <option value="planned">{t("plannedOnly")}</option>
-                <option value="active">{t("activeOnly")}</option>
-                <option value="deactivated">{t("deactivatedOnly")}</option>
+                <option value="all">{t("movies.filters.allStatuses")}</option>
+                <option value="planned">{t("movies.filters.plannedOnly")}</option>
+                <option value="active">{t("movies.filters.activeOnly")}</option>
+                <option value="deactivated">{t("movies.filters.deactivatedOnly")}</option>
               </select>
             </label>
             <div className="toolbar__actions">
               <button className="button--ghost" type="button" onClick={resetFilters}>
-                {t("resetFilters")}
+                {t("common.actions.resetFilters")}
               </button>
             </div>
           </div>
@@ -200,19 +200,19 @@ export function MoviesPage() {
       {isLoading ? (
         <StatePanel
           tone="loading"
-          title="Loading the movie catalog"
-          message="Fetching movies and upcoming sessions."
+          title={t("movies.loading.title")}
+          message={t("movies.loading.message")}
         />
       ) : null}
 
       {!isLoading && errorMessage ? (
         <StatePanel
           tone="error"
-          title="Unable to load the movie catalog"
+          title={t("movies.errors.title")}
           message={errorMessage}
           action={
             <button className="button--ghost" type="button" onClick={() => void loadMoviesCatalog()}>
-              Try again
+              {t("common.actions.retry")}
             </button>
           }
         />
@@ -220,10 +220,10 @@ export function MoviesPage() {
 
       {!isLoading && !errorMessage && filteredMovies.length === 0 ? (
         <section className="empty-state empty-state--panel">
-          <h2>{t("catalogEmptyTitle")}</h2>
-          <p>{t("catalogEmptyText")}</p>
+          <h2>{t("movies.catalog.emptyTitle")}</h2>
+          <p>{t("movies.catalog.emptyText")}</p>
           <button className="button--ghost" type="button" onClick={resetFilters}>
-            {t("resetFilters")}
+            {t("common.actions.resetFilters")}
           </button>
         </section>
       ) : null}

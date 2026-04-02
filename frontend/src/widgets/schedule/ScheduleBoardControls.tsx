@@ -34,18 +34,18 @@ export function ScheduleBoardControls({
     <section className="panel day-panel schedule-board-controls">
       <div className="toolbar-panel__header">
         <div>
-          <p className="page-eyebrow">{t("chooseDay")}</p>
-          <h2 className="section-title">{t("daySessionsTitle")}</h2>
-          <p className="toolbar-panel__summary">{t("scheduleDayHint")}</p>
+          <p className="page-eyebrow">{t("schedule.board.dayLabel")}</p>
+          <h2 className="section-title">{t("schedule.board.title")}</h2>
+          <p className="toolbar-panel__summary">{t("schedule.board.hint")}</p>
         </div>
         <p className="toolbar-panel__summary">{resultsLabel}</p>
       </div>
 
       <div className="toolbar toolbar--schedule-board">
         <label className="field">
-          <span>{t("movie")}</span>
+          <span>{t("common.labels.movie")}</span>
           <select value={movieId} onChange={(event) => onFilterChange("movieId", event.target.value)}>
-            <option value="">{t("allMovies")}</option>
+            <option value="">{t("common.labels.allMovies")}</option>
             {movies.map((movie) => (
               <option key={movie.id} value={movie.id}>
                 {movie.title}
@@ -55,9 +55,9 @@ export function ScheduleBoardControls({
         </label>
 
         <label className="field">
-          <span>{t("genre")}</span>
+          <span>{t("common.labels.genre")}</span>
           <select value={genre} onChange={(event) => onFilterChange("genre", event.target.value)}>
-            <option value="">{t("allGenres")}</option>
+            <option value="">{t("common.labels.allGenres")}</option>
             {genres.map((currentGenre) => (
               <option key={currentGenre} value={currentGenre}>
                 {getGenreLabel(currentGenre, i18n.language)}
@@ -68,7 +68,7 @@ export function ScheduleBoardControls({
 
         <div className="toolbar__actions">
           <button className="button--ghost" type="button" onClick={onReset}>
-            {t("resetFilters")}
+            {t("common.actions.resetFilters")}
           </button>
         </div>
       </div>
@@ -88,7 +88,7 @@ export function ScheduleBoardControls({
           ))}
         </div>
       ) : (
-        <div className="empty-state">{t("scheduleEmptyDays")}</div>
+        <div className="empty-state">{t("schedule.board.emptyDays")}</div>
       )}
     </section>
   );

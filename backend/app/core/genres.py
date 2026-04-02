@@ -41,7 +41,7 @@ GENRE_DEFINITIONS: tuple[GenreDefinition, ...] = (
     GenreDefinition("romance", uk="Романтика", en="Romance", aliases=("romantic",)),
     GenreDefinition(
         "science_fiction",
-        uk="Наукова фантастика",
+        uk="Фантастика",
         en="Science Fiction",
         aliases=("sci-fi", "sci fi", "scifi", "fantastic", "фантастика"),
     ),

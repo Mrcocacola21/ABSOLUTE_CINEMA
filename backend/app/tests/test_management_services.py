@@ -326,14 +326,14 @@ def build_ticket(ticket_id: str = "ticket-1") -> dict[str, object]:
 def test_movie_create_schema_accepts_localized_fields_and_normalizes_genres() -> None:
     payload = MovieCreate(
         title={"uk": "Дюна", "en": "Dune"},
-        description={"uk": "Наукова фантастика", "en": "Science fiction"},
+        description={"uk": "Фантастика", "en": "Science fiction"},
         duration_minutes=155,
         genres=["Sci-Fi", " Drama "],
         status=MovieStatuses.PLANNED,
     )
 
     assert payload.title == LocalizedText(uk="Дюна", en="Dune")
-    assert payload.description == LocalizedText(uk="Наукова фантастика", en="Science fiction")
+    assert payload.description == LocalizedText(uk="Фантастика", en="Science fiction")
     assert payload.genres == ["science_fiction", "drama"]
 
 

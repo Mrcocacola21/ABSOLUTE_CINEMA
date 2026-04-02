@@ -6,6 +6,10 @@ export function normalizeLanguageCode(language?: string): SupportedLanguageCode 
   return language?.toLowerCase().startsWith("en") ? "en" : "uk";
 }
 
+export function getIntlLocale(language?: string): string {
+  return normalizeLanguageCode(language) === "en" ? "en-US" : "uk-UA";
+}
+
 export function getLocalizedText(text: LocalizedText | null | undefined, language: string): string {
   if (!text) {
     return "";

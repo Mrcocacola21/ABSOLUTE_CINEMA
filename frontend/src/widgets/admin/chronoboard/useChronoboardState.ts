@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { SessionCreatePayload, SessionUpdatePayload } from "@/api/admin";
 import { buildGenreSearchText } from "@/shared/genres";
@@ -55,6 +56,7 @@ export function useChronoboardState({
   onCancelSession,
   onDeleteSession,
 }: UseChronoboardStateOptions) {
+  const { t } = useTranslation();
   const dragActivationFrameRef = useRef<number | null>(null);
   const dragMetaRef = useRef<{ movieId: string; origin: DragOrigin } | null>(null);
   const [plannerMovieQuery, setPlannerMovieQuery] = useState("");
@@ -219,21 +221,21 @@ export function useChronoboardState({
   ): string | null {
     const movie = moviesById[movieId];
     if (!movie) {
-      return "Choose a valid movie before scheduling.";
+      return t("chronoboard.notices.chooseValidMovie");
     }
 
     const startDate = new Date(startTime);
     if (Number.isNaN(startDate.getTime())) {
-      return "Select a valid session start time.";
+      return t("chronoboard.notices.selectValidStart");
     }
     if (startDate.getTime() <= Date.now()) {
-      return "Sessions must start in the future.";
+      return t("chronoboard.notices.sessionsFutureOnly");
     }
 
     const startHour = startDate.getHours();
     const startMinute = startDate.getMinutes();
     if (startHour > LAST_SESSION_START_HOUR || (startHour === LAST_SESSION_START_HOUR && startMinute > 0)) {
-      return "New sessions can start no later than 22:00.";
+      return t("chronoboard.notices.latestStartTime");
     }
 
     const proposedDurationMinutes = durationMinutesOverride ?? movie.duration_minutes;
@@ -249,7 +251,10 @@ export function useChronoboardState({
     });
 
     if (blockingSession) {
-      return `This slot overlaps with "${getMovieLabel(blockingSession.movie)}" (${formatTime(blockingSession.start_time)}-${formatTime(blockingSession.end_time)}).`;
+      return t("chronoboard.notices.overlapMessage", {
+        movie: getMovieLabel(blockingSession.movie),
+        timeRange: `${formatTime(blockingSession.start_time)}-${formatTime(blockingSession.end_time)}`,
+      });
     }
 
     return null;
@@ -379,8 +384,8 @@ export function useChronoboardState({
       setPlannerNotice({
         scope: "planning",
         tone: "error",
-        title: "Draft unavailable",
-        message: "The current draft can no longer be moved because its movie is unavailable.",
+        title: t("chronoboard.notices.draftUnavailableTitle"),
+        message: t("chronoboard.notices.draftUnavailableMessage"),
       });
       return;
     }
@@ -391,7 +396,7 @@ export function useChronoboardState({
       setPlannerNotice({
         scope: "planning",
         tone: "warning",
-        title: "Slot unavailable",
+        title: t("chronoboard.notices.slotUnavailableTitle"),
         message: blockedReason,
       });
       return;
@@ -412,8 +417,11 @@ export function useChronoboardState({
     setPlannerNotice({
       scope: "planning",
       tone: "success",
-      title: "Draft moved on the board",
-      message: `${getMovieLabel(movie)} is now staged at ${formatLocalDateTime(startTime)}. It is still only saved after you press Create Session.`,
+      title: t("chronoboard.notices.draftMovedTitle"),
+      message: t("chronoboard.notices.draftMovedMessage", {
+        movie: getMovieLabel(movie),
+        time: formatLocalDateTime(startTime),
+      }),
     });
   }
 
@@ -422,8 +430,10 @@ export function useChronoboardState({
     setPlannerNotice({
       scope: "planning",
       tone: "info",
-      title: "Movie ready for planning",
-      message: `Drag "${getMovieLabel(movie)}" onto the timeline, or click a free slot to start a draft.`,
+      title: t("chronoboard.notices.movieReadyTitle"),
+      message: t("chronoboard.notices.movieReadyMessage", {
+        movie: getMovieLabel(movie),
+      }),
     });
   }
 
@@ -433,8 +443,8 @@ export function useChronoboardState({
       setPlannerNotice({
         scope: "planning",
         tone: "error",
-        title: "Movie unavailable",
-        message: "The selected movie is no longer available for scheduling.",
+        title: t("chronoboard.notices.movieUnavailableTitle"),
+        message: t("chronoboard.notices.movieUnavailableMessage"),
       });
       return;
     }
@@ -444,7 +454,7 @@ export function useChronoboardState({
       setPlannerNotice({
         scope: "planning",
         tone: "warning",
-        title: "Slot unavailable",
+        title: t("chronoboard.notices.slotUnavailableTitle"),
         message: blockedReason,
       });
       return;
@@ -455,8 +465,11 @@ export function useChronoboardState({
     setPlannerNotice({
       scope: "planning",
       tone: "success",
-      title: "Draft placed on the board",
-      message: `${getMovieLabel(movie)} is now staged at ${formatLocalDateTime(startTime)}. It will only be saved after you press Create Session.`,
+      title: t("chronoboard.notices.draftPlacedTitle"),
+      message: t("chronoboard.notices.draftPlacedMessage", {
+        movie: getMovieLabel(movie),
+        time: formatLocalDateTime(startTime),
+      }),
     });
   }
 
@@ -499,18 +512,18 @@ export function useChronoboardState({
       setPlannerNotice({
         scope: "planning",
         tone: "info",
-        title: "Select a movie first",
-        message: "Choose a movie from the Planning Shelf, then click a free slot on the board.",
+        title: t("chronoboard.notices.selectMovieFirstTitle"),
+        message: t("chronoboard.notices.selectMovieFirstMessage"),
       });
       return;
     }
 
     if (draftPlacement && draftPlacement.movie_id === selectedMovie.id) {
-      moveDraftPlacement(startTime, "Draft moved from a board click");
+      moveDraftPlacement(startTime, t("chronoboard.inspector.draftSource.boardMove"));
       return;
     }
 
-    handleSlotPlacement(selectedMovie.id, startTime, "Draft placed from a board click");
+    handleSlotPlacement(selectedMovie.id, startTime, t("chronoboard.inspector.draftSource.boardClick"));
   }
 
   function handleBoardSlotDragOver(event: DragEvent<HTMLButtonElement>, slot: BoardSlot) {
@@ -547,11 +560,11 @@ export function useChronoboardState({
     const currentDragOrigin = activeDrag?.origin ?? null;
     clearBoardDragState();
     if (currentDragOrigin === "draft" && draftPlacement?.movie_id === movieId) {
-      moveDraftPlacement(slot.startTime, "Draft moved from drag and drop");
+      moveDraftPlacement(slot.startTime, t("chronoboard.inspector.draftSource.dragMove"));
       return;
     }
 
-    handleSlotPlacement(movieId, slot.startTime, "Draft placed from drag and drop");
+    handleSlotPlacement(movieId, slot.startTime, t("chronoboard.inspector.draftSource.dragDrop"));
   }
 
   function handleShelfDragStart(event: DragEvent<HTMLElement>, movieId: string) {
@@ -594,7 +607,9 @@ export function useChronoboardState({
       end_time: toDateTimeLocal(session.end_time),
       price: session.price,
       autoFillEndTime: false,
-      sourceLabel: `Editing ${getMovieLabel(session.movie)}`,
+      sourceLabel: t("chronoboard.inspector.draftSource.editingSaved", {
+        movie: getMovieLabel(session.movie),
+      }),
     });
     setSelectedSessionId(session.id);
     setInspectorView("edit");
@@ -676,8 +691,11 @@ export function useChronoboardState({
     setPlannerNotice({
       scope: "session",
       tone: "success",
-      title: "Session created",
-      message: `${getMovieLabel(createdSession.movie)} is now confirmed on the board at ${formatTime(createdSession.start_time)}-${formatTime(createdSession.end_time)}.`,
+      title: t("chronoboard.notices.sessionCreatedTitle"),
+      message: t("chronoboard.notices.sessionCreatedMessage", {
+        movie: getMovieLabel(createdSession.movie),
+        timeRange: `${formatTime(createdSession.start_time)}-${formatTime(createdSession.end_time)}`,
+      }),
     });
   }
 
@@ -703,8 +721,11 @@ export function useChronoboardState({
     setPlannerNotice({
       scope: "session",
       tone: "success",
-      title: "Session updated",
-      message: `${getMovieLabel(updatedSession.movie)} now runs at ${formatTime(updatedSession.start_time)}-${formatTime(updatedSession.end_time)}.`,
+      title: t("chronoboard.notices.sessionUpdatedTitle"),
+      message: t("chronoboard.notices.sessionUpdatedMessage", {
+        movie: getMovieLabel(updatedSession.movie),
+        timeRange: `${formatTime(updatedSession.start_time)}-${formatTime(updatedSession.end_time)}`,
+      }),
     });
   }
 
@@ -713,7 +734,11 @@ export function useChronoboardState({
       return;
     }
 
-    const confirmed = window.confirm(`Cancel the session for "${getMovieLabel(selectedSession.movie)}"?`);
+    const confirmed = window.confirm(
+      t("chronoboard.confirmations.cancelSession", {
+        movie: getMovieLabel(selectedSession.movie),
+      }),
+    );
     if (!confirmed) {
       return;
     }
@@ -727,8 +752,10 @@ export function useChronoboardState({
     setPlannerNotice({
       scope: "session",
       tone: "success",
-      title: "Session cancelled",
-      message: `The session remains on the board for ${formatDayLabel(selectedDay)} with a cancelled status.`,
+      title: t("chronoboard.notices.sessionCancelledTitle"),
+      message: t("chronoboard.notices.sessionCancelledMessage", {
+        day: formatDayLabel(selectedDay),
+      }),
     });
   }
 
@@ -737,7 +764,11 @@ export function useChronoboardState({
       return;
     }
 
-    const confirmed = window.confirm(`Delete the session for "${getMovieLabel(selectedSession.movie)}"?`);
+    const confirmed = window.confirm(
+      t("chronoboard.confirmations.deleteSession", {
+        movie: getMovieLabel(selectedSession.movie),
+      }),
+    );
     if (!confirmed) {
       return;
     }
@@ -753,8 +784,8 @@ export function useChronoboardState({
     setPlannerNotice({
       scope: "session",
       tone: "success",
-      title: "Session deleted",
-      message: "The time slot is open again and ready for a new draft placement.",
+      title: t("chronoboard.notices.sessionDeletedTitle"),
+      message: t("chronoboard.notices.sessionDeletedMessage"),
     });
   }
 

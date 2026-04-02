@@ -1,3 +1,5 @@
+import i18n from "@/i18n";
+import { getIntlLocale } from "@/shared/localization";
 import type { SessionDraft } from "@/widgets/admin/chronoboard/types";
 
 export const DRAG_MOVIE_MIME = "text/cinema-showcase-movie-id";
@@ -28,7 +30,7 @@ export function toDateKey(value: string | Date): string {
 
 export function formatDayLabel(dayKey: string): string {
   const [year, month, day] = dayKey.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString([], {
+  return new Date(year, month - 1, day).toLocaleDateString(getIntlLocale(i18n.resolvedLanguage ?? i18n.language), {
     weekday: "long",
     day: "2-digit",
     month: "long",
@@ -36,7 +38,7 @@ export function formatDayLabel(dayKey: string): string {
 }
 
 export function formatLocalDateTime(value: string): string {
-  return new Date(value).toLocaleString([], {
+  return new Date(value).toLocaleString(getIntlLocale(i18n.resolvedLanguage ?? i18n.language), {
     weekday: "short",
     day: "2-digit",
     month: "short",

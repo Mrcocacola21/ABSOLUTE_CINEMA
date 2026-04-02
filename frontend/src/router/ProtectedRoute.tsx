@@ -1,4 +1,5 @@
 import { Link, Navigate, Outlet } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/features/auth/useAuth";
 import { StatePanel } from "@/shared/ui/StatePanel";
@@ -9,14 +10,15 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
+  const { t } = useTranslation();
   const { isAuthenticated, isAuthLoading, role } = useAuth();
 
   if (isAuthLoading) {
     return (
       <StatePanel
         tone="loading"
-        title="Checking your session"
-        message="Please wait while your account access is being confirmed."
+        title={t("auth.protected.checkingTitle")}
+        message={t("auth.protected.checkingMessage")}
       />
     );
   }
@@ -27,7 +29,7 @@ export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
         to="/login"
         replace
         state={{
-          statusMessage: "Sign in to continue.",
+          statusMessage: t("auth.prompts.signInToContinue"),
         }}
       />
     );
@@ -37,11 +39,11 @@ export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
     return (
       <StatePanel
         tone="error"
-        title="Access denied"
-        message="Administrator access is required to open this page."
+        title={t("auth.protected.accessDeniedTitle")}
+        message={t("auth.protected.accessDeniedMessage")}
         action={
           <Link to="/" className="button--ghost">
-            Back home
+            {t("common.navigation.home")}
           </Link>
         }
       />

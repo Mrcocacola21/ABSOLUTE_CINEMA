@@ -11,7 +11,7 @@ export function ScheduleList({ items }: ScheduleListProps) {
   const { t } = useTranslation();
 
   if (items.length === 0) {
-    return <section className="empty-state">{t("noMatchingSessions")}</section>;
+    return <section className="empty-state">{t("schedule.list.noMatchingTitle")}</section>;
   }
 
   return (

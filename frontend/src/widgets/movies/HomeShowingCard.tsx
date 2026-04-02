@@ -61,40 +61,40 @@ export function HomeShowingCard({ movie }: HomeShowingCardProps) {
           ) : null}
 
           <p className="muted home-showing-card__description">
-            {description || t("homeMovieFallback")}
+            {description || t("home.spotlight.movieFallback")}
           </p>
         </div>
       </div>
 
       <div className="stats-row home-showing-card__stats">
         <span className="badge">
-          {t("upcomingSessions")}: {movie.upcomingSessions}
+          {t("common.labels.upcomingSessions")}: {movie.upcomingSessions}
         </span>
         <span className="badge">
-          {t("availableSeats")}: {movie.maxAvailableSeats}
+          {t("common.labels.availableSeats")}: {movie.maxAvailableSeats}
         </span>
         <span className="badge">
-          {t("fromPrice")}: {formatCurrency(movie.minPrice)}
+          {t("common.labels.price")}: {formatCurrency(movie.minPrice)}
         </span>
       </div>
 
       <div className="home-showing-card__schedule">
         <div className="home-showing-card__session">
-          <span className="muted">{t("nextSession")}</span>
+          <span className="muted">{t("movie.sessionWindow.nextSession")}</span>
           <strong>{formatSessionRange(movie.nextSession.start_time, movie.nextSession.end_time)}</strong>
         </div>
         <div className="home-showing-card__session">
-          <span className="muted">{t("lastUpcomingSession")}</span>
+          <span className="muted">{t("movie.sessionWindow.lastUpcomingSession")}</span>
           <strong>{formatSessionRange(movie.lastSession.start_time, movie.lastSession.end_time)}</strong>
         </div>
       </div>
 
       <div className="actions-row">
         <Link to={`/schedule/${movie.nextSession.id}`} className="button">
-          {t("viewNextSession")}
+          {t("common.actions.viewNextSession")}
         </Link>
         <Link to={`/movies/${movie.id}`} className="button--ghost">
-          {t("movieDetailsAction")}
+          {t("common.actions.viewMovieDetails")}
         </Link>
       </div>
     </article>

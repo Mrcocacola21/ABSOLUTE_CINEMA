@@ -33,7 +33,7 @@ export function LoginPage() {
       await login(email, password);
       navigate("/profile");
     } catch (error) {
-      setErrorMessage(extractApiErrorMessage(error, t("loginFailed")));
+      setErrorMessage(extractApiErrorMessage(error, t("auth.login.failed")));
     } finally {
       setIsSubmitting(false);
     }
@@ -42,21 +42,21 @@ export function LoginPage() {
   return (
     <section className="auth-shell">
       <section className="panel auth-aside">
-        <p className="page-eyebrow">{t("login")}</p>
-        <h1 className="page-title auth-title">{t("signIn")}</h1>
-        <p className="page-subtitle">{t("loginIntro")}</p>
+        <p className="page-eyebrow">{t("auth.login.eyebrow")}</p>
+        <h1 className="page-title auth-title">{t("auth.login.title")}</h1>
+        <p className="page-subtitle">{t("auth.login.intro")}</p>
         <div className="actions-row">
           <Link to="/register" className="button--ghost">
-            {t("createAccount")}
+            {t("common.actions.createAccount")}
           </Link>
         </div>
       </section>
 
       <form className="form-card auth-form" onSubmit={handleSubmit}>
-        <h2 className="section-title">{t("signIn")}</h2>
+        <h2 className="section-title">{t("auth.login.title")}</h2>
         <div className="form-grid">
           <label className="field">
-            <span>{t("email")}</span>
+            <span>{t("common.labels.email")}</span>
             <input
               value={email}
               onChange={(event) => setEmail(event.target.value)}
@@ -66,7 +66,7 @@ export function LoginPage() {
             />
           </label>
           <label className="field">
-            <span>{t("password")}</span>
+            <span>{t("common.labels.password")}</span>
             <input
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -77,13 +77,13 @@ export function LoginPage() {
           </label>
         </div>
         {statusMessage ? <StatusBanner tone="info" message={statusMessage} /> : null}
-        {errorMessage ? <StatusBanner tone="error" title="Unable to sign in" message={errorMessage} /> : null}
+        {errorMessage ? <StatusBanner tone="error" title={t("auth.login.errorTitle")} message={errorMessage} /> : null}
         <div className="actions-row">
           <button className="button" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Signing in..." : t("login")}
+            {isSubmitting ? t("auth.login.submitting") : t("common.navigation.login")}
           </button>
           <Link to="/register" className="button--ghost">
-            {t("registerInstead")}
+            {t("auth.prompts.needAccount")}
           </Link>
         </div>
       </form>

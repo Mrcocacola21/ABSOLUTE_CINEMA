@@ -27,34 +27,40 @@ export function PurchaseTicketCard({
   const totalPrice =
     price !== undefined && selectedSeats.length > 0 ? price * selectedSeats.length : undefined;
   const purchaseLabel = isSubmitting
-    ? "Purchasing..."
+    ? `${t("common.actions.purchaseTicket")}...`
     : selectedSeats.length > 1
-      ? "Purchase tickets"
+      ? t("common.actions.purchaseTickets")
       : selectedSeats.length === 1
-        ? t("purchaseTicketAction")
-        : "Select seats first";
+        ? t("common.actions.purchaseTicket")
+        : t("common.actions.selectSeatsFirst");
 
   return (
     <aside className="booking-module__summary" aria-live="polite">
       <div className="booking-module__summary-main">
         <div className="booking-module__summary-header">
-          <h3>{t("ticketPurchase")}</h3>
+          <h3>{t("booking.summary.title")}</h3>
           <p className="muted">
             {selectedSeats.length > 0
-              ? "Your selected seats are ready to reserve."
-              : "Select seats from the map to unlock checkout."}
+              ? t("booking.summary.selectionReady")
+              : t("booking.summary.selectionPrompt")}
           </p>
         </div>
 
         <div className={`booking-module__selection-card${selectedSeats.length > 0 ? " is-active" : ""}`}>
           <span className="booking-module__selection-label">
-            {selectedSeats.length > 0 ? (selectedSeats.length === 1 ? t("selectedSeat") : "Selected seats") : "Selection"}
+            {selectedSeats.length > 0
+              ? selectedSeats.length === 1
+                ? t("common.labels.selectedSeat")
+                : t("common.labels.selectedSeats")
+              : t("common.labels.selection")}
           </span>
           <strong>{selectedSeats.length > 0 ? `${selectedSeats.length}` : "--"}</strong>
           <p>
             {selectedSeats.length > 0
-              ? `Seats ${selectedSeatLabels.join(", ")} will be reserved when you confirm the purchase.`
-              : t("chooseSeatPrompt")}
+              ? selectedSeats.length === 1
+                ? t("booking.summary.reserveSingle", { seats: selectedSeatLabels.join(", ") })
+                : t("booking.summary.reserveMultiple", { seats: selectedSeatLabels.join(", ") })
+              : t("common.hints.chooseSeatPrompt")}
           </p>
         </div>
       </div>
@@ -62,19 +68,19 @@ export function PurchaseTicketCard({
       <div className="booking-module__metric-grid">
         {availableSeats !== undefined ? (
           <div className="booking-module__metric">
-            <span>{t("availableSeats")}</span>
+            <span>{t("common.labels.availableSeats")}</span>
             <strong>{availableSeats}</strong>
           </div>
         ) : null}
         {price !== undefined ? (
           <div className="booking-module__metric">
-            <span>{selectedSeats.length > 0 ? "Price per ticket" : t("price")}</span>
+            <span>{selectedSeats.length > 0 ? t("common.labels.pricePerTicket") : t("common.labels.price")}</span>
             <strong>{formatCurrency(price)}</strong>
           </div>
         ) : null}
         {totalPrice !== undefined ? (
           <div className="booking-module__metric">
-            <span>Total</span>
+            <span>{t("common.labels.total")}</span>
             <strong>{formatCurrency(totalPrice)}</strong>
           </div>
         ) : null}

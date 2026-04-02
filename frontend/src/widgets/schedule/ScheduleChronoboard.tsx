@@ -247,7 +247,7 @@ export function ScheduleChronoboard({ items, selectedDay, highlightedSessionId =
                 className="public-chrono-menu__dismiss"
                 type="button"
                 onClick={closeMenu}
-                aria-label="Close quick actions"
+                aria-label={t("schedule.quickActions.closeQuickActions")}
               >
                 x
               </button>
@@ -255,10 +255,10 @@ export function ScheduleChronoboard({ items, selectedDay, highlightedSessionId =
 
             <div className="public-chrono-menu__actions">
               <Link to={`/schedule/${activeMenuItem.id}`} className="button">
-                {t("viewSession")}
+                {t("common.actions.viewSession")}
               </Link>
               <Link to={`/movies/${activeMenuItem.movie_id}`} className="button--ghost">
-                {t("movieDetails")}
+                {t("common.actions.viewMovieDetails")}
               </Link>
             </div>
           </div>,
@@ -271,17 +271,17 @@ export function ScheduleChronoboard({ items, selectedDay, highlightedSessionId =
       <section className="panel public-chrono">
         <div className="public-chrono__header">
           <div>
-            <p className="page-eyebrow">{t("daySessionsTitle")}</p>
+            <p className="page-eyebrow">{t("schedule.board.title")}</p>
             <h2 className="section-title">{formatScheduleDayLabel(selectedDay)}</h2>
-            <p className="muted">{t("scheduleDayHint")}</p>
+            <p className="muted">{t("schedule.board.hint")}</p>
           </div>
 
           <div className="stats-row public-chrono__stats">
             <span className="badge">
-              {items.length} {t("upcomingSessions")}
+              {items.length} {t("common.labels.upcomingSessions")}
             </span>
             <span className="badge">
-              {uniqueMoviesCount} {t("movies")}
+              {uniqueMoviesCount} {t("common.labels.movies")}
             </span>
             {firstSession && lastSession ? (
               <span className="badge">
@@ -334,10 +334,10 @@ export function ScheduleChronoboard({ items, selectedDay, highlightedSessionId =
                     </p>
                     <div className="public-chrono-session__footer">
                       <span className="public-chrono-session__stat">
-                        {item.available_seats} {t("seatsLeft")}
+                        {item.available_seats} {t("common.stats.seatsLeft")}
                       </span>
                       <span className="public-chrono-session__stat public-chrono-session__stat--muted">
-                        {soldSeats} sold
+                        {soldSeats} {t("common.stats.sold")}
                       </span>
                     </div>
                   </button>

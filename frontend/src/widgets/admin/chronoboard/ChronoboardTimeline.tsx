@@ -28,6 +28,7 @@ interface ChronoboardTimelineProps {
   dragPreview: DragPreview | null;
   previewEndTime: string | null;
   previewDurationMinutes: number | null;
+  highlightedConflictSessionId: string | null;
   dragOrigin: DragOrigin | null;
   visibleDraft: SessionDraft | null;
   draftMovie: Movie | null;
@@ -68,6 +69,7 @@ export function ChronoboardTimeline({
   dragPreview,
   previewEndTime,
   previewDurationMinutes,
+  highlightedConflictSessionId,
   dragOrigin,
   visibleDraft,
   draftMovie,
@@ -212,12 +214,20 @@ export function ChronoboardTimeline({
             {selectedDaySessions.map((session) => {
               const soldTickets = session.total_seats - session.available_seats;
               const isSelected = selectedSessionId === session.id && inspectorView !== "draft";
+              const isConflictTarget = highlightedConflictSessionId === session.id;
 
               return (
                 <button
                   key={session.id}
                   type="button"
-                  className={`chrono-session chrono-session--${session.status}${isSelected ? " is-selected" : ""}`}
+                  className={[
+                    "chrono-session",
+                    `chrono-session--${session.status}`,
+                    isSelected ? "is-selected" : "",
+                    isConflictTarget ? "is-conflict-target" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   style={getSessionCardStyle(session.start_time, session.end_time)}
                   onClick={() => onSessionSelect(session)}
                 >

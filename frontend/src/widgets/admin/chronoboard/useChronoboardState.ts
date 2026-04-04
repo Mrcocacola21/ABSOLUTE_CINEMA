@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { SessionCreatePayload, SessionUpdatePayload } from "@/api/admin";
+import type {
+  SessionBatchCreatePayload,
+  SessionBatchCreateResult,
+  SessionCreatePayload,
+  SessionUpdatePayload,
+} from "@/api/admin";
 import { buildGenreSearchText } from "@/shared/genres";
 import { buildLocalizedSearchText, getLocalizedText } from "@/shared/localization";
 import { isMovieScheduleReady } from "@/shared/movieStatus";
@@ -9,6 +14,8 @@ import { formatTime } from "@/shared/presentation";
 import type { Movie, Session, SessionDetails } from "@/types/domain";
 import type {
   BoardSlot,
+  DraftCalendarDay,
+  DraftDatePlan,
   DragOrigin,
   DragPreview,
   InspectorView,
@@ -24,13 +31,21 @@ import {
   PIXELS_PER_MINUTE,
   SLOT_MINUTES,
   addMinutesToDateTimeLocal,
+  buildCalendarDays,
+  buildCalendarWeekdayLabels,
   buildDayDate,
+  combineDateKeyAndTime,
   formatDayLabel,
+  formatDayPillLabel,
   formatLocalDateTime,
+  formatMonthLabel,
   getBoardMinuteOffset,
   getDraftDurationMinutes,
+  shiftMonthKey,
   toDateKey,
+  toMonthKey,
   toDateTimeLocal,
+  sortDateKeys,
 } from "@/widgets/admin/chronoboard/utils";
 
 interface UseChronoboardStateOptions {
@@ -40,6 +55,7 @@ interface UseChronoboardStateOptions {
   scheduleReadyMovies: Movie[];
   sessions: SessionDetails[];
   onCreateSession: (payload: SessionCreatePayload) => Promise<SessionDetails | null>;
+  onCreateSessionsBatch: (payload: SessionBatchCreatePayload) => Promise<SessionBatchCreateResult | null>;
   onUpdateSession: (sessionId: string, payload: SessionUpdatePayload) => Promise<SessionDetails | null>;
   onCancelSession: (sessionId: string) => Promise<Session | null>;
   onDeleteSession: (sessionId: string) => Promise<{ id: string; deleted: boolean } | null>;
@@ -52,6 +68,7 @@ export function useChronoboardState({
   scheduleReadyMovies,
   sessions,
   onCreateSession,
+  onCreateSessionsBatch,
   onUpdateSession,
   onCancelSession,
   onDeleteSession,
@@ -65,6 +82,7 @@ export function useChronoboardState({
   const [draggedMovieId, setDraggedMovieId] = useState<string | null>(null);
   const [dragOrigin, setDragOrigin] = useState<DragOrigin | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null);
+  const [highlightedConflictSessionId, setHighlightedConflictSessionId] = useState<string | null>(null);
   const [draftPlacement, setDraftPlacement] = useState<SessionDraft | null>(null);
   const [editingDraft, setEditingDraft] = useState<SessionEditDraft | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -213,34 +231,70 @@ export function useChronoboardState({
     return sessionsByMoviePrice.get(movieId) ?? 200;
   }
 
-  function getSlotBlockedReason(
+  function getDraftPrimaryDateKey(draft: SessionDraft): string {
+    return toDateKey(draft.start_time);
+  }
+
+  function getDraftTargetDateKeys(draft: SessionDraft): string[] {
+    const dateKeys =
+      draft.sourceMode === "timeline"
+        ? [getDraftPrimaryDateKey(draft), ...draft.extraDateKeys]
+        : [...draft.extraDateKeys];
+    return sortDateKeys([...new Set(dateKeys)]);
+  }
+
+  function buildDraftWindowForDate(
+    draft: Pick<SessionDraft, "start_time" | "end_time">,
+    dateKey: string,
+  ): { startTime: string; endTime: string } {
+    const startTime = combineDateKeyAndTime(dateKey, draft.start_time);
+    return {
+      startTime,
+      endTime: addMinutesToDateTimeLocal(startTime, getDraftDurationMinutes(draft)),
+    };
+  }
+
+  function getSlotConflict(
     startTime: string,
     movieId: string,
     sessionIdToIgnore?: string,
     durationMinutesOverride?: number,
-  ): string | null {
+    sessionPool: SessionDetails[] = sessions,
+  ): { reason: string | null; blockingSessionId: string | null } {
     const movie = moviesById[movieId];
     if (!movie) {
-      return t("chronoboard.notices.chooseValidMovie");
+      return {
+        reason: t("chronoboard.notices.chooseValidMovie"),
+        blockingSessionId: null,
+      };
     }
 
     const startDate = new Date(startTime);
     if (Number.isNaN(startDate.getTime())) {
-      return t("chronoboard.notices.selectValidStart");
+      return {
+        reason: t("chronoboard.notices.selectValidStart"),
+        blockingSessionId: null,
+      };
     }
     if (startDate.getTime() <= Date.now()) {
-      return t("chronoboard.notices.sessionsFutureOnly");
+      return {
+        reason: t("chronoboard.notices.sessionsFutureOnly"),
+        blockingSessionId: null,
+      };
     }
 
     const startHour = startDate.getHours();
     const startMinute = startDate.getMinutes();
     if (startHour > LAST_SESSION_START_HOUR || (startHour === LAST_SESSION_START_HOUR && startMinute > 0)) {
-      return t("chronoboard.notices.latestStartTime");
+      return {
+        reason: t("chronoboard.notices.latestStartTime"),
+        blockingSessionId: null,
+      };
     }
 
     const proposedDurationMinutes = durationMinutesOverride ?? movie.duration_minutes;
     const proposedEnd = new Date(startDate.getTime() + proposedDurationMinutes * 60_000);
-    const blockingSession = selectedDaySessions.find((session) => {
+    const blockingSession = sessionPool.find((session) => {
       if (session.id === sessionIdToIgnore || session.status === "cancelled") {
         return false;
       }
@@ -251,13 +305,29 @@ export function useChronoboardState({
     });
 
     if (blockingSession) {
-      return t("chronoboard.notices.overlapMessage", {
-        movie: getMovieLabel(blockingSession.movie),
-        timeRange: `${formatTime(blockingSession.start_time)}-${formatTime(blockingSession.end_time)}`,
-      });
+      return {
+        reason: t("chronoboard.notices.overlapMessage", {
+          movie: getMovieLabel(blockingSession.movie),
+          timeRange: `${formatTime(blockingSession.start_time)}-${formatTime(blockingSession.end_time)}`,
+        }),
+        blockingSessionId: blockingSession.id,
+      };
     }
 
-    return null;
+    return {
+      reason: null,
+      blockingSessionId: null,
+    };
+  }
+
+  function getSlotBlockedReason(
+    startTime: string,
+    movieId: string,
+    sessionIdToIgnore?: string,
+    durationMinutesOverride?: number,
+    sessionPool: SessionDetails[] = sessions,
+  ): string | null {
+    return getSlotConflict(startTime, movieId, sessionIdToIgnore, durationMinutesOverride, sessionPool).reason;
   }
 
   const boardSlots = useMemo<BoardSlot[]>(() => {
@@ -268,8 +338,8 @@ export function useChronoboardState({
       const hour = Math.floor(absoluteMinutes / 60);
       const minute = absoluteMinutes % 60;
       const startTime = buildDayDate(selectedDay, hour, minute);
-      const blockedReason = candidateMovie
-        ? getSlotBlockedReason(startTime, candidateMovie.id, undefined, candidateDurationMinutes ?? undefined)
+      const slotConflict = candidateMovie
+        ? getSlotConflict(startTime, candidateMovie.id, undefined, candidateDurationMinutes ?? undefined)
         : null;
 
       slots.push({
@@ -278,12 +348,95 @@ export function useChronoboardState({
         label: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
         left: `${offset * PIXELS_PER_MINUTE}px`,
         width: `${SLOT_MINUTES * PIXELS_PER_MINUTE}px`,
-        blockedReason,
+        blockedReason: slotConflict?.reason ?? null,
+        blockingSessionId: slotConflict?.blockingSessionId ?? null,
       });
     }
 
     return slots;
-  }, [candidateDurationMinutes, candidateMovie, selectedDay, selectedDaySessions]);
+  }, [candidateDurationMinutes, candidateMovie, selectedDay, sessions, t]);
+
+  const sessionCountsByDate = useMemo(
+    () =>
+      sessions.reduce<Map<string, number>>((accumulator, session) => {
+        const dateKey = toDateKey(session.start_time);
+        accumulator.set(dateKey, (accumulator.get(dateKey) ?? 0) + 1);
+        return accumulator;
+      }, new Map<string, number>()),
+    [sessions],
+  );
+
+  const draftDatePlans = useMemo<DraftDatePlan[]>(() => {
+    if (!draftPlacement) {
+      return [];
+    }
+
+    return getDraftTargetDateKeys(draftPlacement).map((dateKey) => {
+      const { startTime, endTime } = buildDraftWindowForDate(draftPlacement, dateKey);
+      const conflictReason = getSlotBlockedReason(
+        startTime,
+        draftPlacement.movie_id,
+        undefined,
+        getDraftDurationMinutes(draftPlacement),
+      );
+
+      return {
+        dateKey,
+        label: formatDayLabel(dateKey),
+        shortLabel: formatDayPillLabel(dateKey),
+        startTime,
+        endTime,
+        isLocked: draftPlacement.sourceMode === "timeline" && dateKey === getDraftPrimaryDateKey(draftPlacement),
+        isConflicting: Boolean(conflictReason),
+        conflictReason,
+      };
+    });
+  }, [draftPlacement, sessions, t]);
+
+  const draftSelectionSummary = useMemo(
+    () => ({
+      selectedCount: draftDatePlans.length,
+      readyCount: draftDatePlans.filter((plan) => !plan.isConflicting).length,
+      conflictCount: draftDatePlans.filter((plan) => plan.isConflicting).length,
+    }),
+    [draftDatePlans],
+  );
+
+  const draftWeekdayLabels = useMemo(() => buildCalendarWeekdayLabels(), []);
+
+  const draftCalendarMonthLabel = useMemo(
+    () => (draftPlacement ? formatMonthLabel(draftPlacement.calendarMonth) : ""),
+    [draftPlacement],
+  );
+
+  const draftCalendarDays = useMemo<DraftCalendarDay[]>(() => {
+    if (!draftPlacement) {
+      return [];
+    }
+
+    const selectedDateKeys = new Set(getDraftTargetDateKeys(draftPlacement));
+    const conflictingDateKeys = new Set(
+      draftDatePlans.filter((plan) => plan.isConflicting).map((plan) => plan.dateKey),
+    );
+    const primaryDateKey = getDraftPrimaryDateKey(draftPlacement);
+    const todayKey = toDateKey(new Date());
+
+    return buildCalendarDays(draftPlacement.calendarMonth).map((day) => {
+      const isLocked = draftPlacement.sourceMode === "timeline" && day.dateKey === primaryDateKey;
+      const hasSessions = sessionCountsByDate.get(day.dateKey) !== undefined;
+      const isPast = new Date(combineDateKeyAndTime(day.dateKey, draftPlacement.start_time)).getTime() <= Date.now();
+
+      return {
+        ...day,
+        isToday: day.dateKey === todayKey,
+        isSelected: selectedDateKeys.has(day.dateKey),
+        isLocked,
+        isPast,
+        hasConflict: conflictingDateKeys.has(day.dateKey),
+        hasSessions,
+      };
+    });
+  }, [draftDatePlans, draftPlacement, sessionCountsByDate]);
 
   useEffect(() => {
     if (pinnedMovieId && !moviesById[pinnedMovieId]) {
@@ -346,6 +499,7 @@ export function useChronoboardState({
     setDraggedMovieId(null);
     setDragOrigin(null);
     setDragPreview(null);
+    setHighlightedConflictSessionId(null);
   }
 
   function clearPlanningSelection() {
@@ -358,7 +512,12 @@ export function useChronoboardState({
     setPlannerNotice((currentNotice) => (currentNotice?.scope === "planning" ? null : currentNotice));
   }
 
-  function openDraftPlacement(movieId: string, startTime: string, sourceLabel: string) {
+  function openDraftPlacement(
+    movieId: string,
+    startTime: string,
+    sourceLabel: string,
+    sourceMode: SessionDraft["sourceMode"] = "timeline",
+  ) {
     setDraftPlacement({
       movie_id: movieId,
       start_time: startTime,
@@ -366,12 +525,18 @@ export function useChronoboardState({
       price: getSuggestedPrice(movieId),
       autoFillEndTime: true,
       sourceLabel,
+      sourceMode,
+      extraDateKeys: [],
+      calendarMonth: toMonthKey(startTime),
     });
     setEditingDraft(null);
-    setSelectedSessionId(null);
+    if (sourceMode === "timeline") {
+      setSelectedSessionId(null);
+    }
     setInspectorView("draft");
     setPinnedMovieId(movieId);
     setSelectedDay(toDateKey(startTime));
+    setHighlightedConflictSessionId(null);
   }
 
   function moveDraftPlacement(startTime: string, sourceLabel: string) {
@@ -407,6 +572,8 @@ export function useChronoboardState({
       start_time: startTime,
       end_time: addMinutesToDateTimeLocal(startTime, durationMinutes),
       sourceLabel,
+      extraDateKeys: draftPlacement.extraDateKeys.filter((dateKey) => dateKey !== toDateKey(startTime)),
+      calendarMonth: toMonthKey(startTime),
     });
     setEditingDraft(null);
     setSelectedSessionId(null);
@@ -504,6 +671,7 @@ export function useChronoboardState({
   function handleBoardLaneDragLeave(event: DragEvent<HTMLDivElement>) {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
       setDragPreview(null);
+      setHighlightedConflictSessionId(null);
     }
   }
 
@@ -518,7 +686,7 @@ export function useChronoboardState({
       return;
     }
 
-    if (draftPlacement && draftPlacement.movie_id === selectedMovie.id) {
+    if (draftPlacement && draftPlacement.sourceMode === "timeline" && draftPlacement.movie_id === selectedMovie.id) {
       moveDraftPlacement(startTime, t("chronoboard.inspector.draftSource.boardMove"));
       return;
     }
@@ -539,6 +707,7 @@ export function useChronoboardState({
       : activeDragOrigin === "draft"
         ? "move"
         : "copy";
+    setHighlightedConflictSessionId(slot.blockingSessionId);
     setDragPreview(slot.blockedReason ? null : { movieId: activeDraggedMovieId, startTime: slot.startTime });
   }
 
@@ -559,7 +728,7 @@ export function useChronoboardState({
 
     const currentDragOrigin = activeDrag?.origin ?? null;
     clearBoardDragState();
-    if (currentDragOrigin === "draft" && draftPlacement?.movie_id === movieId) {
+    if (currentDragOrigin === "draft" && draftPlacement?.sourceMode === "timeline" && draftPlacement.movie_id === movieId) {
       moveDraftPlacement(slot.startTime, t("chronoboard.inspector.draftSource.dragMove"));
       return;
     }
@@ -575,7 +744,7 @@ export function useChronoboardState({
   }
 
   function handleDraftDragStart(event: DragEvent<HTMLButtonElement>) {
-    if (!draftPlacement) {
+    if (!draftPlacement || draftPlacement.sourceMode !== "timeline") {
       return;
     }
 
@@ -591,11 +760,54 @@ export function useChronoboardState({
     setInspectorView("draft");
   }
 
+  function toggleDraftDate(dateKey: string) {
+    setDraftPlacement((currentDraft) => {
+      if (!currentDraft) {
+        return currentDraft;
+      }
+
+      const primaryDateKey = getDraftPrimaryDateKey(currentDraft);
+      if (currentDraft.sourceMode === "timeline" && dateKey === primaryDateKey) {
+        return currentDraft;
+      }
+
+      const nextExtraDateKeys = currentDraft.extraDateKeys.includes(dateKey)
+        ? currentDraft.extraDateKeys.filter((currentDateKey) => currentDateKey !== dateKey)
+        : sortDateKeys([...currentDraft.extraDateKeys, dateKey]);
+
+      return {
+        ...currentDraft,
+        extraDateKeys: nextExtraDateKeys,
+      };
+    });
+  }
+
+  function showPreviousDraftMonth() {
+    setDraftPlacement((currentDraft) =>
+      currentDraft
+        ? {
+            ...currentDraft,
+            calendarMonth: shiftMonthKey(currentDraft.calendarMonth, -1),
+          }
+        : currentDraft,
+    );
+  }
+
+  function showNextDraftMonth() {
+    setDraftPlacement((currentDraft) =>
+      currentDraft
+        ? {
+            ...currentDraft,
+            calendarMonth: shiftMonthKey(currentDraft.calendarMonth, 1),
+          }
+        : currentDraft,
+    );
+  }
+
   function handleSessionSelect(session: SessionDetails) {
     setSelectedSessionId(session.id);
     setEditingDraft(null);
     setInspectorView("session");
-    setPinnedMovieId(session.movie_id);
     setPlannerNotice(null);
   }
 
@@ -616,6 +828,33 @@ export function useChronoboardState({
     setPlannerNotice(null);
   }
 
+  function openDuplicateSessionDraft(session: SessionDetails) {
+    setDraftPlacement({
+      movie_id: session.movie_id,
+      start_time: toDateTimeLocal(session.start_time),
+      end_time: toDateTimeLocal(session.end_time),
+      price: session.price,
+      autoFillEndTime: false,
+      sourceLabel: t("chronoboard.inspector.draftSource.duplicatingSaved", {
+        movie: getMovieLabel(session.movie),
+      }),
+      sourceMode: "duplicate",
+      extraDateKeys: [],
+      calendarMonth: toMonthKey(session.start_time),
+    });
+    setEditingDraft(null);
+    setInspectorView("draft");
+    setPlannerNotice({
+      scope: "session",
+      tone: "info",
+      title: t("chronoboard.notices.duplicateReadyTitle"),
+      message: t("chronoboard.notices.duplicateReadyMessage", {
+        movie: getMovieLabel(session.movie),
+        timeRange: `${formatTime(session.start_time)}-${formatTime(session.end_time)}`,
+      }),
+    });
+  }
+
   function updateDraftField<K extends keyof SessionDraft>(field: K, value: SessionDraft[K]) {
     setDraftPlacement((currentDraft) => {
       if (!currentDraft) {
@@ -630,6 +869,13 @@ export function useChronoboardState({
 
       if ((field === "movie_id" || field === "start_time") && nextDraft.autoFillEndTime) {
         nextDraft.end_time = getSuggestedEndTime(nextDraft.movie_id, nextDraft.start_time);
+      }
+
+      if (field === "start_time") {
+        nextDraft.extraDateKeys = nextDraft.extraDateKeys.filter(
+          (dateKey) => dateKey !== getDraftPrimaryDateKey(nextDraft),
+        );
+        nextDraft.calendarMonth = toMonthKey(nextDraft.start_time);
       }
 
       return nextDraft;
@@ -673,28 +919,129 @@ export function useChronoboardState({
       return;
     }
 
-    const createdSession = await onCreateSession({
+    const targetDateKeys = getDraftTargetDateKeys(draftPlacement);
+    if (targetDateKeys.length === 0) {
+      setPlannerNotice({
+        scope: "session",
+        tone: "warning",
+        title: t("chronoboard.notices.chooseDatesTitle"),
+        message: t("chronoboard.notices.chooseDatesMessage"),
+      });
+      return;
+    }
+
+    if (draftDatePlans.every((plan) => plan.isConflicting)) {
+      setPlannerNotice({
+        scope: "session",
+        tone: "warning",
+        title: t("chronoboard.notices.allSelectedDatesBlockedTitle"),
+        message: t("chronoboard.notices.allSelectedDatesBlockedMessage"),
+      });
+      return;
+    }
+
+    const shouldCreateSingleSession = draftPlacement.sourceMode === "timeline" && targetDateKeys.length === 1;
+    if (shouldCreateSingleSession) {
+      const createdSession = await onCreateSession({
+        movie_id: draftPlacement.movie_id,
+        start_time: draftPlacement.start_time,
+        end_time: draftPlacement.end_time,
+        price: Number(draftPlacement.price),
+      });
+      if (!createdSession) {
+        return;
+      }
+
+      setDraftPlacement(null);
+      clearPlanningBanners();
+      setSelectedSessionId(createdSession.id);
+      setInspectorView("session");
+      setSelectedDay(toDateKey(createdSession.start_time));
+      setPlannerNotice({
+        scope: "session",
+        tone: "success",
+        title: t("chronoboard.notices.sessionCreatedTitle"),
+        message: t("chronoboard.notices.sessionCreatedMessage", {
+          movie: getMovieLabel(createdSession.movie),
+          timeRange: `${formatTime(createdSession.start_time)}-${formatTime(createdSession.end_time)}`,
+        }),
+      });
+      return;
+    }
+
+    const batchResult = await onCreateSessionsBatch({
       movie_id: draftPlacement.movie_id,
       start_time: draftPlacement.start_time,
       end_time: draftPlacement.end_time,
       price: Number(draftPlacement.price),
+      dates: targetDateKeys,
     });
-    if (!createdSession) {
+    if (!batchResult) {
       return;
     }
 
-    setDraftPlacement(null);
-    clearPlanningBanners();
-    setSelectedSessionId(createdSession.id);
-    setInspectorView("session");
-    setSelectedDay(toDateKey(createdSession.start_time));
+    const firstCreatedSession = batchResult.created_sessions[0] ?? null;
+    const rejectedDateKeys = sortDateKeys(batchResult.rejected_dates.map((item) => item.date));
+
+    if (batchResult.rejected_count === 0) {
+      setDraftPlacement(null);
+      if (draftPlacement.sourceMode === "timeline") {
+        clearPlanningBanners();
+      }
+
+      if (draftPlacement.sourceMode === "duplicate") {
+        setInspectorView(selectedSession ? "session" : "none");
+      } else if (firstCreatedSession) {
+        setSelectedSessionId(firstCreatedSession.id);
+        setInspectorView("session");
+        setSelectedDay(toDateKey(firstCreatedSession.start_time));
+      }
+
+      setPlannerNotice({
+        scope: "session",
+        tone: "success",
+        title: t("chronoboard.notices.batchCreatedTitle", { count: batchResult.created_count }),
+        message: t("chronoboard.notices.batchCreatedMessage", {
+          count: batchResult.created_count,
+          movie: draftMovie ? getMovieLabel(draftMovie) : "",
+          timeRange:
+            firstCreatedSession !== null
+              ? `${formatTime(firstCreatedSession.start_time)}-${formatTime(firstCreatedSession.end_time)}`
+              : `${formatTime(draftPlacement.start_time)}-${formatTime(draftPlacement.end_time)}`,
+        }),
+      });
+      return;
+    }
+
+    setDraftPlacement((currentDraft) => {
+      if (!currentDraft) {
+        return currentDraft;
+      }
+
+      const primaryDateKey = getDraftPrimaryDateKey(currentDraft);
+      const shouldRemainTimelineDraft =
+        currentDraft.sourceMode === "timeline" && rejectedDateKeys.includes(primaryDateKey);
+
+      return {
+        ...currentDraft,
+        sourceMode: shouldRemainTimelineDraft ? "timeline" : "duplicate",
+        extraDateKeys: shouldRemainTimelineDraft
+          ? rejectedDateKeys.filter((dateKey) => dateKey !== primaryDateKey)
+          : rejectedDateKeys,
+        calendarMonth: toMonthKey(rejectedDateKeys[0] ?? currentDraft.start_time),
+      };
+    });
+    setInspectorView("draft");
     setPlannerNotice({
       scope: "session",
-      tone: "success",
-      title: t("chronoboard.notices.sessionCreatedTitle"),
-      message: t("chronoboard.notices.sessionCreatedMessage", {
-        movie: getMovieLabel(createdSession.movie),
-        timeRange: `${formatTime(createdSession.start_time)}-${formatTime(createdSession.end_time)}`,
+      tone: "warning",
+      title: t("chronoboard.notices.batchCreatedPartialTitle", {
+        createdCount: batchResult.created_count,
+        rejectedCount: batchResult.rejected_count,
+      }),
+      message: t("chronoboard.notices.batchCreatedPartialMessage", {
+        createdCount: batchResult.created_count,
+        rejectedCount: batchResult.rejected_count,
       }),
     });
   }
@@ -789,7 +1136,10 @@ export function useChronoboardState({
     });
   }
 
-  const visibleDraft = draftPlacement && toDateKey(draftPlacement.start_time) === selectedDay ? draftPlacement : null;
+  const visibleDraft =
+    draftPlacement && draftPlacement.sourceMode === "timeline" && toDateKey(draftPlacement.start_time) === selectedDay
+      ? draftPlacement
+      : null;
   const previewEndTime = dragPreview ? getDragPreviewEndTime(dragPreview.movieId, dragPreview.startTime) : null;
   const previewDurationMinutes =
     dragPreview && dragOrigin === "draft" && draftPlacement && draftPlacement.movie_id === dragPreview.movieId
@@ -809,6 +1159,11 @@ export function useChronoboardState({
     draggedMovieId,
     plannerNotice,
     draftPlacement,
+    draftDatePlans,
+    draftSelectionSummary,
+    draftWeekdayLabels,
+    draftCalendarMonthLabel,
+    draftCalendarDays,
     editingDraft,
     selectedSession,
     selectedSessionId,
@@ -823,6 +1178,7 @@ export function useChronoboardState({
     nowMarkerOffset,
     previewMovie,
     dragPreview,
+    highlightedConflictSessionId,
     previewEndTime,
     previewDurationMinutes,
     dragOrigin,
@@ -845,8 +1201,12 @@ export function useChronoboardState({
     handleDraftDragStart,
     handleDragEnd: clearBoardDragState,
     handleDraftSelect,
+    toggleDraftDate,
+    showPreviousDraftMonth,
+    showNextDraftMonth,
     handleSessionSelect,
     openEditSessionDraft,
+    openDuplicateSessionDraft,
     updateDraftField,
     updateEditingDraftField,
     resetDraftEndTime,

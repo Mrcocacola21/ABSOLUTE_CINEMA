@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import type {
   MovieCreatePayload,
   MovieUpdatePayload,
+  SessionBatchCreatePayload,
+  SessionBatchCreateResult,
   SessionCreatePayload,
   SessionUpdatePayload,
 } from "@/api/admin";
@@ -32,6 +34,7 @@ interface AdminScheduleManagementProps {
   onDeactivateMovie: (movieId: string) => Promise<Movie | null>;
   onDeleteMovie: (movieId: string) => Promise<{ id: string; deleted: boolean } | null>;
   onCreateSession: (payload: SessionCreatePayload) => Promise<SessionDetails | null>;
+  onCreateSessionsBatch: (payload: SessionBatchCreatePayload) => Promise<SessionBatchCreateResult | null>;
   onUpdateSession: (sessionId: string, payload: SessionUpdatePayload) => Promise<SessionDetails | null>;
   onCancelSession: (sessionId: string) => Promise<Session | null>;
   onDeleteSession: (sessionId: string) => Promise<{ id: string; deleted: boolean } | null>;
@@ -61,6 +64,7 @@ export function AdminScheduleManagement({
   onDeactivateMovie,
   onDeleteMovie,
   onCreateSession,
+  onCreateSessionsBatch,
   onUpdateSession,
   onCancelSession,
   onDeleteSession,
@@ -125,6 +129,7 @@ export function AdminScheduleManagement({
     scheduleReadyMovies,
     sessions,
     onCreateSession,
+    onCreateSessionsBatch,
     onUpdateSession,
     onCancelSession,
     onDeleteSession,
@@ -308,6 +313,7 @@ export function AdminScheduleManagement({
           dragPreview={chronoboard.dragPreview}
           previewEndTime={chronoboard.previewEndTime}
           previewDurationMinutes={chronoboard.previewDurationMinutes}
+          highlightedConflictSessionId={chronoboard.highlightedConflictSessionId}
           dragOrigin={chronoboard.dragOrigin}
           visibleDraft={chronoboard.visibleDraft}
           draftMovie={chronoboard.draftMovie}
@@ -344,6 +350,11 @@ export function AdminScheduleManagement({
           <ChronoboardInspector
             inspectorView={chronoboard.inspectorView}
             draftPlacement={chronoboard.draftPlacement}
+            draftDatePlans={chronoboard.draftDatePlans}
+            draftSelectionSummary={chronoboard.draftSelectionSummary}
+            draftWeekdayLabels={chronoboard.draftWeekdayLabels}
+            draftCalendarMonthLabel={chronoboard.draftCalendarMonthLabel}
+            draftCalendarDays={chronoboard.draftCalendarDays}
             editingDraft={chronoboard.editingDraft}
             selectedSession={chronoboard.selectedSession}
             draftMovie={chronoboard.draftMovie}
@@ -352,6 +363,9 @@ export function AdminScheduleManagement({
             isBusy={isBusy}
             busyActionLabel={busyActionLabel}
             onDiscardDraft={chronoboard.clearDraftPlacement}
+            onToggleDraftDate={chronoboard.toggleDraftDate}
+            onShowPreviousDraftMonth={chronoboard.showPreviousDraftMonth}
+            onShowNextDraftMonth={chronoboard.showNextDraftMonth}
             onUpdateDraftField={chronoboard.updateDraftField}
             onUpdateEditingDraftField={chronoboard.updateEditingDraftField}
             onResetDraftEndTime={chronoboard.resetDraftEndTime}
@@ -359,6 +373,7 @@ export function AdminScheduleManagement({
             onUpdateEditedSession={chronoboard.handleUpdateEditedSession}
             onBackToSession={chronoboard.backToSession}
             onOpenEditSessionDraft={chronoboard.openEditSessionDraft}
+            onOpenDuplicateSessionDraft={chronoboard.openDuplicateSessionDraft}
             onCancelSelectedSession={chronoboard.handleCancelSelectedSession}
             onDeleteSelectedSession={chronoboard.handleDeleteSelectedSession}
             onJumpToToday={chronoboard.jumpToToday}

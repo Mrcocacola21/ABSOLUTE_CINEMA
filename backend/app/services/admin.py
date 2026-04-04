@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 
 from app.builders.attendance_report import AttendanceReportBuilder
@@ -26,7 +26,15 @@ from app.schemas.movie import (
     merge_movie_localized_updates,
 )
 from app.schemas.report import AttendanceReportRead, AttendanceSessionSummary
-from app.schemas.session import SessionCreate, SessionDetailsRead, SessionRead, SessionUpdate
+from app.schemas.session import (
+    SessionBatchCreate,
+    SessionBatchCreateRead,
+    SessionBatchRejectedDateRead,
+    SessionCreate,
+    SessionDetailsRead,
+    SessionRead,
+    SessionUpdate,
+)
 from app.schemas.user import UserRead
 from app.services.movie_status import MovieStatusManager
 
@@ -203,7 +211,6 @@ class AdminService:
     async def create_session(self, payload: SessionCreate, created_by: UserRead) -> SessionDetailsRead:
         """Create a new session slot for an existing movie."""
         _ = created_by
-        settings = get_settings()
         now = datetime.now(tz=timezone.utc)
         await self.movie_status_manager.refresh_statuses(current_time=now)
 
@@ -219,24 +226,114 @@ class AdminService:
         if overlapping is not None:
             raise ConflictException("Session overlaps with an existing session in the only hall.")
 
-        document = {
-            "movie_id": payload.movie_id,
-            "start_time": start_time,
-            "end_time": end_time,
-            "price": payload.price,
-            "status": SessionStatuses.SCHEDULED,
-            "total_seats": settings.total_seats,
-            "available_seats": settings.total_seats,
-            "created_at": now,
-            "updated_at": None,
-        }
-
-        session_document = await self.session_repository.create_session(document)
+        session_document = await self.session_repository.create_session(
+            self._build_session_document(
+                movie_id=payload.movie_id,
+                start_time=start_time,
+                end_time=end_time,
+                price=payload.price,
+                created_at=now,
+            )
+        )
         await self.movie_status_manager.refresh_statuses(current_time=now)
         session = SessionRead.model_validate(session_document)
         return SessionDetailsFactory.build(
             session=session,
             movie=await self._get_movie_or_not_found(payload.movie_id),
+        )
+
+    async def create_sessions_batch(
+        self,
+        payload: SessionBatchCreate,
+        created_by: UserRead,
+    ) -> SessionBatchCreateRead:
+        """Create the same movie slot across multiple selected dates.
+
+        The operation is intentionally partial-success friendly for admin planning flows:
+        each requested date is validated independently and conflicting dates are returned
+        in the response instead of aborting the whole batch.
+        """
+        _ = created_by
+        now = datetime.now(tz=timezone.utc)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
+
+        movie = await self._require_movie_for_scheduling(payload.movie_id)
+        template_start_time = self._normalize_session_time(payload.start_time)
+        template_end_time = self._normalize_session_time(payload.end_time)
+        self._validate_session_window(movie=movie, start_time=template_start_time, end_time=template_end_time)
+
+        created_documents: list[dict[str, object]] = []
+        rejected_dates: list[SessionBatchRejectedDateRead] = []
+
+        for requested_date in payload.dates:
+            start_time, end_time = self._build_session_window_for_date(
+                template_start_time=template_start_time,
+                template_end_time=template_end_time,
+                target_date=requested_date,
+            )
+
+            try:
+                self._validate_session_slot(movie=movie, start_time=start_time, end_time=end_time, now=now)
+            except ValidationException as exc:
+                rejected_dates.append(
+                    SessionBatchRejectedDateRead(
+                        date=requested_date,
+                        start_time=start_time,
+                        end_time=end_time,
+                        code=exc.code,
+                        message=exc.message,
+                    )
+                )
+                continue
+
+            overlapping = await self.session_repository.find_overlapping(
+                start_time=start_time,
+                end_time=end_time,
+            )
+            if overlapping is not None:
+                rejected_dates.append(
+                    SessionBatchRejectedDateRead(
+                        date=requested_date,
+                        start_time=start_time,
+                        end_time=end_time,
+                        code="conflict",
+                        message="Session overlaps with an existing session in the only hall.",
+                        blocking_session_id=str(overlapping["id"]),
+                    )
+                )
+                continue
+
+            created_documents.append(
+                await self.session_repository.create_session(
+                    self._build_session_document(
+                        movie_id=payload.movie_id,
+                        start_time=start_time,
+                        end_time=end_time,
+                        price=payload.price,
+                        created_at=now,
+                    )
+                )
+            )
+
+        if created_documents:
+            await self.movie_status_manager.refresh_statuses(current_time=now)
+
+        scheduled_movie = await self._get_movie_or_not_found(payload.movie_id)
+        created_sessions = [
+            SessionDetailsFactory.build(
+                session=SessionRead.model_validate(document),
+                movie=scheduled_movie,
+            )
+            for document in created_documents
+        ]
+
+        return SessionBatchCreateRead(
+            requested_dates=payload.dates,
+            requested_count=len(payload.dates),
+            created_count=len(created_sessions),
+            rejected_count=len(rejected_dates),
+            created_sessions=created_sessions,
+            rejected_dates=rejected_dates,
         )
 
     async def cancel_session(self, session_id: str, cancelled_by: UserRead) -> SessionRead:
@@ -405,6 +502,26 @@ class AdminService:
             return start_time.replace(tzinfo=cinema_timezone).astimezone(timezone.utc)
         return start_time.astimezone(timezone.utc)
 
+    def _build_session_window_for_date(
+        self,
+        *,
+        template_start_time: datetime,
+        template_end_time: datetime,
+        target_date: date,
+    ) -> tuple[datetime, datetime]:
+        cinema_timezone = ZoneInfo(get_settings().cinema_timezone)
+        localized_start = template_start_time.astimezone(cinema_timezone)
+        localized_end = template_end_time.astimezone(cinema_timezone)
+        duration = localized_end - localized_start
+
+        start_local = datetime.combine(
+            target_date,
+            localized_start.timetz().replace(tzinfo=None),
+            tzinfo=cinema_timezone,
+        )
+        end_local = start_local + duration
+        return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
     async def _require_movie_for_scheduling(
         self,
         movie_id: str,
@@ -426,12 +543,43 @@ class AdminService:
     ) -> None:
         if start_time <= now:
             raise ValidationException("Session start time must be in the future.")
+        self._validate_session_window(movie=movie, start_time=start_time, end_time=end_time)
+
+    def _validate_session_window(
+        self,
+        *,
+        movie: MovieRead,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> None:
         self._validate_start_time(start_time)
         if end_time <= start_time:
             raise ValidationException("Session end time must be greater than start time.")
         minimum_duration_minutes = (end_time - start_time).total_seconds() / 60
         if minimum_duration_minutes < movie.duration_minutes:
             raise ValidationException("Session slot must be at least as long as the selected movie duration.")
+
+    def _build_session_document(
+        self,
+        *,
+        movie_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        price: float,
+        created_at: datetime,
+    ) -> dict[str, object]:
+        settings = get_settings()
+        return {
+            "movie_id": movie_id,
+            "start_time": start_time,
+            "end_time": end_time,
+            "price": price,
+            "status": SessionStatuses.SCHEDULED,
+            "total_seats": settings.total_seats,
+            "available_seats": settings.total_seats,
+            "created_at": created_at,
+            "updated_at": None,
+        }
 
     def _normalize_movie_document(self, document: dict[str, object]) -> dict[str, object]:
         """Convert Pydantic values into plain MongoDB-friendly data."""

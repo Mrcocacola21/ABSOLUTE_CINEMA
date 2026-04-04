@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import Field, field_validator, model_validator
 
@@ -70,6 +70,25 @@ class SessionUpdate(BaseSchema):
         return self
 
 
+class SessionBatchCreate(BaseSchema):
+    """Payload for creating the same session slot on multiple calendar dates."""
+
+    movie_id: str
+    start_time: datetime
+    end_time: datetime
+    price: float = Field(ge=0)
+    dates: list[date] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_batch_slot(self) -> "SessionBatchCreate":
+        """Ensure the template slot is valid and dates are unique."""
+        if self.end_time <= self.start_time:
+            raise ValueError("end_time must be greater than start_time.")
+        if len(set(self.dates)) != len(self.dates):
+            raise ValueError("dates must be unique.")
+        return self
+
+
 class SessionRead(SessionBase):
     """Session DTO returned by the API."""
 
@@ -82,6 +101,28 @@ class SessionDetailsRead(SessionRead):
     """Session DTO enriched with movie information."""
 
     movie: MovieRead
+
+
+class SessionBatchRejectedDateRead(BaseSchema):
+    """One requested date that could not be created in batch mode."""
+
+    date: date
+    start_time: datetime
+    end_time: datetime
+    code: str
+    message: str
+    blocking_session_id: str | None = None
+
+
+class SessionBatchCreateRead(BaseSchema):
+    """Result of a batch session creation attempt."""
+
+    requested_dates: list[date]
+    requested_count: int = Field(ge=0)
+    created_count: int = Field(ge=0)
+    rejected_count: int = Field(ge=0)
+    created_sessions: list[SessionDetailsRead] = Field(default_factory=list)
+    rejected_dates: list[SessionBatchRejectedDateRead] = Field(default_factory=list)
 
 
 class ScheduleItemRead(BaseSchema):

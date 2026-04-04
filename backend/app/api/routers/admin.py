@@ -11,7 +11,14 @@ from app.factories.response_factory import ApiResponseFactory
 from app.schemas.common import DeleteResultRead
 from app.schemas.movie import MovieCreate, MovieRead, MovieUpdate
 from app.schemas.report import AttendanceReportRead
-from app.schemas.session import SessionCreate, SessionDetailsRead, SessionRead, SessionUpdate
+from app.schemas.session import (
+    SessionBatchCreate,
+    SessionBatchCreateRead,
+    SessionCreate,
+    SessionDetailsRead,
+    SessionRead,
+    SessionUpdate,
+)
 from app.schemas.ticket import TicketListRead
 from app.schemas.user import UserRead
 from app.services.admin import AdminService
@@ -117,6 +124,17 @@ async def create_session(
     """Create a new movie session for the schedule."""
     session = await admin_service.create_session(payload=payload, created_by=admin_user)
     return ApiResponseFactory.created(data=session, message="Session created successfully.")
+
+
+@router.post("/sessions/batch", response_model=ApiResponse[SessionBatchCreateRead])
+async def create_sessions_batch(
+    payload: SessionBatchCreate,
+    admin_user: UserRead = Depends(get_current_admin),
+    admin_service: AdminService = Depends(get_admin_service),
+) -> ApiResponse[SessionBatchCreateRead]:
+    """Create the same session slot across multiple selected dates."""
+    result = await admin_service.create_sessions_batch(payload=payload, created_by=admin_user)
+    return ApiResponseFactory.success(data=result, message="Batch session planning processed.")
 
 
 @router.patch("/sessions/{session_id}", response_model=ApiResponse[SessionDetailsRead])

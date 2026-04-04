@@ -5,6 +5,7 @@ import {
   cancelSessionRequest,
   createMovieRequest,
   createSessionRequest,
+  createSessionsBatchRequest,
   deactivateMovieRequest,
   deleteMovieRequest,
   deleteSessionRequest,
@@ -15,6 +16,7 @@ import {
   listAdminUsersRequest,
   type MovieCreatePayload,
   type MovieUpdatePayload,
+  type SessionBatchCreatePayload,
   type SessionCreatePayload,
   type SessionUpdatePayload,
   updateMovieRequest,
@@ -42,7 +44,7 @@ export function AdminDashboardPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [reportErrorMessage, setReportErrorMessage] = useState("");
   const [feedback, setFeedback] = useState<{
-    tone: "success" | "error";
+    tone: "success" | "error" | "warning";
     title: string;
     message: string;
   } | null>(null);
@@ -230,6 +232,44 @@ export function AdminDashboardPage() {
     );
   }
 
+  async function handleCreateSessionsBatch(payload: SessionBatchCreatePayload) {
+    setPendingActionLabel(t("admin.actions.createSessionBatchLoading"));
+    setFeedback(null);
+
+    try {
+      const response = await createSessionsBatchRequest(payload);
+      await refreshDashboard({ background: true });
+
+      const result = response.data;
+      const isPartial = result.rejected_count > 0;
+      setFeedback({
+        tone: isPartial ? "warning" : "success",
+        title: isPartial
+          ? t("admin.actions.createSessionBatchPartialTitle")
+          : t("admin.actions.createSessionBatchSuccessTitle"),
+        message: isPartial
+          ? t("admin.actions.createSessionBatchPartialMessage", {
+              createdCount: result.created_count,
+              rejectedCount: result.rejected_count,
+            })
+          : t("admin.actions.createSessionBatchSuccessMessage", {
+              count: result.created_count,
+            }),
+      });
+
+      return result;
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        title: t("admin.actions.createSessionBatchErrorTitle"),
+        message: extractApiErrorMessage(error, t("admin.actions.createSessionBatchFailure")),
+      });
+      return null;
+    } finally {
+      setPendingActionLabel("");
+    }
+  }
+
   async function handleUpdateSession(sessionId: string, payload: SessionUpdatePayload) {
     return runAdminAction(
       () => updateSessionRequest(sessionId, payload),
@@ -382,20 +422,21 @@ export function AdminDashboardPage() {
 
       {!isLoading && !errorMessage ? (
         <>
-          <AdminScheduleManagement
-            movies={movies}
-            sessions={sessions}
-            isBusy={Boolean(pendingActionLabel)}
-            busyActionLabel={pendingActionLabel}
+        <AdminScheduleManagement
+          movies={movies}
+          sessions={sessions}
+          isBusy={Boolean(pendingActionLabel)}
+          busyActionLabel={pendingActionLabel}
             onCreateMovie={handleCreateMovie}
             onUpdateMovie={handleUpdateMovie}
             onDeactivateMovie={handleDeactivateMovie}
-            onDeleteMovie={handleDeleteMovie}
-            onCreateSession={handleCreateSession}
-            onUpdateSession={handleUpdateSession}
-            onCancelSession={handleCancelSession}
-            onDeleteSession={handleDeleteSession}
-          />
+          onDeleteMovie={handleDeleteMovie}
+          onCreateSession={handleCreateSession}
+          onCreateSessionsBatch={handleCreateSessionsBatch}
+          onUpdateSession={handleUpdateSession}
+          onCancelSession={handleCancelSession}
+          onDeleteSession={handleDeleteSession}
+        />
           <AttendancePanel
             report={report}
             tickets={tickets}

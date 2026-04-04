@@ -84,6 +84,94 @@ async def test_overlapping_session_creation_is_rejected(
 
 
 @pytest.mark.asyncio
+async def test_batch_session_creation_returns_created_and_rejected_dates(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+    create_session,
+    database,
+) -> None:
+    movie = await create_movie(title="Batch Planning Movie", duration_minutes=120)
+    await create_session(movie_id=movie["id"], day_offset=2, start_hour=15, duration_minutes=150)
+    first_start, first_end = build_session_window(day_offset=1, start_hour=15, duration_minutes=150)
+    conflict_start, _ = build_session_window(day_offset=2, start_hour=15, duration_minutes=150)
+    third_start, _ = build_session_window(day_offset=4, start_hour=15, duration_minutes=150)
+
+    response = await client.post(
+        f"{API_PREFIX}/admin/sessions/batch",
+        headers=admin_auth["headers"],
+        json={
+            "movie_id": movie["id"],
+            "start_time": first_start.isoformat(),
+            "end_time": first_end.isoformat(),
+            "price": 240,
+            "dates": [
+                first_start.date().isoformat(),
+                conflict_start.date().isoformat(),
+                third_start.date().isoformat(),
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["requested_count"] == 3
+    assert body["created_count"] == 2
+    assert body["rejected_count"] == 1
+    assert [session["start_time"][:10] for session in body["created_sessions"]] == [
+        first_start.date().isoformat(),
+        third_start.date().isoformat(),
+    ]
+    assert len(body["rejected_dates"]) == 1
+    rejected = body["rejected_dates"][0]
+    assert rejected["date"] == conflict_start.date().isoformat()
+    assert rejected["code"] == "conflict"
+    assert rejected["message"] == "Session overlaps with an existing session in the only hall."
+    assert rejected["blocking_session_id"]
+
+    count = await database[DatabaseCollections.SESSIONS].count_documents({"movie_id": movie["id"]})
+    assert count == 3
+
+
+@pytest.mark.asyncio
+async def test_batch_session_creation_keeps_future_dates_when_one_requested_day_is_in_the_past(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+    database,
+) -> None:
+    movie = await create_movie(title="Batch Past Date Movie", duration_minutes=110)
+    future_start, future_end = build_session_window(day_offset=2, start_hour=17, duration_minutes=140)
+    past_date = (future_start - timedelta(days=4)).date()
+
+    response = await client.post(
+        f"{API_PREFIX}/admin/sessions/batch",
+        headers=admin_auth["headers"],
+        json={
+            "movie_id": movie["id"],
+            "start_time": future_start.isoformat(),
+            "end_time": future_end.isoformat(),
+            "price": 225,
+            "dates": [
+                past_date.isoformat(),
+                future_start.date().isoformat(),
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["created_count"] == 1
+    assert body["rejected_count"] == 1
+    assert body["rejected_dates"][0]["date"] == past_date.isoformat()
+    assert body["rejected_dates"][0]["code"] == "validation_error"
+    assert body["rejected_dates"][0]["message"] == "Session start time must be in the future."
+
+    stored_sessions = await database[DatabaseCollections.SESSIONS].find({"movie_id": movie["id"]}).to_list(length=10)
+    assert len(stored_sessions) == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("start_hour", "end_delta_minutes", "expected_code", "expected_message"),
     [

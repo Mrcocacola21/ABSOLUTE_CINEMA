@@ -1,3 +1,5 @@
+export type SessionDraftSourceMode = "timeline" | "duplicate";
+
 export interface SessionDraft {
   movie_id: string;
   start_time: string;
@@ -5,10 +7,19 @@ export interface SessionDraft {
   price: number;
   autoFillEndTime: boolean;
   sourceLabel: string;
+  sourceMode: SessionDraftSourceMode;
+  extraDateKeys: string[];
+  calendarMonth: string;
 }
 
-export interface SessionEditDraft extends SessionDraft {
+export interface SessionEditDraft {
   sessionId: string;
+  movie_id: string;
+  start_time: string;
+  end_time: string;
+  price: number;
+  autoFillEndTime: boolean;
+  sourceLabel: string;
 }
 
 export interface DragPreview {
@@ -33,6 +44,7 @@ export interface BoardSlot {
   left: string;
   width: string;
   blockedReason: string | null;
+  blockingSessionId: string | null;
 }
 
 export interface QuickDayOption {
@@ -45,4 +57,27 @@ export interface BoardStats {
   sessions: number;
   soldTickets: number;
   availableSeats: number;
+}
+
+export interface DraftDatePlan {
+  dateKey: string;
+  label: string;
+  shortLabel: string;
+  startTime: string;
+  endTime: string;
+  isLocked: boolean;
+  isConflicting: boolean;
+  conflictReason: string | null;
+}
+
+export interface DraftCalendarDay {
+  dateKey: string;
+  dayNumber: string;
+  isCurrentMonth: boolean;
+  isToday: boolean;
+  isSelected: boolean;
+  isLocked: boolean;
+  isPast: boolean;
+  hasConflict: boolean;
+  hasSessions: boolean;
 }

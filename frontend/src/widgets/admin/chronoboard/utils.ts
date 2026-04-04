@@ -28,12 +28,36 @@ export function toDateKey(value: string | Date): string {
   return `${year}-${month}-${day}`;
 }
 
+export function toMonthKey(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
 export function formatDayLabel(dayKey: string): string {
   const [year, month, day] = dayKey.split("-").map(Number);
   return new Date(year, month - 1, day).toLocaleDateString(getIntlLocale(i18n.resolvedLanguage ?? i18n.language), {
     weekday: "long",
     day: "2-digit",
     month: "long",
+  });
+}
+
+export function formatDayPillLabel(dayKey: string): string {
+  const [year, month, day] = dayKey.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(getIntlLocale(i18n.resolvedLanguage ?? i18n.language), {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+export function formatMonthLabel(monthKey: string): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString(getIntlLocale(i18n.resolvedLanguage ?? i18n.language), {
+    month: "long",
+    year: "numeric",
   });
 }
 
@@ -77,6 +101,52 @@ export function clampMinutes(value: number): number {
 
 export function buildDayDate(dayKey: string, hour: number, minute: number): string {
   return `${dayKey}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+export function combineDateKeyAndTime(dayKey: string, value: string): string {
+  if (!dayKey || !value) {
+    return value;
+  }
+
+  const date = new Date(value);
+  return buildDayDate(dayKey, date.getHours(), date.getMinutes());
+}
+
+export function sortDateKeys(dateKeys: string[]): string[] {
+  return [...dateKeys].sort((left, right) => new Date(left).getTime() - new Date(right).getTime());
+}
+
+export function shiftMonthKey(monthKey: string, monthOffset: number): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  return toMonthKey(new Date(year, month - 1 + monthOffset, 1));
+}
+
+export function buildCalendarWeekdayLabels(): string[] {
+  const locale = getIntlLocale(i18n.resolvedLanguage ?? i18n.language);
+  const monday = new Date(Date.UTC(2024, 0, 1));
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday);
+    date.setUTCDate(monday.getUTCDate() + index);
+    return date.toLocaleDateString(locale, { weekday: "short" });
+  });
+}
+
+export function buildCalendarDays(monthKey: string): Array<{ dateKey: string; dayNumber: string; isCurrentMonth: boolean }> {
+  const [year, month] = monthKey.split("-").map(Number);
+  const monthStart = new Date(year, month - 1, 1);
+  const startOffset = (monthStart.getDay() + 6) % 7;
+  const gridStart = new Date(year, month - 1, 1 - startOffset);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const current = new Date(gridStart);
+    current.setDate(gridStart.getDate() + index);
+
+    return {
+      dateKey: toDateKey(current),
+      dayNumber: String(current.getDate()),
+      isCurrentMonth: current.getMonth() === monthStart.getMonth(),
+    };
+  });
 }
 
 export function getSessionCardStyle(startTime: string, endTime: string): { left: string; width: string } {

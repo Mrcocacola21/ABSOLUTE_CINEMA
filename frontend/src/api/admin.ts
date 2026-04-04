@@ -39,6 +39,28 @@ export interface SessionCreatePayload {
   price: number;
 }
 
+export interface SessionBatchCreatePayload extends SessionCreatePayload {
+  dates: string[];
+}
+
+export interface SessionBatchRejectedDate {
+  date: string;
+  start_time: string;
+  end_time: string;
+  code: string;
+  message: string;
+  blocking_session_id?: string | null;
+}
+
+export interface SessionBatchCreateResult {
+  requested_dates: string[];
+  requested_count: number;
+  created_count: number;
+  rejected_count: number;
+  created_sessions: SessionDetails[];
+  rejected_dates: SessionBatchRejectedDate[];
+}
+
 export interface SessionUpdatePayload {
   movie_id?: string;
   start_time?: string;
@@ -83,6 +105,11 @@ export async function listAdminSessionsRequest() {
 
 export async function createSessionRequest(payload: SessionCreatePayload) {
   const { data } = await apiClient.post<ApiResponse<SessionDetails>>("/admin/sessions", payload);
+  return data;
+}
+
+export async function createSessionsBatchRequest(payload: SessionBatchCreatePayload) {
+  const { data } = await apiClient.post<ApiResponse<SessionBatchCreateResult>>("/admin/sessions/batch", payload);
   return data;
 }
 

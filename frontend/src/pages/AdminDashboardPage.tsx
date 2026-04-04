@@ -36,14 +36,47 @@ export function AdminDashboardPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [report, setReport] = useState<AttendanceReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isReportLoading, setIsReportLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pendingActionLabel, setPendingActionLabel] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [reportErrorMessage, setReportErrorMessage] = useState("");
   const [feedback, setFeedback] = useState<{
     tone: "success" | "error";
     title: string;
     message: string;
   } | null>(null);
+
+  async function loadAttendanceReport(options?: {
+    showLoading?: boolean;
+    preserveCurrentOnError?: boolean;
+  }) {
+    const showLoading = options?.showLoading ?? report === null;
+    const preserveCurrentOnError = options?.preserveCurrentOnError ?? report !== null;
+
+    if (showLoading) {
+      setIsReportLoading(true);
+    }
+
+    setReportErrorMessage("");
+
+    try {
+      const attendanceResponse = await getAttendanceRequest();
+      setReport(attendanceResponse.data);
+      return attendanceResponse.data;
+    } catch (error) {
+      if (!preserveCurrentOnError) {
+        setReport(null);
+      }
+
+      setReportErrorMessage(extractApiErrorMessage(error, t("admin.reports.errorMessage")));
+      return null;
+    } finally {
+      if (showLoading) {
+        setIsReportLoading(false);
+      }
+    }
+  }
 
   async function refreshDashboard(options?: { background?: boolean }) {
     const background = options?.background ?? false;
@@ -53,21 +86,24 @@ export function AdminDashboardPage() {
       setIsLoading(true);
     }
 
+    const reportPromise = loadAttendanceReport({
+      showLoading: !background || report === null,
+      preserveCurrentOnError: background || report !== null,
+    });
+
     try {
-      const [moviesResponse, sessionsResponse, ticketsResponse, usersResponse, attendanceResponse] =
+      const [moviesResponse, sessionsResponse, ticketsResponse, usersResponse] =
         await Promise.all([
           listAdminMoviesRequest(),
           listAdminSessionsRequest(),
           listAdminTicketsRequest(),
           listAdminUsersRequest(),
-          getAttendanceRequest(),
         ]);
 
       setMovies(moviesResponse.data);
       setSessions(sessionsResponse.data);
       setTickets(ticketsResponse.data);
       setUsers(usersResponse.data);
-      setReport(attendanceResponse.data);
       setErrorMessage("");
     } catch (error) {
       const message = extractApiErrorMessage(error, t("admin.dashboard.unavailableMessage"));
@@ -81,11 +117,14 @@ export function AdminDashboardPage() {
         setErrorMessage(message);
       }
     } finally {
-      if (background) {
-        setIsRefreshing(false);
-      } else {
+      if (!background) {
         setIsLoading(false);
       }
+    }
+
+    if (background) {
+      await reportPromise;
+      setIsRefreshing(false);
     }
   }
 
@@ -265,7 +304,7 @@ export function AdminDashboardPage() {
           <button
             className="button--ghost"
             type="button"
-            disabled={isLoading || isRefreshing || Boolean(pendingActionLabel)}
+            disabled={isLoading || isRefreshing || (isReportLoading && report === null) || Boolean(pendingActionLabel)}
             onClick={() => void refreshDashboard({ background: true })}
           >
             {isRefreshing ? t("common.actions.refresh") : t("common.actions.refreshData")}
@@ -357,7 +396,19 @@ export function AdminDashboardPage() {
             onCancelSession={handleCancelSession}
             onDeleteSession={handleDeleteSession}
           />
-          <AttendancePanel report={report} tickets={tickets} users={users} />
+          <AttendancePanel
+            report={report}
+            tickets={tickets}
+            users={users}
+            isLoading={isReportLoading}
+            errorMessage={reportErrorMessage}
+            onRetry={() =>
+              void loadAttendanceReport({
+                showLoading: true,
+                preserveCurrentOnError: report !== null,
+              })
+            }
+          />
         </>
       ) : null}
     </>

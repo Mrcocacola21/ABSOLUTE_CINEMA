@@ -87,6 +87,42 @@ async def test_user_can_purchase_multiple_tickets_in_one_order_and_update_sessio
 
 
 @pytest.mark.asyncio
+async def test_order_purchase_and_profile_order_list_support_movies_with_poster_url(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    poster_url = "https://example.com/posters/absolute-cinema.jpg"
+    movie = await create_movie(
+        title="Poster Order Movie",
+        duration_minutes=118,
+        poster_url=poster_url,
+    )
+    session = await create_session(movie_id=movie["id"], start_hour=12, duration_minutes=140, price=225)
+
+    purchase_response = await client.post(
+        f"{API_PREFIX}/orders/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seats": [{"seat_row": 2, "seat_number": 6}],
+        },
+    )
+
+    assert purchase_response.status_code == 201, purchase_response.text
+    purchased_order = purchase_response.json()["data"]
+    assert purchased_order["poster_url"] == poster_url
+
+    orders_response = await client.get(f"{API_PREFIX}/users/me/orders", headers=user_auth["headers"])
+    assert orders_response.status_code == 200, orders_response.text
+    orders = orders_response.json()["data"]
+    assert len(orders) == 1
+    assert orders[0]["id"] == purchased_order["id"]
+    assert orders[0]["poster_url"] == poster_url
+
+
+@pytest.mark.asyncio
 async def test_order_purchase_rejects_duplicate_seats_in_payload(
     client: httpx.AsyncClient,
     user_auth: dict[str, object],

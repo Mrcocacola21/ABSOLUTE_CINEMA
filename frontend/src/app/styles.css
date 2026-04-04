@@ -3365,18 +3365,458 @@ img {
   gap: 10px;
 }
 
-.admin-report-summary {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+.admin-reports {
+  display: grid;
+  gap: 24px;
 }
 
-.admin-report-summary__card,
+.admin-reports__meta {
+  display: grid;
+  gap: 4px;
+  text-align: right;
+  justify-items: end;
+}
+
+.admin-reports__meta span,
+.admin-report-summary__eyebrow,
+.admin-report-toolbar__label,
+.admin-report-insight__label,
+.admin-attendance-row__stat span {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-reports__meta strong {
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.admin-report-summary {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.admin-report-summary__card {
+  display: grid;
+  position: relative;
+  gap: 14px;
+  padding: 18px;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background:
+    radial-gradient(circle at top right, rgba(244, 166, 98, 0.16), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.03));
+}
+
+.admin-report-summary__card::after {
+  content: "";
+  position: absolute;
+  inset: auto 20px 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+}
+
+.admin-report-summary__card strong {
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  line-height: 0.95;
+}
+
+.admin-report-summary__card p {
+  max-width: 28ch;
+}
+
+.admin-report-tabs {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 10px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018));
+}
+
+.admin-report-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  color: #fff;
+  text-align: left;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.admin-report-tab:hover {
+  transform: translateY(-1px);
+  border-color: rgba(244, 166, 98, 0.2);
+}
+
+.admin-report-tab.is-active {
+  border-color: rgba(244, 166, 98, 0.34);
+  background:
+    radial-gradient(circle at top right, rgba(244, 166, 98, 0.18), transparent 46%),
+    linear-gradient(180deg, rgba(244, 166, 98, 0.14), rgba(255, 255, 255, 0.03));
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+}
+
+.admin-report-tab__label,
+.admin-report-mini-card__label {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.admin-report-tab.is-active .admin-report-tab__label {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.admin-report-tab__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+  font-size: 0.94rem;
+  font-weight: 800;
+}
+
+.admin-report-stage {
+  display: grid;
+}
+
+.admin-report-mini-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.admin-report-mini-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.admin-report-mini-card strong {
+  font-size: 1.38rem;
+  line-height: 0.96;
+}
+
+.admin-report-mini-card p {
+  margin: 0;
+  max-width: 26ch;
+}
+
 .admin-report-feed__item {
   display: grid;
   gap: 10px;
 }
 
 .admin-reports__grid {
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.95fr);
+  align-items: start;
+}
+
+.admin-reports__sidebar {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.admin-report-panel {
+  gap: 18px;
+}
+
+.admin-report-panel--attendance {
+  border-color: rgba(244, 166, 98, 0.18);
+  background:
+    radial-gradient(circle at top right, rgba(244, 166, 98, 0.14), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.028));
+}
+
+.admin-report-panel__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.admin-report-panel__copy {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.admin-report-panel__copy p {
+  margin: 0;
+}
+
+.admin-report-panel__header-meta {
+  display: grid;
+  justify-items: end;
+  align-content: start;
+  gap: 8px;
+}
+
+.admin-report-filter-panel {
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.022));
+}
+
+.admin-report-filter-panel h4 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.admin-report-toolbar {
+  display: grid;
+  gap: 14px 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  padding: 14px 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.admin-report-toolbar--bookings {
+  grid-template-columns: minmax(0, 1.35fr) repeat(2, minmax(220px, 1fr)) auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.admin-report-toolbar--bookings .field > span:first-child {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.admin-report-toolbar__actions {
+  min-width: 0;
+}
+
+.admin-report-toolbar__group {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-report-toggle-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-report-toggle {
+  display: grid;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    transform 0.18s ease;
+}
+
+.admin-report-toggle:hover {
+  color: #fff;
+  border-color: rgba(244, 166, 98, 0.24);
+  transform: translateY(-1px);
+}
+
+.admin-report-toggle.is-active {
+  color: #fff;
+  border-color: rgba(244, 166, 98, 0.34);
+  background:
+    linear-gradient(180deg, rgba(244, 166, 98, 0.22), rgba(244, 166, 98, 0.08));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.admin-report-insights {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.admin-report-insight {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  align-content: start;
+}
+
+.admin-report-insight--positive {
+  border-color: rgba(119, 194, 157, 0.24);
+  background:
+    linear-gradient(180deg, rgba(119, 194, 157, 0.12), rgba(255, 255, 255, 0.025));
+}
+
+.admin-report-insight--warning {
+  border-color: rgba(227, 123, 118, 0.22);
+  background:
+    linear-gradient(180deg, rgba(227, 123, 118, 0.12), rgba(255, 255, 255, 0.025));
+}
+
+.admin-report-insight strong {
+  font-size: 1.04rem;
+  line-height: 1.22;
+}
+
+.admin-report-insight p {
+  margin: 0;
+}
+
+.admin-attendance-list {
+  display: grid;
+  gap: 12px;
+  max-height: 620px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.admin-attendance-row {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  align-content: start;
+}
+
+.admin-attendance-row--strong {
+  border-color: rgba(119, 194, 157, 0.2);
+  background:
+    linear-gradient(180deg, rgba(119, 194, 157, 0.11), rgba(255, 255, 255, 0.025));
+}
+
+.admin-attendance-row--weak {
+  border-color: rgba(227, 123, 118, 0.2);
+  background:
+    linear-gradient(180deg, rgba(227, 123, 118, 0.12), rgba(255, 255, 255, 0.022));
+}
+
+.admin-attendance-row--cancelled {
+  border-color: rgba(227, 123, 118, 0.18);
+  background:
+    linear-gradient(180deg, rgba(227, 123, 118, 0.08), rgba(255, 255, 255, 0.02));
+}
+
+.admin-attendance-row__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-attendance-row__copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.admin-attendance-row__copy strong {
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.admin-attendance-row__copy p,
+.admin-attendance-row__progress-copy {
+  margin: 0;
+}
+
+.admin-attendance-row__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.admin-attendance-row__progress {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-attendance-row__progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.admin-attendance-row__progress-head strong {
+  color: #fff;
+  font-size: 1rem;
+}
+
+.admin-attendance-row__meter {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.admin-attendance-row__meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(244, 166, 98, 0.9), rgba(119, 194, 157, 0.92));
+}
+
+.admin-attendance-row__stats {
+  display: grid;
+  gap: 10px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-attendance-row__stat {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.admin-attendance-row__stat strong {
+  font-size: 1.02rem;
 }
 
 .admin-report-feed__item {
@@ -3384,6 +3824,48 @@ img {
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
+}
+
+.admin-report-feed__top {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-report-feed__copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.admin-report-feed__copy p {
+  margin: 0;
+}
+
+.admin-report-feed {
+  max-height: 620px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.admin-report-feed__buyer {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.admin-report-feed__buyer strong,
+.admin-report-feed__buyer span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-report-feed__buyer span {
+  color: var(--text-muted);
+  font-size: 0.92rem;
 }
 
 .chrono-workbench {
@@ -4121,6 +4603,36 @@ img {
     grid-template-columns: 1fr;
   }
 
+  .admin-report-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-report-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-report-toolbar--bookings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-report-toolbar__actions {
+    justify-content: flex-start;
+  }
+
+  .admin-report-panel__header {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-report-panel__header-meta,
+  .admin-reports__meta {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .admin-attendance-row__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .admin-planner__library,
   .admin-planner__panel {
     position: static;
@@ -4218,6 +4730,40 @@ img {
   .admin-form__field-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .admin-report-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-report-tab {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .admin-report-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-report-mini-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-report-toolbar--bookings {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-report-feed__top,
+  .admin-attendance-row__header {
+    flex-direction: column;
+  }
+
+  .admin-attendance-row__tags {
+    justify-content: flex-start;
+  }
+
+  .admin-attendance-row__stats {
+    grid-template-columns: 1fr;
   }
 
   .admin-form__genre-picker {

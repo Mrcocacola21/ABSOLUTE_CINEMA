@@ -17,6 +17,7 @@ from app.schemas.session import SessionCreate
 from app.schemas.ticket import TicketRead
 from app.schemas.user import UserRead, UserUpdate
 from app.services.admin import AdminService
+from app.services.order import OrderService
 from app.services.ticket import TicketService
 
 
@@ -272,6 +273,7 @@ def build_movie(
     movie_id: str = "movie-1",
     *,
     duration_minutes: int = 120,
+    poster_url: str | None = None,
     status: str = MovieStatuses.PLANNED,
 ) -> dict[str, object]:
     now = datetime.now(tz=timezone.utc)
@@ -280,7 +282,7 @@ def build_movie(
         title={"uk": "Інтерстеллар", "en": "Interstellar"},
         description={"uk": "Науково-фантастична драма", "en": "Sci-fi drama"},
         duration_minutes=duration_minutes,
-        poster_url=None,
+        poster_url=poster_url,
         age_rating="PG-13",
         genres=["science_fiction", "drama"],
         status=status,
@@ -368,6 +370,37 @@ def test_movie_create_schema_rejects_invalid_genre_code() -> None:
 def test_user_update_requires_current_password_for_sensitive_fields() -> None:
     with pytest.raises(ValueError):
         UserUpdate(email="new@example.com")
+
+
+def test_order_service_build_order_read_serializes_httpurl_poster_url_to_plain_string() -> None:
+    poster_url = "https://example.com/posters/interstellar.jpg"
+    now = datetime.now(tz=timezone.utc)
+    service = OrderService(
+        session_repository=FakeSessionRepository(),
+        ticket_repository=FakeTicketRepository(),
+        movie_repository=FakeMovieRepository(),
+        order_repository=FakeOrderRepository(),
+    )
+
+    built_order = service._build_order_read(
+        order_document={
+            "id": "order-1",
+            "user_id": "user-1",
+            "session_id": "session-1",
+            "status": "completed",
+            "total_price": 200.0,
+            "tickets_count": 1,
+            "created_at": now,
+            "updated_at": None,
+        },
+        ticket_documents=[build_ticket()],
+        session_document=build_session(),
+        movie_document=build_movie(poster_url=poster_url),
+        now=now,
+    )
+
+    assert built_order.poster_url == poster_url
+    assert isinstance(built_order.poster_url, str)
 
 
 @pytest.mark.asyncio

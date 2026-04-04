@@ -200,7 +200,7 @@ class OrderService:
             **order.model_dump(mode="python"),
             movie_id=movie.id,
             movie_title=movie.title,
-            poster_url=movie.poster_url,
+            poster_url=str(movie.poster_url) if movie.poster_url else None,
             age_rating=movie.age_rating,
             session_start_time=session.start_time,
             session_end_time=session.end_time,

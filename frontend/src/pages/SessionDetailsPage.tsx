@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import axios from "axios";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 
@@ -34,6 +35,7 @@ export function SessionDetailsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const purchaseInFlightRef = useRef(false);
   const [feedback, setFeedback] = useState<{
     tone: "success" | "error" | "info";
     title: string;
@@ -118,40 +120,49 @@ export function SessionDetailsPage() {
   }
 
   async function handlePurchase() {
-    if (selectedSeats.length === 0) {
+    if (selectedSeats.length === 0 || purchaseInFlightRef.current) {
       return;
     }
+    purchaseInFlightRef.current = true;
     setIsSubmitting(true);
     setFeedback(null);
+    const seatsToPurchase = [...selectedSeats];
     try {
       await purchaseOrderRequest({
         session_id: sessionId,
-        seats: selectedSeats.map((seat) => ({
+        seats: seatsToPurchase.map((seat) => ({
           seat_row: seat.row,
           seat_number: seat.number,
         })),
       });
       await loadSessionData({ background: true });
-      const selectedSeatLabels = selectedSeats.map((seat) => `${seat.row}-${seat.number}`).join(", ");
+      const selectedSeatLabels = seatsToPurchase.map((seat) => `${seat.row}-${seat.number}`).join(", ");
       setFeedback({
         tone: "success",
         title:
-          selectedSeats.length > 1
+          seatsToPurchase.length > 1
             ? t("session.purchase.successMultipleTitle")
             : t("session.purchase.successSingleTitle"),
         message:
-          selectedSeats.length > 1
+          seatsToPurchase.length > 1
             ? t("session.purchase.successMultipleMessage", { seats: selectedSeatLabels })
             : t("session.purchase.successSingleMessage", { seats: selectedSeatLabels }),
       });
       setSelectedSeats([]);
     } catch (error) {
+      const isConflictError = axios.isAxiosError(error) && error.response?.status === 409;
+      if (isConflictError) {
+        await loadSessionData({ background: true });
+      }
       setFeedback({
         tone: "error",
-        title: t("session.purchase.failedTitle"),
-        message: extractApiErrorMessage(error, t("session.purchase.failedMessage")),
+        title: isConflictError ? t("session.purchase.conflictTitle") : t("session.purchase.failedTitle"),
+        message: isConflictError
+          ? t("session.purchase.conflictMessage")
+          : extractApiErrorMessage(error, t("session.purchase.failedMessage")),
       });
     } finally {
+      purchaseInFlightRef.current = false;
       setIsSubmitting(false);
     }
   }

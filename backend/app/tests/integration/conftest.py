@@ -263,6 +263,7 @@ async def create_movie(
         title: str = "Interstellar",
         description: str = "Science fiction epic",
         duration_minutes: int = 169,
+        poster_url: str | None = None,
         genres: list[str] | None = None,
         status: str = "planned",
     ) -> dict[str, object]:
@@ -273,7 +274,7 @@ async def create_movie(
                 "title": build_localized_text(title),
                 "description": build_localized_text(description),
                 "duration_minutes": duration_minutes,
-                "poster_url": None,
+                "poster_url": poster_url,
                 "age_rating": "PG-13",
                 "genres": genres or ["science_fiction", "drama"],
                 "status": status,

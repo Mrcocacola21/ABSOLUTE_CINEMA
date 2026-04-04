@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import "./ProfilePage.css";
+
 import { listMyOrdersRequest } from "@/api/orders";
 import { cancelTicketRequest } from "@/api/tickets";
 import { deactivateCurrentUserRequest, updateCurrentUserRequest } from "@/api/users";
@@ -24,6 +26,18 @@ const emptySensitiveFields = {
   password: "",
   current_password: "",
 };
+
+function getInitials(value: string): string {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return "CS";
+  }
+
+  return parts
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
 
 export function ProfilePage() {
   const { t, i18n } = useTranslation();
@@ -223,19 +237,67 @@ export function ProfilePage() {
     );
   }
 
+  const accountStatus = formatStateLabel(currentUser.is_active ? "active" : "inactive");
+  const accountRole = formatStateLabel(currentUser.role);
+  const profileInitials = getInitials(currentUser.name);
+  const totalTicketsCount = orders.reduce((sum, order) => sum + order.tickets_count, 0);
+  const activeTicketsCount = orders.reduce((sum, order) => sum + order.active_tickets_count, 0);
+
   return (
-    <>
-      <section className="panel">
-        <h1 className="page-title">{t("profile.page.title")}</h1>
-        <p className="muted">{t("profile.page.intro")}</p>
-        <div className="stats-row">
-          <span className="badge">{currentUser.name}</span>
-          <span className="badge">{currentUser.email}</span>
-          <span className="badge">{formatStateLabel(currentUser.role)}</span>
-          <span className="badge">
-            {formatStateLabel(currentUser.is_active ? "active" : "inactive")}
-          </span>
+    <div className="profile-page">
+      <section className="panel profile-hero">
+        <div className="profile-hero__main">
+          <div className="profile-hero__avatar" aria-hidden="true">
+            {profileInitials}
+          </div>
+
+          <div className="profile-hero__copy">
+            <p className="page-eyebrow">{t("common.account.label")}</p>
+            <h1 className="page-title profile-hero__title">{currentUser.name}</h1>
+            <p className="profile-hero__subtitle">{t("profile.page.intro")}</p>
+
+            <div className="profile-hero__meta">
+              <div className="profile-hero__meta-card">
+                <span>{t("common.labels.email")}</span>
+                <strong title={currentUser.email}>{currentUser.email}</strong>
+              </div>
+              <div className="profile-hero__meta-card">
+                <span>{t("common.account.label")}</span>
+                <strong>{accountRole}</strong>
+              </div>
+              <div className="profile-hero__meta-card">
+                <span>{t("common.labels.date")}</span>
+                <strong>{formatDateTime(currentUser.created_at, i18n.language)}</strong>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <aside className="profile-hero__aside">
+          <div className="profile-hero__aside-head">
+            <span className="badge">{accountStatus}</span>
+            <p className="muted">{currentUser.email}</p>
+          </div>
+
+          <div className="profile-hero__summary">
+            <div className="profile-hero__stat profile-hero__stat--primary">
+              <span>{t("common.labels.status")}</span>
+              <strong>{accountStatus}</strong>
+              <p>{accountRole}</p>
+            </div>
+
+            <div className="profile-hero__stats">
+              <div className="profile-hero__stat">
+                <span>{t("profile.orders.title")}</span>
+                <strong>{isOrdersLoading ? "..." : orders.length}</strong>
+              </div>
+              <div className="profile-hero__stat">
+                <span>{t("common.labels.tickets")}</span>
+                <strong>{isOrdersLoading ? "..." : totalTicketsCount}</strong>
+              </div>
+            </div>
+          </div>
+        </aside>
       </section>
 
       {feedback ? (
@@ -246,15 +308,22 @@ export function ProfilePage() {
         />
       ) : null}
 
-      <section className="split-grid">
-        <form className="form-card" onSubmit={handleProfileUpdate}>
-          <div className="toolbar-panel__header">
-            <div>
-              <h3>{t("profile.form.title")}</h3>
-              <p className="muted">{t("profile.form.intro")}</p>
+      <section className="profile-layout">
+        <form className="form-card profile-panel profile-form-panel" onSubmit={handleProfileUpdate}>
+          <div className="profile-panel__header">
+            <div className="profile-panel__copy">
+              <h2 className="section-title">{t("profile.form.title")}</h2>
+              <p className="profile-panel__summary">{t("profile.form.intro")}</p>
             </div>
+            <span className="badge">{accountRole}</span>
           </div>
-          <div className="form-grid">
+
+          <div className="profile-form__hint-card">
+            <strong>{t("common.labels.currentPassword")}</strong>
+            <p>{t("profile.form.requirementHint")}</p>
+          </div>
+
+          <div className="profile-form__grid">
             <label className="field">
               <span>{t("common.labels.name")}</span>
               <input
@@ -297,136 +366,185 @@ export function ProfilePage() {
               />
             </label>
           </div>
-          <div className="actions-row">
-            <button className="button" type="submit" disabled={isSavingProfile || isDeactivatingAccount}>
-              {isSavingProfile ? t("profile.form.saveLoading") : t("profile.form.saveIdle")}
-            </button>
-            <button
-              className="button--danger"
-              type="button"
-              disabled={isSavingProfile || isDeactivatingAccount}
-              onClick={() => {
-                void handleDeactivateAccount();
-              }}
-            >
-              {isDeactivatingAccount ? t("profile.form.deactivating") : t("common.actions.deactivateAccount")}
-            </button>
+
+          <div className="profile-form__footer">
+            <div className="profile-form__actions">
+              <button className="button" type="submit" disabled={isSavingProfile || isDeactivatingAccount}>
+                {isSavingProfile ? t("profile.form.saveLoading") : t("profile.form.saveIdle")}
+              </button>
+              <button
+                className="button--danger"
+                type="button"
+                disabled={isSavingProfile || isDeactivatingAccount}
+                onClick={() => {
+                  void handleDeactivateAccount();
+                }}
+              >
+                {isDeactivatingAccount ? t("profile.form.deactivating") : t("common.actions.deactivateAccount")}
+              </button>
+            </div>
           </div>
-          <p className="muted">{t("profile.form.requirementHint")}</p>
         </form>
 
-        <section className="form-card">
-          <div className="admin-section__header">
-            <div>
-              <h3>{t("profile.orders.title")}</h3>
-              <p className="muted">{t("profile.orders.intro")}</p>
+        <section className="form-card profile-panel profile-orders-panel">
+          <div className="profile-panel__header profile-panel__header--orders">
+            <div className="profile-panel__copy">
+              <h2 className="section-title">{t("profile.orders.title")}</h2>
+              <p className="profile-panel__summary">{t("profile.orders.intro")}</p>
             </div>
-            <span className="badge">{orders.length}</span>
+
+            <div className="profile-panel__actions">
+              <span className="badge">{isOrdersLoading ? "..." : orders.length}</span>
+              {!isOrdersLoading && orders.length > 0 ? (
+                <span className="badge">
+                  {t("profile.orders.activeSummary", {
+                    active: activeTicketsCount,
+                    total: totalTicketsCount,
+                  })}
+                </span>
+              ) : null}
+            </div>
           </div>
 
           {isOrdersLoading ? (
-            <StatePanel
-              tone="loading"
-              title={t("profile.orders.loadingTitle")}
-              message={t("profile.orders.loadingMessage")}
-            />
+            <section className="profile-orders__state profile-orders__state--loading" aria-busy="true">
+              <div className="profile-orders__state-copy">
+                <h3 className="section-title">{t("profile.orders.loadingTitle")}</h3>
+                <p>{t("profile.orders.loadingMessage")}</p>
+              </div>
+            </section>
           ) : null}
 
           {!isOrdersLoading && ordersErrorMessage ? (
-            <StatePanel
-              tone="error"
-              title={t("profile.orders.unavailableTitle")}
-              message={ordersErrorMessage}
-              action={
-                <button className="button--ghost" type="button" onClick={() => void refreshOrders()}>
-                  {t("common.actions.retry")}
-                </button>
-              }
-            />
+            <section className="profile-orders__state profile-orders__state--error">
+              <div className="profile-orders__state-copy">
+                <h3 className="section-title">{t("profile.orders.unavailableTitle")}</h3>
+                <p>{ordersErrorMessage}</p>
+              </div>
+
+              <button className="button--ghost" type="button" onClick={() => void refreshOrders()}>
+                {t("common.actions.retry")}
+              </button>
+            </section>
           ) : null}
 
           {!isOrdersLoading && !ordersErrorMessage && orders.length === 0 ? (
-            <section className="empty-state empty-state--panel">
-              <h2>{t("profile.orders.emptyTitle")}</h2>
-              <p>{t("profile.orders.emptyText")}</p>
-              <Link to="/schedule" className="button--ghost">
+            <section className="profile-orders__empty">
+              <span className="badge">{t("profile.orders.title")}</span>
+
+              <div className="profile-orders__empty-copy">
+                <h3 className="section-title">{t("profile.orders.emptyTitle")}</h3>
+                <p>{t("profile.orders.emptyText")}</p>
+              </div>
+
+              <Link to="/schedule" className="button">
                 {t("common.actions.browseSchedule")}
               </Link>
             </section>
           ) : null}
 
           {!isOrdersLoading && !ordersErrorMessage && orders.length > 0 ? (
-            <div className="list">
-              {orders.map((order) => (
-                <article key={order.id} className="card order-history__order">
-                  <div className="order-history__order-head">
-                    <div>
-                      <strong>{getLocalizedText(order.movie_title, i18n.language)}</strong>
-                      <p className="muted">
-                        {formatDateTime(order.session_start_time)} | {formatStateLabel(order.session_status)}
-                      </p>
-                    </div>
-                    <div className="stats-row">
-                      <span className="badge">{formatStateLabel(order.status)}</span>
-                      <span className="badge">
-                        {t("profile.orders.activeSummary", {
-                          active: order.active_tickets_count,
-                          total: order.tickets_count,
-                        })}
-                      </span>
-                      <span className="badge">{formatCurrency(order.total_price)}</span>
-                    </div>
-                  </div>
+            <div className="profile-orders__list">
+              {orders.map((order) => {
+                const movieTitle = getLocalizedText(order.movie_title, i18n.language);
 
-                  <div className="order-history__meta">
-                    <span className="badge">{t("profile.orders.shortId", { id: order.id.slice(-6) })}</span>
-                    <span className="badge">{t("profile.orders.ticketsCount", { count: order.tickets_count })}</span>
-                    {order.age_rating ? <span className="badge">{order.age_rating}</span> : null}
-                  </div>
-
-                  <div className="order-history__tickets">
-                    {order.tickets.map((ticket) => (
-                      <div key={ticket.id} className="order-history__ticket">
-                        <div className="order-history__ticket-copy">
-                          <strong>
-                            {t("common.labels.seat")} {ticket.seat_row}-{ticket.seat_number}
-                          </strong>
-                          <p className="muted">
-                            {t("profile.orders.purchasedAt", { date: formatDateTime(ticket.purchased_at) })}
-                            {ticket.cancelled_at
-                              ? ` | ${t("profile.orders.cancelledAt", {
-                                  date: formatDateTime(ticket.cancelled_at),
-                                })}`
-                              : ""}
-                          </p>
-                        </div>
-                        <div className="stats-row">
-                          <span className="badge">{formatStateLabel(ticket.status)}</span>
-                          <span className="badge">{formatCurrency(ticket.price)}</span>
-                        </div>
-                        {ticket.is_cancellable ? (
-                          <button
-                            className="button--ghost"
-                            type="button"
-                            disabled={cancellingTicketId === ticket.id}
-                            onClick={() => {
-                              void handleCancelTicket(order, ticket);
-                            }}
-                          >
-                            {cancellingTicketId === ticket.id
-                              ? t("profile.orders.cancelLoading")
-                              : t("common.actions.cancelTicket")}
-                          </button>
-                        ) : null}
+                return (
+                  <article key={order.id} className="card order-history__order profile-order-card">
+                    <div className="profile-order-card__hero">
+                      <div className="media-tile profile-order-card__media" aria-hidden="true">
+                        {order.poster_url ? (
+                          <img src={order.poster_url} alt="" className="media-tile__image" />
+                        ) : (
+                          getInitials(movieTitle)
+                        )}
                       </div>
-                    ))}
-                  </div>
-                </article>
-              ))}
+
+                      <div className="profile-order-card__copy">
+                        <div className="profile-order-card__headline">
+                          <div>
+                            <h3 className="profile-order-card__title">{movieTitle}</h3>
+                            <p className="muted profile-order-card__session">
+                              {formatDateTime(order.session_start_time, i18n.language)} |{" "}
+                              {formatStateLabel(order.session_status)}
+                            </p>
+                          </div>
+                          <span className="badge">{formatStateLabel(order.status)}</span>
+                        </div>
+
+                        <div className="order-history__meta">
+                          <span className="badge">{t("profile.orders.shortId", { id: order.id.slice(-6) })}</span>
+                          <span className="badge">
+                            {t("profile.orders.ticketsCount", { count: order.tickets_count })}
+                          </span>
+                          <span className="badge">
+                            {t("profile.orders.activeSummary", {
+                              active: order.active_tickets_count,
+                              total: order.tickets_count,
+                            })}
+                          </span>
+                          {order.age_rating ? <span className="badge">{order.age_rating}</span> : null}
+                        </div>
+                      </div>
+
+                      <div className="profile-order-card__summary">
+                        <div className="profile-order-card__price">
+                          <span>{t("common.labels.total")}</span>
+                          <strong>{formatCurrency(order.total_price, i18n.language)}</strong>
+                        </div>
+
+                        <Link to={`/schedule/${order.session_id}`} className="button--ghost profile-order-card__cta">
+                          {t("common.actions.viewSession")}
+                        </Link>
+                      </div>
+                    </div>
+
+                    <div className="order-history__tickets">
+                      {order.tickets.map((ticket) => (
+                        <div key={ticket.id} className="order-history__ticket profile-order-ticket">
+                          <div className="order-history__ticket-copy">
+                            <strong>
+                              {t("common.labels.seat")} {ticket.seat_row}-{ticket.seat_number}
+                            </strong>
+                            <p className="muted">
+                              {t("profile.orders.purchasedAt", {
+                                date: formatDateTime(ticket.purchased_at, i18n.language),
+                              })}
+                              {ticket.cancelled_at
+                                ? ` | ${t("profile.orders.cancelledAt", {
+                                    date: formatDateTime(ticket.cancelled_at, i18n.language),
+                                  })}`
+                                : ""}
+                            </p>
+                          </div>
+
+                          <div className="profile-order-ticket__meta">
+                            <span className="badge">{formatStateLabel(ticket.status)}</span>
+                            <span className="badge">{formatCurrency(ticket.price, i18n.language)}</span>
+                            {ticket.is_cancellable ? (
+                              <button
+                                className="button--ghost profile-order-ticket__action"
+                                type="button"
+                                disabled={cancellingTicketId === ticket.id}
+                                onClick={() => {
+                                  void handleCancelTicket(order, ticket);
+                                }}
+                              >
+                                {cancellingTicketId === ticket.id
+                                  ? t("profile.orders.cancelLoading")
+                                  : t("common.actions.cancelTicket")}
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           ) : null}
         </section>
       </section>
-    </>
+    </div>
   );
 }

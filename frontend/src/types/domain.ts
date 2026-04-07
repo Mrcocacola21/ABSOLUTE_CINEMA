@@ -162,3 +162,18 @@ export interface AttendanceReport {
   total_tickets_sold: number;
   sessions: AttendanceSessionSummary[];
 }
+
+export interface AttendanceTicketDetails extends Ticket {
+  user_name?: string | null;
+  user_email?: string | null;
+  order_status?: OrderStatus | null;
+}
+
+export interface AttendanceSessionDetails {
+  generated_at: string;
+  session: SessionDetails;
+  seat_map: SessionSeats;
+  tickets_sold: number;
+  attendance_rate: number;
+  occupied_tickets: AttendanceTicketDetails[];
+}

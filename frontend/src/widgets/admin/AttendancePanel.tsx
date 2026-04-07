@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 
 import { getIntlLocale, getLocalizedText } from "@/shared/localization";
 import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
@@ -513,6 +514,13 @@ export function AttendancePanel({
                           <span>{t("admin.reports.attendance.capacity")}</span>
                           <strong>{item.total_seats}</strong>
                         </div>
+                      </div>
+
+                      <div className="admin-attendance-row__footer">
+                        <p className="muted">{t("admin.reports.attendance.detailsHint")}</p>
+                        <Link className="button--ghost admin-attendance-row__action" to={`/admin/attendance/${item.session_id}`}>
+                          {t("common.actions.viewDetails")}
+                        </Link>
                       </div>
                     </article>
                   );

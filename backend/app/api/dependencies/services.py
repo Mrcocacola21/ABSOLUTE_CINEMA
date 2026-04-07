@@ -98,4 +98,5 @@ def get_admin_service() -> AdminService:
         session_repository=get_session_repository(),
         ticket_repository=get_ticket_repository(),
         order_repository=get_order_repository(),
+        user_repository=get_user_repository(),
     )

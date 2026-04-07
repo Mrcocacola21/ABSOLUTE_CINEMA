@@ -22,6 +22,10 @@ from app.services.ticket import TicketService
 
 
 class FakeOrderRepository:
+    async def list_by_ids(self, order_ids: list[str], *, db_session=None) -> list[dict[str, object]]:
+        _ = (order_ids, db_session)
+        return []
+
     async def get_by_id(
         self,
         order_id: str,

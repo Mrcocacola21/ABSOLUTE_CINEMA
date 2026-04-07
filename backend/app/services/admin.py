@@ -17,6 +17,7 @@ from app.repositories.movies import MovieRepository
 from app.repositories.orders import OrderRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.tickets import TicketRepository
+from app.repositories.users import UserRepository
 from app.schemas.common import DeleteResultRead
 from app.schemas.movie import (
     MovieCreate,
@@ -25,7 +26,13 @@ from app.schemas.movie import (
     build_movie_normalization_updates,
     merge_movie_localized_updates,
 )
-from app.schemas.report import AttendanceReportRead, AttendanceSessionSummary
+from app.schemas.report import (
+    AttendanceReportRead,
+    AttendanceSessionDetailsRead,
+    AttendanceSessionSummary,
+    AttendanceTicketDetailsRead,
+)
+from app.schemas.seat import SeatAvailabilityRead
 from app.schemas.session import (
     SessionBatchCreate,
     SessionBatchCreateRead,
@@ -33,6 +40,7 @@ from app.schemas.session import (
     SessionCreate,
     SessionDetailsRead,
     SessionRead,
+    SessionSeatsRead,
     SessionUpdate,
 )
 from app.schemas.user import UserRead
@@ -48,11 +56,13 @@ class AdminService:
         session_repository: SessionRepository,
         ticket_repository: TicketRepository,
         order_repository: OrderRepository,
+        user_repository: UserRepository | None = None,
     ) -> None:
         self.movie_repository = movie_repository
         self.session_repository = session_repository
         self.ticket_repository = ticket_repository
         self.order_repository = order_repository
+        self.user_repository = user_repository or UserRepository()
         self.event_publisher = build_default_event_publisher()
         self.movie_status_manager = MovieStatusManager(
             movie_repository=movie_repository,
@@ -486,6 +496,78 @@ class AdminService:
             builder.add_session(summary)
         return builder.build()
 
+    async def get_attendance_session_details(
+        self,
+        session_id: str,
+        requested_by: UserRead,
+    ) -> AttendanceSessionDetailsRead:
+        """Return detailed attendance information for one session."""
+        _ = requested_by
+        now = datetime.now(tz=timezone.utc)
+        await self.movie_status_manager.refresh_statuses(current_time=now)
+
+        session_document = await self.session_repository.get_by_id(session_id)
+        if session_document is None:
+            raise NotFoundException("Session was not found.")
+
+        session = SessionRead.model_validate(session_document)
+        movie = await self._get_movie_or_not_found(session.movie_id)
+
+        ticket_documents = await self.ticket_repository.list_by_session(session_id, active_only=True)
+        occupied_seats = {
+            (int(ticket["seat_row"]), int(ticket["seat_number"]))
+            for ticket in ticket_documents
+        }
+        derived_available_seats = max(session.total_seats - len(occupied_seats), 0)
+        session_details = SessionDetailsFactory.build(
+            session=session,
+            movie=movie,
+        ).model_copy(update={"available_seats": derived_available_seats})
+        seat_map = self._build_session_seat_map(session=session, occupied_seats=occupied_seats)
+
+        user_documents = await self.user_repository.list_by_ids(
+            [str(ticket["user_id"]) for ticket in ticket_documents]
+        )
+        order_documents = await self.order_repository.list_by_ids(
+            [
+                str(ticket["order_id"])
+                for ticket in ticket_documents
+                if ticket.get("order_id")
+            ]
+        )
+        user_map = {str(user["id"]): user for user in user_documents}
+        order_map = {str(order["id"]): order for order in order_documents}
+
+        occupied_tickets = [
+            AttendanceTicketDetailsRead(
+                **ticket,
+                user_name=str(user_map[ticket["user_id"]]["name"]) if ticket["user_id"] in user_map else None,
+                user_email=str(user_map[ticket["user_id"]]["email"]) if ticket["user_id"] in user_map else None,
+                order_status=(
+                    str(order_map[ticket["order_id"]]["status"])
+                    if ticket.get("order_id") and ticket["order_id"] in order_map
+                    else None
+                ),
+            )
+            for ticket in sorted(
+                ticket_documents,
+                key=lambda document: (
+                    int(document["seat_row"]),
+                    int(document["seat_number"]),
+                    document["purchased_at"],
+                ),
+            )
+        ]
+
+        return AttendanceSessionDetailsRead(
+            generated_at=now,
+            session=session_details,
+            seat_map=seat_map,
+            tickets_sold=len(occupied_tickets),
+            attendance_rate=(len(occupied_tickets) / session.total_seats) if session.total_seats else 0,
+            occupied_tickets=occupied_tickets,
+        )
+
     def _validate_start_time(self, start_time: datetime) -> None:
         settings = get_settings()
         earliest = time(hour=settings.first_session_hour, minute=0)
@@ -501,6 +583,31 @@ class AdminService:
         if start_time.tzinfo is None:
             return start_time.replace(tzinfo=cinema_timezone).astimezone(timezone.utc)
         return start_time.astimezone(timezone.utc)
+
+    def _build_session_seat_map(
+        self,
+        *,
+        session: SessionRead,
+        occupied_seats: set[tuple[int, int]],
+    ) -> SessionSeatsRead:
+        settings = get_settings()
+        seats = [
+            SeatAvailabilityRead(
+                row=row_index,
+                number=seat_index,
+                is_available=(row_index, seat_index) not in occupied_seats,
+            )
+            for row_index in range(1, settings.hall_rows_count + 1)
+            for seat_index in range(1, settings.hall_seats_per_row + 1)
+        ]
+        return SessionSeatsRead(
+            session_id=session.id,
+            rows_count=settings.hall_rows_count,
+            seats_per_row=settings.hall_seats_per_row,
+            total_seats=session.total_seats,
+            available_seats=max(session.total_seats - len(occupied_seats), 0),
+            seats=seats,
+        )
 
     def _build_session_window_for_date(
         self,

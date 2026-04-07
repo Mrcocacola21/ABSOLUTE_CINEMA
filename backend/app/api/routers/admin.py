@@ -10,7 +10,7 @@ from app.core.responses import ApiResponse
 from app.factories.response_factory import ApiResponseFactory
 from app.schemas.common import DeleteResultRead
 from app.schemas.movie import MovieCreate, MovieRead, MovieUpdate
-from app.schemas.report import AttendanceReportRead
+from app.schemas.report import AttendanceReportRead, AttendanceSessionDetailsRead
 from app.schemas.session import (
     SessionBatchCreate,
     SessionBatchCreateRead,
@@ -203,3 +203,14 @@ async def get_attendance(
     """Build an attendance report for administrators."""
     report = await admin_service.build_attendance_report(requested_by=admin_user)
     return ApiResponseFactory.success(data=report, message="Attendance report generated.")
+
+
+@router.get("/attendance/sessions/{session_id}", response_model=ApiResponse[AttendanceSessionDetailsRead])
+async def get_attendance_session_details(
+    session_id: str,
+    admin_user: UserRead = Depends(get_current_admin),
+    admin_service: AdminService = Depends(get_admin_service),
+) -> ApiResponse[AttendanceSessionDetailsRead]:
+    """Return detailed attendance information for one session."""
+    details = await admin_service.get_attendance_session_details(session_id=session_id, requested_by=admin_user)
+    return ApiResponseFactory.success(data=details, message="Attendance session details loaded.")

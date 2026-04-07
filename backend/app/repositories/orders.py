@@ -59,6 +59,23 @@ class OrderRepository(BaseRepository):
         documents = await cursor.to_list(length=500)
         return MongoDocumentAdapter.normalize_many(documents)
 
+    async def list_by_ids(
+        self,
+        order_ids: list[str],
+        *,
+        db_session: AsyncIOMotorClientSession | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return orders for the provided identifiers."""
+        if not order_ids:
+            return []
+
+        cursor = self.collection.find(
+            {"_id": {"$in": [to_object_id(order_id) for order_id in set(order_ids)]}},
+            session=db_session,
+        )
+        documents = await cursor.to_list(length=len(order_ids))
+        return MongoDocumentAdapter.normalize_many(documents)
+
     async def update_order(
         self,
         order_id: str,

@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { AppLayout } from "@/widgets/layout/AppLayout";
 import { ProtectedRoute } from "@/router/ProtectedRoute";
+import { AdminAttendanceDetailsPage } from "@/pages/AdminAttendanceDetailsPage";
 import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
 import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -30,6 +31,7 @@ export function AppRouter() {
           </Route>
           <Route element={<ProtectedRoute requiredRole="admin" />}>
             <Route path="/admin" element={<AdminDashboardPage />} />
+            <Route path="/admin/attendance/:sessionId" element={<AdminAttendanceDetailsPage />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Route>

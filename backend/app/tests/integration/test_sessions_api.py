@@ -55,6 +55,74 @@ async def test_admin_can_create_list_and_read_session(
 
 
 @pytest.mark.asyncio
+async def test_admin_can_read_attendance_session_details(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Attendance Detail Movie", duration_minutes=115)
+    session = await create_session(movie_id=movie["id"], start_hour=17, duration_minutes=150, price=280)
+
+    purchase_response = await client.post(
+        f"{API_PREFIX}/orders/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seats": [
+                {"seat_row": 2, "seat_number": 5},
+                {"seat_row": 2, "seat_number": 6},
+            ],
+        },
+    )
+    assert purchase_response.status_code == 201, purchase_response.text
+
+    response = await client.get(
+        f"{API_PREFIX}/admin/attendance/sessions/{session['id']}",
+        headers=admin_auth["headers"],
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()["data"]
+    assert payload["session"]["id"] == session["id"]
+    assert payload["session"]["movie"]["id"] == movie["id"]
+    assert payload["tickets_sold"] == 2
+    assert payload["attendance_rate"] == pytest.approx(2 / payload["session"]["total_seats"])
+    assert payload["seat_map"]["session_id"] == session["id"]
+    assert payload["seat_map"]["available_seats"] == payload["seat_map"]["total_seats"] - 2
+    assert len(payload["occupied_tickets"]) == 2
+    assert payload["occupied_tickets"][0]["seat_row"] == 2
+    assert payload["occupied_tickets"][0]["seat_number"] == 5
+    assert payload["occupied_tickets"][0]["user_name"] == user_auth["user"]["name"]
+    assert payload["occupied_tickets"][0]["user_email"] == user_auth["user"]["email"]
+    assert payload["occupied_tickets"][0]["order_status"] == "completed"
+    assert next(
+        seat for seat in payload["seat_map"]["seats"] if seat["row"] == 2 and seat["number"] == 5
+    )["is_available"] is False
+    assert next(
+        seat for seat in payload["seat_map"]["seats"] if seat["row"] == 2 and seat["number"] == 7
+    )["is_available"] is True
+
+
+@pytest.mark.asyncio
+async def test_attendance_session_details_returns_404_for_unknown_session(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+) -> None:
+    response = await client.get(
+        f"{API_PREFIX}/admin/attendance/sessions/{ObjectId()}",
+        headers=admin_auth["headers"],
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "not_found"
+    assert body["error"]["message"] == "Session was not found."
+
+
+@pytest.mark.asyncio
 async def test_overlapping_session_creation_is_rejected(
     client: httpx.AsyncClient,
     admin_auth: dict[str, object],

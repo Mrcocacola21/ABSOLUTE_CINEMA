@@ -3,6 +3,7 @@ import type { GenreCode } from "@/shared/genres";
 import type { ApiResponse } from "@/types/api";
 import type {
   AttendanceReport,
+  AttendanceSessionDetails,
   LocalizedText,
   Movie,
   MovieStatus,
@@ -145,5 +146,12 @@ export async function listAdminUsersRequest() {
 
 export async function getAttendanceRequest() {
   const { data } = await apiClient.get<ApiResponse<AttendanceReport>>("/admin/attendance");
+  return data;
+}
+
+export async function getAttendanceSessionDetailsRequest(sessionId: string) {
+  const { data } = await apiClient.get<ApiResponse<AttendanceSessionDetails>>(
+    `/admin/attendance/sessions/${sessionId}`,
+  );
   return data;
 }

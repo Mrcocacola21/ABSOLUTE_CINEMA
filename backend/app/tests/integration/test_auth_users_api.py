@@ -37,6 +37,30 @@ async def test_successful_registration_persists_hashed_user(
 
 
 @pytest.mark.asyncio
+async def test_registration_normalizes_email_and_name_whitespace(
+    client: httpx.AsyncClient,
+    database,
+) -> None:
+    response = await client.post(
+        f"{API_PREFIX}/auth/register",
+        json={
+            "email": "FreshUser@Example.COM",
+            "name": "  Fresh   User  ",
+            "password": DEFAULT_PASSWORD,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()["data"]
+    assert body["email"] == "freshuser@example.com"
+    assert body["name"] == "Fresh User"
+
+    stored_user = await database[DatabaseCollections.USERS].find_one({"email": "freshuser@example.com"})
+    assert stored_user is not None
+    assert stored_user["name"] == "Fresh User"
+
+
+@pytest.mark.asyncio
 async def test_duplicate_email_registration_returns_conflict(
     register_user,
     database,
@@ -111,3 +135,52 @@ async def test_users_me_requires_authentication(client: httpx.AsyncClient) -> No
     assert body["success"] is False
     assert body["error"]["code"] == "authentication_error"
     assert body["error"]["message"] == "Authentication is required to access this resource."
+
+
+@pytest.mark.asyncio
+async def test_users_me_update_normalizes_name_and_email(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    database,
+) -> None:
+    response = await client.patch(
+        f"{API_PREFIX}/users/me",
+        headers=user_auth["headers"],
+        json={
+            "name": "  Updated   User  ",
+            "email": "NEW-EMAIL@EXAMPLE.COM",
+            "current_password": DEFAULT_PASSWORD,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()["data"]
+    assert payload["name"] == "Updated User"
+    assert payload["email"] == "new-email@example.com"
+
+    stored_user = await database[DatabaseCollections.USERS].find_one({"_id": payload["id"]})
+    if stored_user is None:
+        stored_user = await database[DatabaseCollections.USERS].find_one({"email": "new-email@example.com"})
+    assert stored_user is not None
+    assert stored_user["name"] == "Updated User"
+    assert stored_user["email"] == "new-email@example.com"
+
+
+@pytest.mark.asyncio
+async def test_users_me_update_rejects_reusing_current_password(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+) -> None:
+    response = await client.patch(
+        f"{API_PREFIX}/users/me",
+        headers=user_auth["headers"],
+        json={
+            "password": DEFAULT_PASSWORD,
+            "current_password": DEFAULT_PASSWORD,
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "request_validation_error"
+    assert body["error"]["message"] == "New password must be different from current_password."

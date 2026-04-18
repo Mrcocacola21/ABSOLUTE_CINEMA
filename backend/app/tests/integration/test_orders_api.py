@@ -217,7 +217,7 @@ async def test_order_purchase_rejects_seat_outside_hall_bounds(
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "validation_error"
-    assert body["error"]["message"] == "Seat coordinates are outside the configured hall dimensions."
+    assert body["error"]["message"] == "Seat is outside the configured hall dimensions: row 99, seat 1."
 
 
 @pytest.mark.asyncio

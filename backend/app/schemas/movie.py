@@ -4,14 +4,136 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
+import re
 from typing import Any
 
-from pydantic import Field, HttpUrl, field_validator, model_validator
+from pydantic import Field, TypeAdapter, ValidationError, field_validator, model_validator
+from pydantic.networks import HttpUrl
 
 from app.core.constants import MOVIE_STATUS_VALUES, MovieStatuses
-from app.core.genres import normalize_genre_codes
+from app.core.genres import normalize_genre_code
 from app.schemas.common import BaseSchema
-from app.schemas.localization import LocalizedText, LocalizedTextUpdate, merge_localized_text
+from app.schemas.localization import (
+    LocalizedText,
+    LocalizedTextUpdate,
+    merge_localized_text,
+    validate_expected_text_language,
+)
+
+MOVIE_DURATION_MINUTES_MIN = 40
+MOVIE_DURATION_MINUTES_MAX = 360
+MOVIE_TITLE_MAX_LENGTH = 150
+MOVIE_DESCRIPTION_MAX_LENGTH = 2000
+MOVIE_AGE_RATING_MAX_LENGTH = 16
+
+POSTER_URL_ADAPTER = TypeAdapter(HttpUrl)
+POSTER_IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".svg")
+POSTER_ASSET_PATH_PATTERN = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9/_\.-]*$")
+AGE_RATING_PATTERN = re.compile(r"^[A-Za-z0-9+ -]+$")
+
+
+def _validate_localized_text_length(
+    value: LocalizedText | LocalizedTextUpdate | None,
+    *,
+    field_name: str,
+    max_length: int,
+) -> LocalizedText | LocalizedTextUpdate | None:
+    if value is None:
+        return None
+
+    for language_code in ("uk", "en"):
+        localized_value = getattr(value, language_code, None)
+        if localized_value is None:
+            continue
+        if len(localized_value) > max_length:
+            raise ValueError(
+                f"{field_name}.{language_code} must be at most {max_length} characters long."
+            )
+    return value
+
+
+def _validate_localized_text_language(
+    value: LocalizedText | LocalizedTextUpdate | None,
+    *,
+    field_name: str,
+) -> LocalizedText | LocalizedTextUpdate | None:
+    if value is None:
+        return None
+
+    for language_code in ("uk", "en"):
+        localized_value = getattr(value, language_code, None)
+        if localized_value is None:
+            continue
+        validate_expected_text_language(
+            localized_value,
+            expected_language=language_code,
+            field_name=f"{field_name}.{language_code}",
+        )
+    return value
+
+
+def _normalize_and_validate_poster_url(value: object) -> str | None:
+    if value is None:
+        return None
+
+    candidate = str(value).strip()
+    if not candidate:
+        return None
+
+    if candidate.startswith("/"):
+        if not POSTER_ASSET_PATH_PATTERN.fullmatch(candidate):
+            raise ValueError(
+                "poster_url must be an absolute http(s) URL or a root-relative image asset path."
+            )
+        if not candidate.lower().endswith(POSTER_IMAGE_SUFFIXES):
+            raise ValueError(
+                "poster_url asset paths must end with .jpg, .jpeg, .png, .webp, or .svg."
+            )
+        return candidate
+
+    try:
+        return str(POSTER_URL_ADAPTER.validate_python(candidate))
+    except ValidationError as exc:
+        raise ValueError(
+            "poster_url must be an absolute http(s) URL or a root-relative image asset path."
+        ) from exc
+
+
+def _normalize_age_rating(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    normalized = " ".join(value.split())
+    if not normalized:
+        return None
+    if len(normalized) > MOVIE_AGE_RATING_MAX_LENGTH:
+        raise ValueError(
+            f"age_rating must be at most {MOVIE_AGE_RATING_MAX_LENGTH} characters long."
+        )
+    if not AGE_RATING_PATTERN.fullmatch(normalized):
+        raise ValueError("age_rating may only contain letters, numbers, spaces, '+' and '-'.")
+    return normalized
+
+
+def _normalize_movie_genres(value: list[str] | None) -> list[str] | None:
+    if value is None:
+        return None
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_value in value:
+        cleaned = raw_value.strip()
+        if not cleaned:
+            continue
+
+        normalized_code = normalize_genre_code(cleaned)
+        if normalized_code in seen:
+            raise ValueError("Duplicate genre codes are not allowed.")
+
+        seen.add(normalized_code)
+        normalized.append(normalized_code)
+
+    return normalized
 
 
 def _populate_legacy_movie_status(value: Any) -> Any:
@@ -33,9 +155,9 @@ class MovieBase(BaseSchema):
 
     title: LocalizedText
     description: LocalizedText
-    duration_minutes: int = Field(ge=1, le=600)
-    poster_url: HttpUrl | None = None
-    age_rating: str | None = Field(default=None, max_length=32)
+    duration_minutes: int = Field(ge=MOVIE_DURATION_MINUTES_MIN, le=MOVIE_DURATION_MINUTES_MAX)
+    poster_url: str | None = None
+    age_rating: str | None = Field(default=None, max_length=MOVIE_AGE_RATING_MAX_LENGTH)
     genres: list[str] = Field(default_factory=list)
     status: str = MovieStatuses.PLANNED
 
@@ -45,11 +167,49 @@ class MovieBase(BaseSchema):
         """Accept legacy payloads/documents that still send `is_active`."""
         return _populate_legacy_movie_status(value)
 
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: LocalizedText) -> LocalizedText:
+        """Keep localized movie titles compact enough for catalog and schedule views."""
+        return _validate_localized_text_language(
+            _validate_localized_text_length(
+                value,
+                field_name="title",
+                max_length=MOVIE_TITLE_MAX_LENGTH,
+            ),
+            field_name="title",
+        )
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, value: LocalizedText) -> LocalizedText:
+        """Keep localized movie descriptions within a presentation-friendly size."""
+        return _validate_localized_text_language(
+            _validate_localized_text_length(
+                value,
+                field_name="description",
+                max_length=MOVIE_DESCRIPTION_MAX_LENGTH,
+            ),
+            field_name="description",
+        )
+
+    @field_validator("poster_url", mode="before")
+    @classmethod
+    def normalize_poster_url(cls, value: object) -> str | None:
+        """Accept either external poster URLs or local demo asset paths."""
+        return _normalize_and_validate_poster_url(value)
+
+    @field_validator("age_rating")
+    @classmethod
+    def validate_age_rating(cls, value: str | None) -> str | None:
+        """Normalize optional age ratings and reject blank or noisy values."""
+        return _normalize_age_rating(value)
+
     @field_validator("genres")
     @classmethod
     def normalize_genres(cls, value: list[str]) -> list[str]:
         """Normalize genres into supported canonical codes."""
-        return normalize_genre_codes(value)
+        return _normalize_movie_genres(value) or []
 
     @field_validator("status")
     @classmethod
@@ -69,9 +229,13 @@ class MovieUpdate(BaseSchema):
 
     title: LocalizedTextUpdate | None = None
     description: LocalizedTextUpdate | None = None
-    duration_minutes: int | None = Field(default=None, ge=1, le=600)
-    poster_url: HttpUrl | None = None
-    age_rating: str | None = Field(default=None, max_length=32)
+    duration_minutes: int | None = Field(
+        default=None,
+        ge=MOVIE_DURATION_MINUTES_MIN,
+        le=MOVIE_DURATION_MINUTES_MAX,
+    )
+    poster_url: str | None = None
+    age_rating: str | None = Field(default=None, max_length=MOVIE_AGE_RATING_MAX_LENGTH)
     genres: list[str] | None = None
     status: str | None = None
 
@@ -81,13 +245,49 @@ class MovieUpdate(BaseSchema):
         """Accept legacy partial updates that still send `is_active`."""
         return _populate_legacy_movie_status(value)
 
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: LocalizedTextUpdate | None) -> LocalizedTextUpdate | None:
+        """Apply the same title length rules to partial updates."""
+        return _validate_localized_text_language(
+            _validate_localized_text_length(
+                value,
+                field_name="title",
+                max_length=MOVIE_TITLE_MAX_LENGTH,
+            ),
+            field_name="title",
+        )
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, value: LocalizedTextUpdate | None) -> LocalizedTextUpdate | None:
+        """Apply the same description limits to partial updates."""
+        return _validate_localized_text_language(
+            _validate_localized_text_length(
+                value,
+                field_name="description",
+                max_length=MOVIE_DESCRIPTION_MAX_LENGTH,
+            ),
+            field_name="description",
+        )
+
+    @field_validator("poster_url", mode="before")
+    @classmethod
+    def normalize_poster_url(cls, value: object) -> str | None:
+        """Normalize explicit poster updates, including empty strings from forms."""
+        return _normalize_and_validate_poster_url(value)
+
+    @field_validator("age_rating")
+    @classmethod
+    def validate_age_rating(cls, value: str | None) -> str | None:
+        """Normalize optional age-rating updates."""
+        return _normalize_age_rating(value)
+
     @field_validator("genres")
     @classmethod
     def normalize_genres(cls, value: list[str] | None) -> list[str] | None:
         """Normalize genre codes for partial updates too."""
-        if value is None:
-            return None
-        return MovieBase.normalize_genres(value)
+        return _normalize_movie_genres(value)
 
     @field_validator("status")
     @classmethod

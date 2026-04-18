@@ -33,6 +33,16 @@ def build_localized_text(value: str, *, en: str | None = None) -> dict[str, str]
     }
 
 
+def build_default_test_ukrainian_text(value: str, *, prefix: str) -> str:
+    """Generate deterministic Ukrainian placeholder text for English-led test fixtures."""
+    normalized = value.strip()
+    if not normalized:
+        return prefix
+
+    checksum = sum(ord(character) for character in normalized if not character.isspace())
+    return f"{prefix} {checksum}"
+
+
 def build_session_window(
     *,
     day_offset: int = 1,
@@ -261,7 +271,9 @@ async def create_movie(
     async def _create(
         *,
         title: str = "Interstellar",
+        title_uk: str | None = None,
         description: str = "Science fiction epic",
+        description_uk: str | None = None,
         duration_minutes: int = 169,
         poster_url: str | None = None,
         genres: list[str] | None = None,
@@ -271,8 +283,14 @@ async def create_movie(
             f"{API_PREFIX}/admin/movies",
             headers=admin_auth["headers"],
             json={
-                "title": build_localized_text(title),
-                "description": build_localized_text(description),
+                "title": {
+                    "uk": title_uk or build_default_test_ukrainian_text(title, prefix="Фільм"),
+                    "en": title,
+                },
+                "description": {
+                    "uk": description_uk or build_default_test_ukrainian_text(description, prefix="Опис"),
+                    "en": description,
+                },
                 "duration_minutes": duration_minutes,
                 "poster_url": poster_url,
                 "age_rating": "PG-13",

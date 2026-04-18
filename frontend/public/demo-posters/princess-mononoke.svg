@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Princess Mononoke demo poster</title>
+  <desc id="desc">Forest-toned poster used for the demo movie catalog.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#14532d"/>
+      <stop offset="100%" stop-color="#172554"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)"/>
+  <circle cx="470" cy="190" r="115" fill="#dcfce7" opacity="0.1"/>
+  <path d="M70 690C180 560 320 560 530 690V820H70Z" fill="#052e16" opacity="0.85"/>
+  <text x="70" y="120" fill="#fefce8" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="28" letter-spacing="5">CINEMA SHOWCASE</text>
+  <text x="70" y="470" fill="#fef3c7" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="64" font-weight="700">PRINCESS</text>
+  <text x="70" y="550" fill="#fef3c7" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="84" font-weight="700">MONONOKE</text>
+  <text x="70" y="640" fill="#d1fae5" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="30">epic fantasy / action</text>
+</svg>

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from app.core.config import get_settings
 from app.core.constants import MOVIE_STATUS_VALUES, ORDER_STATUS_VALUES, Roles, SessionStatuses, TicketStatuses
 from app.core.genres import SUPPORTED_GENRE_CODES
 from app.db.collections import DatabaseCollections
+
+settings = get_settings()
 
 
 COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
@@ -26,10 +29,12 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                     "name": {
                         "bsonType": "string",
                         "minLength": 2,
+                        "maxLength": 255,
                     },
                     "email": {
                         "bsonType": "string",
                         "minLength": 3,
+                        "maxLength": 320,
                     },
                     "password_hash": {
                         "bsonType": "string",
@@ -73,10 +78,12 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                             "uk": {
                                 "bsonType": "string",
                                 "minLength": 1,
+                                "maxLength": 150,
                             },
                             "en": {
                                 "bsonType": "string",
                                 "minLength": 1,
+                                "maxLength": 150,
                             },
                         },
                     },
@@ -87,25 +94,32 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                             "uk": {
                                 "bsonType": "string",
                                 "minLength": 1,
+                                "maxLength": 2000,
                             },
                             "en": {
                                 "bsonType": "string",
                                 "minLength": 1,
+                                "maxLength": 2000,
                             },
                         },
                     },
                     "duration_minutes": {
                         "bsonType": ["int", "long"],
-                        "minimum": 1,
+                        "minimum": 40,
+                        "maximum": 360,
                     },
                     "poster_url": {
                         "bsonType": ["string", "null"],
+                        "maxLength": 512,
                     },
                     "age_rating": {
                         "bsonType": ["string", "null"],
+                        "minLength": 1,
+                        "maxLength": 16,
                     },
                     "genres": {
                         "bsonType": "array",
+                        "uniqueItems": True,
                         "items": {
                             "bsonType": "string",
                             "enum": list(SUPPORTED_GENRE_CODES),
@@ -155,7 +169,8 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                             },
                             "price": {
                                 "bsonType": ["int", "long", "double", "decimal"],
-                                "minimum": 0,
+                                "minimum": 0.01,
+                                "maximum": 1000,
                             },
                             "status": {
                                 "enum": [
@@ -166,11 +181,13 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                             },
                             "total_seats": {
                                 "bsonType": ["int", "long"],
-                                "minimum": 0,
+                                "minimum": settings.total_seats,
+                                "maximum": settings.total_seats,
                             },
                             "available_seats": {
                                 "bsonType": ["int", "long"],
                                 "minimum": 0,
+                                "maximum": settings.total_seats,
                             },
                             "created_at": {
                                 "bsonType": "date",
@@ -185,6 +202,7 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                     "$expr": {
                         "$and": [
                             {"$gt": ["$end_time", "$start_time"]},
+                            {"$eq": ["$total_seats", settings.total_seats]},
                             {"$lte": ["$available_seats", "$total_seats"]},
                         ]
                     }
@@ -220,11 +238,12 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                     },
                     "total_price": {
                         "bsonType": ["int", "long", "double", "decimal"],
-                        "minimum": 0,
+                        "minimum": 0.01,
                     },
                     "tickets_count": {
                         "bsonType": ["int", "long"],
                         "minimum": 1,
+                        "maximum": settings.total_seats,
                     },
                     "created_at": {
                         "bsonType": "date",
@@ -268,14 +287,16 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                             "seat_row": {
                                 "bsonType": ["int", "long"],
                                 "minimum": 1,
+                                "maximum": settings.hall_rows_count,
                             },
                             "seat_number": {
                                 "bsonType": ["int", "long"],
                                 "minimum": 1,
+                                "maximum": settings.hall_seats_per_row,
                             },
                             "price": {
                                 "bsonType": ["int", "long", "double", "decimal"],
-                                "minimum": 0,
+                                "minimum": 0.01,
                             },
                             "status": {
                                 "enum": [TicketStatuses.PURCHASED, TicketStatuses.CANCELLED],

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900" role="img" aria-labelledby="title desc">
+  <title id="title">A Silent Voice demo poster</title>
+  <desc id="desc">Minimal pale poster for planned demo movies.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#f8fafc"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)"/>
+  <circle cx="300" cy="260" r="120" fill="#93c5fd" opacity="0.22"/>
+  <circle cx="300" cy="260" r="76" fill="#f8fafc"/>
+  <text x="70" y="120" fill="#334155" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="28" letter-spacing="5">CINEMA SHOWCASE</text>
+  <text x="70" y="540" fill="#0f172a" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="92" font-weight="700">A SILENT</text>
+  <text x="70" y="632" fill="#0f172a" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="92" font-weight="700">VOICE</text>
+  <text x="70" y="720" fill="#475569" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="30">planned / drama / romance</text>
+</svg>

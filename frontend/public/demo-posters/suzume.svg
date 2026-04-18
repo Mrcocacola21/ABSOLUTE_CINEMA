@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Suzume demo poster</title>
+  <desc id="desc">Warm sunset poster with a stylized doorway silhouette.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#7c2d12"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)"/>
+  <rect x="215" y="250" width="170" height="330" rx="18" fill="#fff7ed" opacity="0.16"/>
+  <rect x="248" y="292" width="104" height="250" rx="10" fill="#fed7aa" opacity="0.88"/>
+  <circle cx="300" cy="420" r="12" fill="#7c2d12"/>
+  <text x="70" y="120" fill="#ffedd5" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="28" letter-spacing="5">CINEMA SHOWCASE</text>
+  <text x="70" y="680" fill="#fff7ed" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="108" font-weight="700">SUZUME</text>
+  <text x="70" y="760" fill="#bfdbfe" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="30">adventure / fantasy / drama</text>
+</svg>

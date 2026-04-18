@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900" role="img" aria-labelledby="title desc">
+  <title id="title">The Boy and the Heron demo poster</title>
+  <desc id="desc">Calm teal poster with feather-like arcs.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#083344"/>
+      <stop offset="100%" stop-color="#164e63"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)"/>
+  <path d="M120 220C240 110 350 130 470 260" fill="none" stroke="#bae6fd" stroke-width="12" opacity="0.3"/>
+  <path d="M110 280C240 190 350 210 470 340" fill="none" stroke="#e0f2fe" stroke-width="8" opacity="0.25"/>
+  <circle cx="470" cy="670" r="150" fill="#99f6e4" opacity="0.08"/>
+  <text x="70" y="120" fill="#cffafe" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="28" letter-spacing="5">CINEMA SHOWCASE</text>
+  <text x="70" y="460" fill="#f0fdfa" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="68" font-weight="700">THE BOY</text>
+  <text x="70" y="542" fill="#f0fdfa" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="68" font-weight="700">AND THE</text>
+  <text x="70" y="624" fill="#f0fdfa" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="68" font-weight="700">HERON</text>
+  <text x="70" y="712" fill="#a7f3d0" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="30">lyrical fantasy / drama</text>
+</svg>

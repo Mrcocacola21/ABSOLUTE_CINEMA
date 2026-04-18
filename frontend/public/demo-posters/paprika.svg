@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Paprika demo poster</title>
+  <desc id="desc">Psychedelic geometric poster for the seeded catalog.</desc>
+  <rect width="600" height="900" fill="#431407"/>
+  <circle cx="160" cy="220" r="130" fill="#fb7185" opacity="0.55"/>
+  <circle cx="420" cy="260" r="110" fill="#f59e0b" opacity="0.55"/>
+  <circle cx="280" cy="430" r="150" fill="#60a5fa" opacity="0.45"/>
+  <circle cx="430" cy="610" r="160" fill="#4ade80" opacity="0.35"/>
+  <text x="70" y="120" fill="#fff7ed" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="28" letter-spacing="5">CINEMA SHOWCASE</text>
+  <text x="70" y="660" fill="#fff7ed" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="114" font-weight="700">PAPRIKA</text>
+  <text x="70" y="742" fill="#fde68a" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="30">planned / sci-fi / mystery</text>
+</svg>

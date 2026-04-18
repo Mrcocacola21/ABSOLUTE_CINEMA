@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Weathering with You demo poster</title>
+  <desc id="desc">Rainy blue poster with reflective bands.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#0ea5e9"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)"/>
+  <g stroke="#e0f2fe" stroke-width="8" opacity="0.2">
+    <line x1="120" y1="0" x2="40" y2="900"/>
+    <line x1="220" y1="0" x2="140" y2="900"/>
+    <line x1="320" y1="0" x2="240" y2="900"/>
+    <line x1="420" y1="0" x2="340" y2="900"/>
+    <line x1="520" y1="0" x2="440" y2="900"/>
+  </g>
+  <text x="70" y="120" fill="#e0f2fe" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="28" letter-spacing="5">CINEMA SHOWCASE</text>
+  <text x="70" y="500" fill="#f8fafc" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="70" font-weight="700">WEATHERING</text>
+  <text x="70" y="585" fill="#f8fafc" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="70" font-weight="700">WITH YOU</text>
+  <text x="70" y="670" fill="#fef08a" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="30">rainy romance / fantasy</text>
+</svg>

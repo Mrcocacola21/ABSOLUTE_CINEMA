@@ -171,9 +171,21 @@ class OrderPurchaseCommand:
         rows_count: int,
         seats_per_row: int,
     ) -> None:
-        for seat in payload.seats:
-            if seat.seat_row > rows_count or seat.seat_number > seats_per_row:
-                raise ValidationException("Seat coordinates are outside the configured hall dimensions.")
+        hall_capacity = rows_count * seats_per_row
+        if len(payload.seats) > hall_capacity:
+            raise ValidationException("One order cannot request more seats than the hall capacity.")
+
+        invalid_seats = [
+            f"row {seat.seat_row}, seat {seat.seat_number}"
+            for seat in payload.seats
+            if seat.seat_row > rows_count or seat.seat_number > seats_per_row
+        ]
+        if invalid_seats:
+            prefix = "Seat is" if len(invalid_seats) == 1 else "Seats are"
+            seat_list = ", ".join(invalid_seats)
+            raise ValidationException(
+                f"{prefix} outside the configured hall dimensions: {seat_list}."
+            )
 
     def _get_purchase_blocker(
         self,

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Perfect Blue demo poster</title>
+  <desc id="desc">Dark dramatic poster for the seeded thriller catalog entries.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#172554"/>
+      <stop offset="100%" stop-color="#450a0a"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)"/>
+  <path d="M120 230C220 110 360 120 470 260" fill="none" stroke="#fda4af" stroke-width="12" opacity="0.28"/>
+  <path d="M160 330C260 210 390 220 470 340" fill="none" stroke="#bfdbfe" stroke-width="8" opacity="0.28"/>
+  <circle cx="300" cy="620" r="165" fill="#020617" opacity="0.28"/>
+  <text x="70" y="120" fill="#e0e7ff" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="28" letter-spacing="5">CINEMA SHOWCASE</text>
+  <text x="70" y="570" fill="#f8fafc" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="94" font-weight="700">PERFECT</text>
+  <text x="70" y="662" fill="#f8fafc" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="94" font-weight="700">BLUE</text>
+  <text x="70" y="746" fill="#fecaca" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="30">psychological thriller</text>
+</svg>

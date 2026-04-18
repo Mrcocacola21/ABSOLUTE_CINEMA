@@ -244,7 +244,7 @@ async def test_batch_session_creation_keeps_future_dates_when_one_requested_day_
     ("start_hour", "end_delta_minutes", "expected_code", "expected_message"),
     [
         (8, 150, "validation_error", "Session start time must be between 09:00 and 22:00."),
-        (10, -10, "request_validation_error", "Request validation failed."),
+        (10, -10, "request_validation_error", "end_time must be greater than start_time."),
     ],
 )
 async def test_invalid_session_time_windows_are_rejected(
@@ -276,6 +276,71 @@ async def test_invalid_session_time_windows_are_rejected(
     assert body["success"] is False
     assert body["error"]["code"] == expected_code
     assert body["error"]["message"] == expected_message
+
+
+@pytest.mark.asyncio
+async def test_admin_rejects_invalid_session_prices_and_excessive_runtime_buffer(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+) -> None:
+    movie = await create_movie(title="Validation Target", duration_minutes=120)
+    start_time, _ = build_session_window(start_hour=10, duration_minutes=120)
+
+    price_response = await client.post(
+        f"{API_PREFIX}/admin/sessions",
+        headers=admin_auth["headers"],
+        json={
+            "movie_id": movie["id"],
+            "start_time": start_time.isoformat(),
+            "end_time": (start_time + timedelta(minutes=130)).isoformat(),
+            "price": 180.555,
+        },
+    )
+    assert price_response.status_code == 422
+    assert price_response.json()["error"]["message"] == "price must have at most two decimal places."
+
+    buffer_response = await client.post(
+        f"{API_PREFIX}/admin/sessions",
+        headers=admin_auth["headers"],
+        json={
+            "movie_id": movie["id"],
+            "start_time": start_time.isoformat(),
+            "end_time": (start_time + timedelta(minutes=190)).isoformat(),
+            "price": 180,
+        },
+    )
+    assert buffer_response.status_code == 422
+    assert (
+        buffer_response.json()["error"]["message"]
+        == "Session slot cannot exceed the movie runtime by more than 60 minutes."
+    )
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_schedule_deactivated_movies(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+) -> None:
+    movie = await create_movie(title="Archived Movie", status="deactivated")
+    start_time, end_time = build_session_window(start_hour=18, duration_minutes=120)
+
+    response = await client.post(
+        f"{API_PREFIX}/admin/sessions",
+        headers=admin_auth["headers"],
+        json={
+            "movie_id": movie["id"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "price": 180,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["message"] == (
+        "Deactivated movies cannot be scheduled. Set the movie back to planned first."
+    )
 
 
 @pytest.mark.asyncio

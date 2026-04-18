@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from pydantic import Field, model_validator
@@ -9,6 +10,57 @@ from pydantic import Field, model_validator
 from app.schemas.common import BaseSchema
 
 SUPPORTED_LANGUAGE_CODES = ("uk", "en")
+LATIN_TOKEN_PATTERN = re.compile(r"[A-Za-z]+")
+CYRILLIC_LETTER_PATTERN = re.compile(r"[\u0400-\u04FF]")
+
+
+def _is_allowed_ukrainian_inline_latin_token(token: str) -> bool:
+    """Allow a narrow set of Latin fragments inside Ukrainian text.
+
+    Ukrainian movie copy sometimes includes short technical labels such as
+    `IMAX`, `OVA`, `TV`, or `x`. Longer Latin words still indicate that the
+    field was likely filled in with English text instead of Ukrainian.
+    """
+
+    return token.casefold() == "x" or (token.isupper() and len(token) <= 5)
+
+
+def validate_expected_text_language(
+    value: str,
+    *,
+    expected_language: str,
+    field_name: str,
+) -> str:
+    """Reject clearly wrong-language localized movie text without blocking title formatting.
+
+    The rule is intentionally heuristic rather than full language detection:
+    we look for Latin vs Cyrillic letters, allow punctuation/numbers, and keep a
+    small exception list for uppercase technical labels in Ukrainian copy.
+    """
+
+    latin_tokens = LATIN_TOKEN_PATTERN.findall(value)
+    latin_letters = sum(len(token) for token in latin_tokens)
+    cyrillic_letters = len(CYRILLIC_LETTER_PATTERN.findall(value))
+
+    if expected_language == "uk":
+        if latin_letters > 0 and cyrillic_letters == 0:
+            raise ValueError(f"{field_name} must contain Ukrainian text.")
+        if cyrillic_letters == 0:
+            return value
+
+        invalid_latin_tokens = [
+            token for token in latin_tokens if not _is_allowed_ukrainian_inline_latin_token(token)
+        ]
+        if invalid_latin_tokens:
+            raise ValueError(f"{field_name} must contain Ukrainian text.")
+        return value
+
+    if expected_language == "en":
+        if cyrillic_letters > 0:
+            raise ValueError(f"{field_name} must contain English text.")
+        return value
+
+    raise ValueError(f"Unsupported language code: {expected_language}")
 
 
 def normalize_language_code(value: str | None) -> str:

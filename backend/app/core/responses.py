@@ -53,12 +53,17 @@ class ErrorResponse(BaseModel):
         )
 
     @classmethod
-    def validation_error(cls, details: list[dict[str, Any]]) -> "ErrorResponse":
+    def validation_error(
+        cls,
+        details: list[dict[str, Any]],
+        *,
+        message: str = "Request validation failed.",
+    ) -> "ErrorResponse":
         """Build an error response for request validation failures."""
         return cls(
             error=ErrorBody(
                 code="request_validation_error",
-                message="Request validation failed.",
+                message=message,
                 details=details,
             )
         )

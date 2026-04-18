@@ -54,7 +54,7 @@ async def test_admin_can_create_list_read_and_update_movies(
         headers=admin_auth["headers"],
         json={
             "description": {"uk": "Оновлений опис", "en": "Updated description"},
-            "genres": ["drama", "mystery", "Drama"],
+            "genres": ["drama", "mystery"],
             "poster_url": None,
         },
     )
@@ -129,6 +129,58 @@ async def test_admin_can_create_and_update_movie_with_localized_fields_and_poste
 
 
 @pytest.mark.asyncio
+async def test_admin_cannot_create_movie_when_ukrainian_title_contains_english_text(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+) -> None:
+    response = await client.post(
+        f"{API_PREFIX}/admin/movies",
+        headers=admin_auth["headers"],
+        json={
+            "title": {"uk": "Attack on Titan", "en": "Attack on Titan"},
+            "description": {
+                "uk": "Аніме про боротьбу людства за виживання.",
+                "en": "An anime about humanity fighting for survival.",
+            },
+            "duration_minutes": 95,
+            "genres": ["animation", "action"],
+            "status": "planned",
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "request_validation_error"
+    assert body["error"]["message"] == "title.uk must contain Ukrainian text."
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_create_movie_when_english_title_contains_ukrainian_text(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+) -> None:
+    response = await client.post(
+        f"{API_PREFIX}/admin/movies",
+        headers=admin_auth["headers"],
+        json={
+            "title": {"uk": "Атака титанів", "en": "Атака титанів"},
+            "description": {
+                "uk": "Аніме про боротьбу людства за виживання.",
+                "en": "An anime about humanity fighting for survival.",
+            },
+            "duration_minutes": 95,
+            "genres": ["animation", "action"],
+            "status": "planned",
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "request_validation_error"
+    assert body["error"]["message"] == "title.en must contain English text."
+
+
+@pytest.mark.asyncio
 async def test_admin_can_update_movie_status_when_no_future_sessions(
     client: httpx.AsyncClient,
     admin_auth: dict[str, object],
@@ -196,7 +248,57 @@ async def test_admin_rejects_unsupported_genre_code(
     assert response.status_code == 422
     body = response.json()
     assert body["error"]["code"] == "request_validation_error"
-    assert body["error"]["message"] == "Request validation failed."
+    assert "Unsupported genre code" in body["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_admin_rejects_duplicate_genres_after_normalization(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+) -> None:
+    response = await client.post(
+        f"{API_PREFIX}/admin/movies",
+        headers=admin_auth["headers"],
+        json={
+            "title": build_localized_text("Р”СѓР±Р»СЊРѕРІР°РЅС– Р¶Р°РЅСЂРё", en="Duplicate Genres"),
+            "description": build_localized_text("РўРµСЃС‚РѕРІРёР№ РѕРїРёСЃ", en="Test description"),
+            "duration_minutes": 95,
+            "genres": ["Drama", " drama "],
+            "status": "planned",
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "request_validation_error"
+    assert body["error"]["message"] == "Duplicate genre codes are not allowed."
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_update_movie_with_invalid_localized_text_language(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+) -> None:
+    movie = await create_movie(
+        title="Weathering with You",
+        title_uk="Дитя погоди",
+        description="A rainy Tokyo romance.",
+        description_uk="Романтична історія під дощовим небом Токіо.",
+    )
+
+    response = await client.patch(
+        f"{API_PREFIX}/admin/movies/{movie['id']}",
+        headers=admin_auth["headers"],
+        json={
+            "description": {"en": "Оновлений український опис"},
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["code"] == "request_validation_error"
+    assert body["error"]["message"] == "description.en must contain English text."
 
 
 @pytest.mark.asyncio

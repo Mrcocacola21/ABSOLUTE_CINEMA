@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Spirited Away demo poster</title>
+  <desc id="desc">Gradient poster with lantern shapes for the seeded demo catalog.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#061826"/>
+      <stop offset="100%" stop-color="#0f766e"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)"/>
+  <circle cx="470" cy="180" r="120" fill="#facc15" opacity="0.18"/>
+  <circle cx="150" cy="720" r="170" fill="#fde68a" opacity="0.1"/>
+  <rect x="70" y="250" width="460" height="430" rx="36" fill="#f8fafc" opacity="0.08"/>
+  <text x="70" y="120" fill="#f8fafc" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="28" letter-spacing="5">CINEMA SHOWCASE</text>
+  <text x="70" y="500" fill="#fef3c7" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="80" font-weight="700">SPIRITED</text>
+  <text x="70" y="585" fill="#fef3c7" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="80" font-weight="700">AWAY</text>
+  <text x="70" y="680" fill="#ccfbf1" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="30">fantasy / adventure / family</text>
+</svg>

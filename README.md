@@ -210,11 +210,37 @@ This is not a decorative feature. It directly supports schedule planning, repeat
 
 Movie `title` and `description` fields are stored as localized objects with Ukrainian and English values. The frontend can switch languages dynamically, and the backend schemas and validators treat those fields as first-class localized content rather than incidental translations.
 
+Those localized movie fields are also validated by expected language. In practice, `title.uk` and `description.uk` reject clearly English or Latin-only content, while `title.en` and `description.en` reject Cyrillic input without breaking punctuation, numbers, or normal movie-title formatting.
+
 ### Normalized genres
 
 Genres are stored as canonical codes rather than arbitrary strings. The backend normalizes known labels and aliases to canonical codes, and the frontend translates those codes into localized labels when rendering forms and views.
 
 This reduces duplicate values such as `"Sci-Fi"`, `"science fiction"`, `"sci fi"`, or localized equivalents being stored as unrelated strings.
+
+### Practical validation tightening
+
+The current repository now applies a stricter but still demo-friendly validation layer in the main authoring and booking flows. In practice, that means:
+
+- movie titles and descriptions are trimmed, required in both locales, and limited to presentation-friendly lengths,
+- localized movie fields reject clearly wrong-language content while still allowing punctuation, numerals, and short technical fragments such as `IMAX`,
+- movie durations, age ratings, poster references, and genre lists are checked more intentionally,
+- session prices must be positive, realistic, and currency-shaped,
+- session slots must be long enough for the movie but cannot drift far beyond the runtime,
+- seat coordinates are validated against the fixed one-hall layout with clearer error messages,
+- ticket and nested order-ticket states are checked for consistent cancellation metadata,
+- profile updates normalize names/emails and reject no-op or same-password changes.
+
+### Demo seed data
+
+The backend also includes an explicit demo seeding command that loads a deterministic presentation dataset. The seeded catalog is intentionally anime-oriented and includes:
+
+- localized movies in `uk` and `en`,
+- a mix of `active`, `planned`, and `deactivated` titles,
+- upcoming, completed, and cancelled sessions,
+- demo users with login credentials,
+- sample grouped orders and tickets so attendance, profile, and reporting views look populated,
+- local poster assets under `frontend/public/demo-posters/` so the seeded catalog does not depend on third-party image hosts.
 
 ### Transactional consistency layer
 
@@ -1465,9 +1491,12 @@ The header includes a language switcher, so users can change UI language during 
 Localization is not limited to interface chrome. Movie data itself is localized:
 
 - `title` is localized,
-- `description` is localized.
+- `description` is localized,
+- backend movie create/update validation checks the expected language for each localized field.
 
 The admin movie forms explicitly ask for Ukrainian and English values, which makes localized content part of standard data entry rather than an afterthought.
+
+The current backend rule is intentionally pragmatic rather than ML-based language detection. It is designed to reject clearly misplaced text such as plain English titles in `uk` fields and plain Ukrainian text in `en` fields, while still accepting punctuation, spaces, numerals, and short inline technical tokens that commonly appear in movie metadata.
 
 ### Fallback behavior
 
@@ -1903,6 +1932,35 @@ When both services are running successfully, the default local URLs are:
 - Backend API: `http://localhost:8000/api/v1`
 - Swagger UI: `http://localhost:8000/docs`
 
+### Optional: Seed demo data
+
+From the `backend/` directory, run:
+
+```powershell
+python -m app.seeds.demo_seed --reset
+```
+
+If you only want to refresh the deterministic demo records without clearing the whole domain dataset first, run:
+
+```powershell
+python -m app.seeds.demo_seed
+```
+
+What the seed command does:
+
+- inserts a mostly anime-oriented localized movie catalog,
+- creates deterministic sessions for schedule and chronoboard demos,
+- creates demo users plus an admin account,
+- adds a controlled set of orders and tickets for attendance/profile views.
+
+Seeded demo credentials after running the command:
+
+- `admin`: `admin@cinema-showcase.dev` / `CinemaDemo123!`
+- `user`: `chihiro@cinema-showcase.dev` / `CinemaDemo123!`
+- `user`: `taki@cinema-showcase.dev` / `CinemaDemo123!`
+- `user`: `suzu@cinema-showcase.dev` / `CinemaDemo123!`
+- `user`: `ashitaka@cinema-showcase.dev` / `CinemaDemo123!`
+
 ### Caveats for non-Docker local runs
 
 - This path is more manual because MongoDB replica-set initialization is your responsibility.
@@ -2028,6 +2086,20 @@ The backend should respond successfully from:
 http://localhost:8000/api/v1/health
 ```
 
+### Optional: Seed demo data inside Docker
+
+After the stack is healthy, seed the presentation dataset with:
+
+```bash
+docker compose exec backend python -m app.seeds.demo_seed --reset
+```
+
+To refresh only the deterministic demo records without wiping every domain collection first:
+
+```bash
+docker compose exec backend python -m app.seeds.demo_seed
+```
+
 ### Stop the stack
 
 ```bash
@@ -2117,8 +2189,10 @@ The following backend test files exist in `backend/app/tests/`:
 
 | Test file | Main focus |
 | --- | --- |
+| `test_demo_seed.py` | Demo dataset shape, seeded credentials, and schema-level validation of seeded records |
 | `test_indexes.py` | Index bootstrap and legacy seat-index replacement behavior |
 | `test_management_services.py` | Management service rules, movie normalization, lifecycle constraints, profile update guardrails |
+| `test_movie_localization_validation.py` | Language-aware validation for localized movie titles and descriptions |
 | `test_pagination.py` | Pagination helper behavior |
 | `test_schedule_strategy.py` | Schedule sorting strategy logic |
 | `test_security.py` | Password hashing and security helpers |
@@ -2137,6 +2211,7 @@ The integration suite lives in `backend/app/tests/integration/`:
 | `test_access_control_api.py` | Protected-route access control, admin requirements, invalid tokens, anonymous booking rejection |
 | `test_admin_registration_api.py` | Admin role assignment through `ADMIN_EMAILS` |
 | `test_auth_users_api.py` | Registration, login, `/users/me`, password persistence expectations |
+| `test_demo_seed.py` | Explicit demo seed command behavior and seeded collection insertion |
 | `test_movies_api.py` | Public/admin movie behavior, lifecycle transitions, deactivation/reactivation rules, include-inactive access |
 | `test_orders_api.py` | Multi-ticket grouped purchase, race/conflict handling, rollback, retry behavior, partial and full cancellation |
 | `test_schedule_api.py` | Public schedule listing, details, seat map, time-based completion synchronization |
@@ -2315,7 +2390,7 @@ This flow is currently best tested through Swagger UI or another API client beca
 
 ## 25. Admin Access and Usage Notes
 
-The repository does not ship with a hardcoded seeded admin account. Admin access is controlled by email-based role assignment during registration.
+By default, admin access is still controlled by email-based role assignment during registration. Separately, the explicit demo seed command can create a ready-to-use demo admin account and several demo users for presentation runs.
 
 ### How admin access works
 
@@ -2333,6 +2408,18 @@ Important nuance:
 - existing normal users are not automatically upgraded later just because you changed `ADMIN_EMAILS`,
 - admin status is applied when the account is created,
 - if you need a different account to be admin, register it after the environment is configured.
+
+### Seeded demo credentials
+
+If you run `python -m app.seeds.demo_seed --reset` or the equivalent Docker command, the repository will also create these accounts:
+
+- `admin`: `admin@cinema-showcase.dev` / `CinemaDemo123!`
+- `user`: `chihiro@cinema-showcase.dev` / `CinemaDemo123!`
+- `user`: `taki@cinema-showcase.dev` / `CinemaDemo123!`
+- `user`: `suzu@cinema-showcase.dev` / `CinemaDemo123!`
+- `user`: `ashitaka@cinema-showcase.dev` / `CinemaDemo123!`
+
+Those accounts exist only after the explicit seed command is run. They are not created automatically on normal startup.
 
 ### How to reach the admin area
 
@@ -2456,10 +2543,6 @@ The project could be extended with:
 - explicit seat-counter reconciliation utilities,
 - repair/report jobs for operational consistency checks.
 
-### Add seed/demo data scripts
-
-Because the repository is clearly demo/coursework friendly, seed data would make first-run evaluation easier by populating movies, sessions, and perhaps sample accounts.
-
 ### Add production deployment profile
 
 The current Docker setup is development-oriented. A production-ready extension could add:
@@ -2471,7 +2554,7 @@ The current Docker setup is development-oriented. A production-ready extension c
 
 ### Add role-management utilities
 
-Right now admin assignment is registration-time email based. A dedicated admin promotion flow or seed command could make role management more flexible for future environments.
+Right now admin assignment outside the demo seed flow is still registration-time email based. A dedicated admin promotion flow would make role management more flexible for future environments.
 
 ### Extend chronoboard ergonomics
 

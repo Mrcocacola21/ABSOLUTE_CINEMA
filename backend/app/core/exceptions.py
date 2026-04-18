@@ -15,6 +15,11 @@ from app.core.responses import ErrorResponse
 
 logger = get_logger(__name__)
 
+REQUEST_VALIDATION_PREFIXES = (
+    "Value error, ",
+    "Assertion failed, ",
+)
+
 
 class AppException(Exception):
     """Base class for controlled application exceptions."""
@@ -114,7 +119,11 @@ async def request_validation_exception_handler(
     exc: RequestValidationError,
 ) -> JSONResponse:
     """Convert FastAPI validation errors into the shared error envelope."""
-    response = ErrorResponse.validation_error(jsonable_encoder(exc.errors()))
+    details = jsonable_encoder(exc.errors())
+    response = ErrorResponse.validation_error(
+        details,
+        message=_extract_request_validation_message(details),
+    )
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=response.model_dump(mode="json"),
@@ -150,3 +159,20 @@ def register_exception_handlers(application: FastAPI) -> None:
     )
     application.add_exception_handler(PyMongoError, pymongo_exception_handler)
     application.add_exception_handler(Exception, unexpected_exception_handler)
+
+
+def _extract_request_validation_message(details: list[dict[str, Any]]) -> str:
+    """Return the first human-readable request validation message when available."""
+    if not details:
+        return "Request validation failed."
+
+    raw_message = str(details[0].get("msg", "")).strip()
+    if not raw_message:
+        return "Request validation failed."
+
+    for prefix in REQUEST_VALIDATION_PREFIXES:
+        if raw_message.startswith(prefix):
+            raw_message = raw_message[len(prefix) :].strip()
+            break
+
+    return raw_message or "Request validation failed."

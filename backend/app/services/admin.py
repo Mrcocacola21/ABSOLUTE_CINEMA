@@ -46,6 +46,8 @@ from app.schemas.session import (
 from app.schemas.user import UserRead
 from app.services.movie_status import MovieStatusManager
 
+MAX_SESSION_RUNTIME_BUFFER_MINUTES = 60
+
 
 class AdminService:
     """Service for administration use cases."""
@@ -575,7 +577,10 @@ class AdminService:
         local_start_time = start_time.astimezone(ZoneInfo(settings.cinema_timezone))
         candidate = local_start_time.timetz().replace(tzinfo=None)
         if candidate < earliest or candidate > latest:
-            raise ValidationException("Session start time must be between 09:00 and 22:00.")
+            raise ValidationException(
+                "Session start time must be between "
+                f"{earliest.strftime('%H:%M')} and {latest.strftime('%H:%M')}."
+            )
 
     def _normalize_session_time(self, start_time: datetime) -> datetime:
         settings = get_settings()
@@ -662,9 +667,13 @@ class AdminService:
         self._validate_start_time(start_time)
         if end_time <= start_time:
             raise ValidationException("Session end time must be greater than start time.")
-        minimum_duration_minutes = (end_time - start_time).total_seconds() / 60
-        if minimum_duration_minutes < movie.duration_minutes:
+        slot_duration_minutes = (end_time - start_time).total_seconds() / 60
+        if slot_duration_minutes < movie.duration_minutes:
             raise ValidationException("Session slot must be at least as long as the selected movie duration.")
+        if slot_duration_minutes > movie.duration_minutes + MAX_SESSION_RUNTIME_BUFFER_MINUTES:
+            raise ValidationException(
+                "Session slot cannot exceed the movie runtime by more than 60 minutes."
+            )
 
     def _build_session_document(
         self,

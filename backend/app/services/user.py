@@ -42,11 +42,21 @@ class UserService:
 
         document_updates: dict[str, object] = {}
         if "name" in updates:
-            document_updates["name"] = updates["name"]
+            normalized_name = str(updates["name"])
+            if normalized_name != str(existing_user["name"]):
+                document_updates["name"] = normalized_name
         if "email" in updates:
-            document_updates["email"] = str(updates["email"]).lower()
+            normalized_email = str(updates["email"]).lower()
+            if normalized_email != str(existing_user["email"]).lower():
+                document_updates["email"] = normalized_email
         if "password" in updates:
-            document_updates["password_hash"] = password_hasher.hash_password(str(updates["password"]))
+            new_password = str(updates["password"])
+            if password_hasher.verify_password(new_password, existing_user["password_hash"]):
+                raise ValidationException("New password must be different from the current password.")
+            document_updates["password_hash"] = password_hasher.hash_password(new_password)
+
+        if not document_updates:
+            raise ValidationException("At least one changed profile field must be provided.")
 
         updated = await self.user_repository.update_user(
             current_user.id,

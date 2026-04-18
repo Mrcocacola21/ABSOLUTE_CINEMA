@@ -346,7 +346,7 @@ def test_movie_create_schema_accepts_localized_fields_and_normalizes_genres() ->
 def test_movie_update_schema_normalizes_genres_and_keeps_nullables() -> None:
     payload = MovieUpdate(
         title={"en": "New title"},
-        genres=[" Drama ", "", "Sci-Fi", "drama"],
+        genres=[" Drama ", "", "Sci-Fi", "mystery"],
         poster_url=None,
         status=MovieStatuses.DEACTIVATED,
     )
@@ -354,10 +354,15 @@ def test_movie_update_schema_normalizes_genres_and_keeps_nullables() -> None:
     dumped = payload.model_dump(exclude_unset=True)
 
     assert dumped["title"] == {"en": "New title"}
-    assert dumped["genres"] == ["drama", "science_fiction"]
+    assert dumped["genres"] == ["drama", "science_fiction", "mystery"]
     assert dumped["status"] == MovieStatuses.DEACTIVATED
     assert "poster_url" in dumped
     assert dumped["poster_url"] is None
+
+
+def test_movie_update_schema_rejects_duplicate_genres_after_normalization() -> None:
+    with pytest.raises(ValidationError):
+        MovieUpdate(genres=["Drama", " drama "])
 
 
 def test_movie_create_schema_rejects_invalid_genre_code() -> None:
@@ -371,9 +376,70 @@ def test_movie_create_schema_rejects_invalid_genre_code() -> None:
         )
 
 
+def test_movie_create_schema_accepts_local_demo_poster_paths_and_blank_age_rating() -> None:
+    payload = MovieCreate(
+        title={"uk": "Судзуме", "en": "Suzume"},
+        description={"uk": "Сучасний аніме-фільм", "en": "Modern anime feature"},
+        duration_minutes=122,
+        poster_url="/demo-posters/suzume.svg",
+        age_rating="   ",
+        genres=["animation", "adventure"],
+        status=MovieStatuses.PLANNED,
+    )
+
+    assert payload.poster_url == "/demo-posters/suzume.svg"
+    assert payload.age_rating is None
+
+
+def test_movie_create_schema_rejects_overlong_localized_title() -> None:
+    with pytest.raises(ValidationError):
+        MovieCreate(
+            title={"uk": "Ж" * 151, "en": "A" * 151},
+            description={"uk": "Опис", "en": "Description"},
+            duration_minutes=100,
+            genres=["drama"],
+            status=MovieStatuses.PLANNED,
+        )
+
+
 def test_user_update_requires_current_password_for_sensitive_fields() -> None:
     with pytest.raises(ValueError):
         UserUpdate(email="new@example.com")
+
+
+def test_user_update_rejects_reusing_current_password() -> None:
+    with pytest.raises(ValueError):
+        UserUpdate(password="SamePassword123", current_password="SamePassword123")
+
+
+def test_session_create_rejects_prices_with_more_than_two_decimals() -> None:
+    now = datetime.now(tz=timezone.utc)
+
+    with pytest.raises(ValidationError):
+        SessionCreate(
+            movie_id="movie-1",
+            start_time=now + timedelta(days=1),
+            end_time=now + timedelta(days=1, hours=2),
+            price=199.999,
+        )
+
+
+def test_ticket_read_rejects_cancelled_status_without_cancelled_at() -> None:
+    now = datetime.now(tz=timezone.utc)
+
+    with pytest.raises(ValidationError):
+        TicketRead(
+            id="ticket-1",
+            user_id="user-1",
+            session_id="session-1",
+            seat_row=2,
+            seat_number=5,
+            price=200.0,
+            status=TicketStatuses.CANCELLED,
+            purchased_at=now,
+            updated_at=None,
+            cancelled_at=None,
+        )
 
 
 def test_order_service_build_order_read_serializes_httpurl_poster_url_to_plain_string() -> None:
@@ -439,6 +505,33 @@ async def test_admin_service_requires_session_slot_long_enough_for_movie() -> No
     now = datetime.now(tz=timezone.utc) + timedelta(days=1)
     start_time = now.replace(hour=10, minute=0, second=0, microsecond=0)
     end_time = start_time + timedelta(minutes=90)
+
+    with pytest.raises(ValidationException):
+        await service.create_session(
+            SessionCreate(
+                movie_id="movie-1",
+                start_time=start_time,
+                end_time=end_time,
+                price=200,
+            ),
+            created_by=build_admin_user(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_admin_service_rejects_session_slot_with_excessive_runtime_buffer() -> None:
+    movie_repository = FakeMovieRepository(movie=build_movie(duration_minutes=120))
+    session_repository = FakeSessionRepository()
+    ticket_repository = FakeTicketRepository()
+    service = AdminService(
+        movie_repository=movie_repository,
+        session_repository=session_repository,
+        ticket_repository=ticket_repository,
+        order_repository=FakeOrderRepository(),
+    )
+    now = datetime.now(tz=timezone.utc) + timedelta(days=1)
+    start_time = now.replace(hour=10, minute=0, second=0, microsecond=0)
+    end_time = start_time + timedelta(minutes=190)
 
     with pytest.raises(ValidationException):
         await service.create_session(

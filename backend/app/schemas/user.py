@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 import re
 
-from pydantic import EmailStr, Field, field_validator, model_validator
+from pydantic import ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.core.constants import Roles
 from app.schemas.common import BaseSchema
@@ -25,6 +25,13 @@ def _normalize_person_name(value: str | None) -> str | None:
 
 class UserCreate(BaseSchema):
     """Payload for registering a new user."""
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
 
     name: str = Field(min_length=2, max_length=255)
     email: EmailStr
@@ -57,6 +64,13 @@ class UserRead(BaseSchema):
 
 class UserUpdate(BaseSchema):
     """Payload for updating the authenticated user's profile."""
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
 
     name: str | None = Field(default=None, min_length=2, max_length=255)
     email: EmailStr | None = None

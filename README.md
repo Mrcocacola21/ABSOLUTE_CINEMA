@@ -1691,6 +1691,9 @@ Important notes:
 
 - Login uses an OAuth2 password form style payload.
 - Admin role assignment happens during registration if the email is listed in `ADMIN_EMAILS`.
+- Registration payloads are strict. Unexpected extra fields such as client-supplied `role` are rejected with request validation errors rather than being silently ignored.
+- The JWT is used only to identify the account. Protected requests still reload the current user from MongoDB, so deleted or inactive accounts are rejected even if the token was issued earlier.
+- Expired, malformed, or structurally invalid access tokens return standardized `401` authentication errors.
 
 ### Movies
 
@@ -1753,6 +1756,14 @@ Important notes:
 | `PATCH /api/v1/users/me` | Update current user profile |
 | `DELETE /api/v1/users/me` | Deactivate current user account |
 
+Important notes:
+
+- The frontend `/profile` page is backed by `/api/v1/users/me` and the related current-user order/ticket endpoints. There is no separate backend `/profile` API route.
+- `GET /api/v1/users/me` is the backend session-restoration endpoint. It resolves the bearer token, reloads the user from the database, and returns the safe current-user DTO.
+- Profile updates allow `name`, `email`, and `password`. Changing `email` or `password` requires `current_password`.
+- Profile update payloads are strict. Unexpected privilege-bearing fields such as `role` or `is_active` are rejected with request validation errors.
+- Account deactivation is a soft deactivation implemented through `is_active=false`. After deactivation, existing protected requests and fresh logins are both rejected.
+
 ### Admin
 
 | Endpoint group | Representative endpoints | Purpose |
@@ -1776,6 +1787,8 @@ The repository uses environment variables on both backend and frontend. The most
 ### Backend environment variables
 
 The backend example file is `backend/.env.example`.
+
+Create a local `backend/.env` by copying that example file. The real `.env` file is for local/runtime use only, is gitignored, and should never be committed.
 
 | Variable | Example/default | Purpose |
 | --- | --- | --- |
@@ -1808,6 +1821,8 @@ If version consistency matters in your setup, set `PROJECT_VERSION` explicitly i
 ### Frontend environment variables
 
 The frontend example file is `frontend/.env.example`.
+
+Create a local `frontend/.env` by copying that example file. The real `.env` file is also gitignored and should stay out of version control.
 
 | Variable | Example/default | Purpose |
 | --- | --- | --- |
@@ -1903,6 +1918,7 @@ Important backend notes:
 - Update `JWT_SECRET_KEY` in `.env` before real use.
 - Make sure `MONGODB_URI` points to your replica-set-enabled MongoDB instance.
 - If MongoDB is not a replica set, startup will fail intentionally.
+- Keep `backend/.env` local only and do not commit it.
 
 ### Step 3: Configure and run the frontend
 
@@ -1923,6 +1939,8 @@ npm install
 cp .env.example .env
 npm run dev
 ```
+
+Keep `frontend/.env` local only and do not commit it.
 
 ### Step 4: Open the application
 
@@ -2046,6 +2064,8 @@ POSIX shell equivalent:
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 ```
+
+Those generated `.env` files are intended for local configuration only and should not be committed.
 
 Adjust at least:
 
@@ -2189,6 +2209,7 @@ The following backend test files exist in `backend/app/tests/`:
 
 | Test file | Main focus |
 | --- | --- |
+| `test_jwt.py` | JWT claim generation and expiry handling |
 | `test_demo_seed.py` | Demo dataset shape, seeded credentials, and schema-level validation of seeded records |
 | `test_indexes.py` | Index bootstrap and legacy seat-index replacement behavior |
 | `test_management_services.py` | Management service rules, movie normalization, lifecycle constraints, profile update guardrails |
@@ -2208,9 +2229,9 @@ The integration suite lives in `backend/app/tests/integration/`:
 
 | Test file | Main focus |
 | --- | --- |
-| `test_access_control_api.py` | Protected-route access control, admin requirements, invalid tokens, anonymous booking rejection |
-| `test_admin_registration_api.py` | Admin role assignment through `ADMIN_EMAILS` |
-| `test_auth_users_api.py` | Registration, login, `/users/me`, password persistence expectations |
+| `test_access_control_api.py` | Protected-route access control, admin requirements, invalid/expired/malformed tokens, inactive or deleted users, anonymous booking rejection |
+| `test_admin_registration_api.py` | Admin role assignment through `ADMIN_EMAILS` and rejection of client-supplied role fields |
+| `test_auth_users_api.py` | Registration, login, `/users/me`, password changes, strict profile updates, and account deactivation behavior |
 | `test_demo_seed.py` | Explicit demo seed command behavior and seeded collection insertion |
 | `test_movies_api.py` | Public/admin movie behavior, lifecycle transitions, deactivation/reactivation rules, include-inactive access |
 | `test_orders_api.py` | Multi-ticket grouped purchase, race/conflict handling, rollback, retry behavior, partial and full cancellation |
@@ -2396,6 +2417,8 @@ By default, admin access is still controlled by email-based role assignment duri
 
 When a user registers, the backend lowercases the submitted email and checks whether it appears in `ADMIN_EMAILS`. If it does, the created account gets role `admin`; otherwise it gets role `user`.
 
+Client-side role submission is not trusted. Registration accepts only the supported account fields and rejects unexpected extras such as `role`.
+
 ### How to create an admin account
 
 1. Set `ADMIN_EMAILS` in `backend/.env` to include the email you want to use.
@@ -2418,6 +2441,8 @@ If you run `python -m app.seeds.demo_seed --reset` or the equivalent Docker comm
 - `user`: `taki@cinema-showcase.dev` / `CinemaDemo123!`
 - `user`: `suzu@cinema-showcase.dev` / `CinemaDemo123!`
 - `user`: `ashitaka@cinema-showcase.dev` / `CinemaDemo123!`
+
+The seed command logs the seeded account emails/roles, but it intentionally does not echo the shared password to the application log.
 
 Those accounts exist only after the explicit seed command is run. They are not created automatically on normal startup.
 

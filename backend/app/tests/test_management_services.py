@@ -15,7 +15,7 @@ from app.schemas.movie import MovieRead
 from app.schemas.movie import MovieCreate
 from app.schemas.session import SessionCreate
 from app.schemas.ticket import TicketRead
-from app.schemas.user import UserRead, UserUpdate
+from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.services.admin import AdminService
 from app.services.order import OrderService
 from app.services.ticket import TicketService
@@ -410,6 +410,21 @@ def test_user_update_requires_current_password_for_sensitive_fields() -> None:
 def test_user_update_rejects_reusing_current_password() -> None:
     with pytest.raises(ValueError):
         UserUpdate(password="SamePassword123", current_password="SamePassword123")
+
+
+def test_user_create_rejects_unexpected_role_field() -> None:
+    with pytest.raises(ValidationError):
+        UserCreate(
+            name="Escalation Attempt",
+            email="escalation@example.com",
+            password="CinemaPass123",
+            role="admin",
+        )
+
+
+def test_user_update_rejects_unexpected_privilege_fields() -> None:
+    with pytest.raises(ValidationError):
+        UserUpdate(role="admin")
 
 
 def test_session_create_rejects_prices_with_more_than_two_decimals() -> None:

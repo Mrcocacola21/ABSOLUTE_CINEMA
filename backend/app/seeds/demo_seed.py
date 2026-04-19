@@ -11,6 +11,7 @@ from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorClientSession, AsyncIOMotorDatabase
 
 from app.core.config import get_settings
+from app.core.logging import configure_logging, get_logger
 from app.db.collections import DatabaseCollections
 from app.db.database import mongodb_manager
 from app.db.indexes import ensure_indexes
@@ -38,6 +39,8 @@ INSERT_COLLECTION_ORDER = (
     DatabaseCollections.ORDERS,
     DatabaseCollections.TICKETS,
 )
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,36 +148,41 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _print_summary(summary: DemoSeedSummary) -> None:
-    print(
-        f"Seeded '{summary.database_name}' with {summary.seed_version} "
-        f"(reset={str(summary.reset_applied).lower()})."
+def _log_summary(summary: DemoSeedSummary) -> None:
+    logger.info(
+        "Seeded '%s' with %s (reset=%s).",
+        summary.database_name,
+        summary.seed_version,
+        str(summary.reset_applied).lower(),
     )
-    print(
-        "Counts: "
-        f"users={summary.counts['users']}, "
-        f"movies={summary.counts['movies']}, "
-        f"sessions={summary.counts['sessions']}, "
-        f"orders={summary.counts['orders']}, "
-        f"tickets={summary.counts['tickets']}"
+    logger.info(
+        "Counts: users=%s, movies=%s, sessions=%s, orders=%s, tickets=%s",
+        summary.counts["users"],
+        summary.counts["movies"],
+        summary.counts["sessions"],
+        summary.counts["orders"],
+        summary.counts["tickets"],
     )
-    print(f"Movie statuses: {summary.movie_status_counts}")
-    print(f"Session statuses: {summary.session_status_counts}")
-    print("Demo credentials:")
+    logger.info("Movie statuses: %s", summary.movie_status_counts)
+    logger.info("Session statuses: %s", summary.session_status_counts)
+    logger.info("Demo accounts seeded. The shared demo password is intentionally not logged.")
     for credential in demo_credentials():
-        print(
-            f"  - {credential['role']}: {credential['email']} / {credential['password']}"
-            f" ({credential['name']})"
+        logger.info(
+            "  - role=%s email=%s name=%s",
+            credential["role"],
+            credential["email"],
+            credential["name"],
         )
 
 
 async def _async_main(reset: bool) -> None:
     summary = await seed_demo_database(reset=reset)
-    _print_summary(summary)
+    _log_summary(summary)
 
 
 def main() -> None:
     """Run the seed command from the command line."""
+    configure_logging(get_settings().log_level)
     args = _build_argument_parser().parse_args()
     asyncio.run(_async_main(reset=bool(args.reset)))
 

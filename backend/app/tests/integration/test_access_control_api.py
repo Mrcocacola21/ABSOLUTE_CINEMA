@@ -10,6 +10,7 @@ from bson import ObjectId
 from jose import jwt
 
 from app.core.config import get_settings
+from app.db.collections import DatabaseCollections
 
 from app.tests.integration.conftest import API_PREFIX, build_localized_text
 
@@ -186,6 +187,132 @@ async def test_invalid_tokens_return_standardized_401(
     assert malformed_body["success"] is False
     assert malformed_body["error"]["code"] == "authentication_error"
     assert malformed_body["error"]["message"] == "Invalid or expired access token."
+
+
+@pytest.mark.asyncio
+async def test_expired_tokens_return_standardized_401(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    auth_headers,
+) -> None:
+    settings = get_settings()
+    expired_token = jwt.encode(
+        {
+            "sub": user_auth["user"]["id"],
+            "email": user_auth["user"]["email"],
+            "role": user_auth["user"]["role"],
+            "exp": int((datetime.now(tz=timezone.utc) - timedelta(minutes=5)).timestamp()),
+        },
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    response = await client.get(
+        f"{API_PREFIX}/users/me",
+        headers=auth_headers(expired_token),
+    )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "authentication_error"
+    assert body["error"]["message"] == "Invalid or expired access token."
+
+
+@pytest.mark.asyncio
+async def test_token_with_invalid_subject_format_returns_standardized_401(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    auth_headers,
+) -> None:
+    settings = get_settings()
+    invalid_subject_token = jwt.encode(
+        {
+            "sub": "not-a-valid-object-id",
+            "email": user_auth["user"]["email"],
+            "role": user_auth["user"]["role"],
+            "exp": int((datetime.now(tz=timezone.utc) + timedelta(minutes=5)).timestamp()),
+        },
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    response = await client.get(
+        f"{API_PREFIX}/users/me",
+        headers=auth_headers(invalid_subject_token),
+    )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "authentication_error"
+    assert body["error"]["message"] == "Invalid or expired access token."
+
+
+@pytest.mark.asyncio
+async def test_token_for_deleted_user_returns_standardized_401(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    database,
+) -> None:
+    await database[DatabaseCollections.USERS].delete_one({"_id": ObjectId(user_auth["user"]["id"])})
+
+    response = await client.get(
+        f"{API_PREFIX}/users/me",
+        headers=user_auth["headers"],
+    )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "authentication_error"
+    assert body["error"]["message"] == "Authenticated user no longer exists."
+
+
+@pytest.mark.asyncio
+async def test_token_for_inactive_user_returns_standardized_401(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    database,
+) -> None:
+    await database[DatabaseCollections.USERS].update_one(
+        {"_id": ObjectId(user_auth["user"]["id"])},
+        {"$set": {"is_active": False}},
+    )
+
+    response = await client.get(
+        f"{API_PREFIX}/users/me",
+        headers=user_auth["headers"],
+    )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "authentication_error"
+    assert body["error"]["message"] == "This account is inactive."
+
+
+@pytest.mark.asyncio
+async def test_inactive_admin_cannot_access_admin_endpoint_with_existing_token(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    database,
+) -> None:
+    await database[DatabaseCollections.USERS].update_one(
+        {"_id": ObjectId(admin_auth["user"]["id"])},
+        {"$set": {"is_active": False}},
+    )
+
+    response = await client.get(
+        f"{API_PREFIX}/admin/users",
+        headers=admin_auth["headers"],
+    )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "authentication_error"
+    assert body["error"]["message"] == "This account is inactive."
 
 
 @pytest.mark.asyncio

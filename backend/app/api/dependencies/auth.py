@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordBearer
 from app.api.dependencies.services import get_user_service
 from app.core.config import get_settings
 from app.core.constants import Roles
-from app.core.exceptions import AuthenticationException, AuthorizationException
+from app.core.exceptions import AuthenticationException, AuthorizationException, ValidationException
 from app.schemas.user import UserRead
 from app.security.jwt import decode_access_token
 from app.services.user import UserService
@@ -31,9 +31,13 @@ async def get_current_user(
     payload = decode_access_token(token)
     user_id = payload.sub
     if not user_id:
-        raise AuthenticationException("Invalid authentication token.")
+        raise AuthenticationException("Invalid or expired access token.")
 
-    user = await user_service.get_user_by_id(user_id)
+    try:
+        user = await user_service.get_user_by_id(user_id)
+    except ValidationException as exc:
+        raise AuthenticationException("Invalid or expired access token.") from exc
+
     if not user:
         raise AuthenticationException("Authenticated user no longer exists.")
     if not user.is_active:

@@ -7,11 +7,11 @@ import pytest
 
 from app.db.collections import DatabaseCollections
 from app.security.jwt import decode_access_token
-from app.tests.integration.conftest import API_PREFIX, ADMIN_EMAIL, DEFAULT_PASSWORD
+from app.tests.integration.conftest import ADMIN_EMAIL, API_PREFIX, DEFAULT_PASSWORD
 
 
 @pytest.mark.asyncio
-async def test_configured_admin_email_registers_as_admin_and_ignores_client_role(
+async def test_configured_admin_email_registers_as_admin(
     client: httpx.AsyncClient,
     database,
 ) -> None:
@@ -21,7 +21,6 @@ async def test_configured_admin_email_registers_as_admin_and_ignores_client_role
             "email": ADMIN_EMAIL.upper(),
             "name": "Bootstrap Admin",
             "password": DEFAULT_PASSWORD,
-            "role": "user",
         },
     )
 
@@ -38,9 +37,8 @@ async def test_configured_admin_email_registers_as_admin_and_ignores_client_role
 
 
 @pytest.mark.asyncio
-async def test_regular_email_cannot_self_assign_admin_role_during_registration(
+async def test_registration_rejects_client_supplied_role_field(
     client: httpx.AsyncClient,
-    database,
 ) -> None:
     response = await client.post(
         f"{API_PREFIX}/auth/register",
@@ -52,17 +50,11 @@ async def test_regular_email_cannot_self_assign_admin_role_during_registration(
         },
     )
 
-    assert response.status_code == 201
+    assert response.status_code == 422
     body = response.json()
-    assert body["success"] is True
-    assert body["data"]["email"] == "self-promoted@example.com"
-    assert body["data"]["role"] == "user"
-
-    stored_user = await database[DatabaseCollections.USERS].find_one(
-        {"email": "self-promoted@example.com"}
-    )
-    assert stored_user is not None
-    assert stored_user["role"] == "user"
+    assert body["success"] is False
+    assert body["error"]["code"] == "request_validation_error"
+    assert body["error"]["message"] == "Extra inputs are not permitted"
 
 
 @pytest.mark.asyncio

@@ -4,10 +4,14 @@ import { useTranslation } from "react-i18next";
 import { getGenreLabels } from "@/shared/genres";
 import { getLocalizedText } from "@/shared/localization";
 import { getMovieStatusBadgeClassName } from "@/shared/movieStatus";
+import { usePagination } from "@/shared/pagination";
 import { formatStateLabel } from "@/shared/presentation";
+import { PaginationControls } from "@/shared/ui/PaginationControls";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
 import type { Movie } from "@/types/domain";
 import { getMovieMonogram } from "@/widgets/admin/chronoboard/utils";
+
+const PLANNING_SHELF_PAGE_SIZE = 4;
 
 interface PlanningShelfProps {
   planningMovies: Movie[];
@@ -37,6 +41,10 @@ export function PlanningShelf({
   onDragEnd,
 }: PlanningShelfProps) {
   const { t, i18n } = useTranslation();
+  const planningPagination = usePagination(planningMovies, {
+    pageSize: PLANNING_SHELF_PAGE_SIZE,
+    resetKey: plannerMovieQuery.trim().toLowerCase(),
+  });
 
   return (
     <section className="card planning-shelf">
@@ -74,7 +82,7 @@ export function PlanningShelf({
       ) : null}
 
       <div className="planning-shelf__grid">
-        {planningMovies.map((movie) => {
+        {planningPagination.pageItems.map((movie) => {
           const isSelected = movie.id === pinnedMovieId || movie.id === draggedMovieId;
           const movieTitle = getLocalizedText(movie.title, i18n.language);
 
@@ -135,6 +143,12 @@ export function PlanningShelf({
           </section>
         ) : null}
       </div>
+
+      <PaginationControls
+        page={planningPagination.page}
+        totalPages={planningPagination.totalPages}
+        onPageChange={planningPagination.setPage}
+      />
     </section>
   );
 }

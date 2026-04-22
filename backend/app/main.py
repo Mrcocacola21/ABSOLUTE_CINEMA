@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.docs import API_TAGS, OPENAPI_DESCRIPTION, PROJECT_REPOSITORY_URL, SWAGGER_UI_PARAMETERS
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
@@ -33,10 +34,16 @@ def create_application() -> FastAPI:
     application = FastAPI(
         title=settings.project_name,
         version=settings.project_version,
-        description=settings.project_description,
+        description=OPENAPI_DESCRIPTION,
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        openapi_tags=API_TAGS,
+        contact={
+            "name": "Cinema Showcase Project Repository",
+            "url": PROJECT_REPOSITORY_URL,
+        },
+        swagger_ui_parameters=SWAGGER_UI_PARAMETERS,
         lifespan=lifespan,
     )
 

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Akira demo poster</title>
+  <desc id="desc">Stylized gradient poster for the Cinema Showcase demo catalog.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#1f2937"/>
+      <stop offset="100%" stop-color="#b91c1c"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)"/>
+  <circle cx="430" cy="213" r="132" fill="#fca5a5" opacity="0.22"/>
+  <circle cx="230" cy="622" r="168" fill="#fef2f2" opacity="0.08"/>
+  <path d="M76 248 C168 210, 250 208, 340 250 S494 322, 530 286" fill="none" stroke="#fca5a5" stroke-width="10" stroke-linecap="round" opacity="0.42"/>
+  <rect x="62" y="228" width="476" height="458" rx="40" fill="#020617" opacity="0.15"/>
+  <text x="72" y="112" fill="#fef2f2" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="28" letter-spacing="5">CINEMA SHOWCASE</text>
+  <text x="72" y="420" fill="#fef2f2" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="76" font-weight="700">AKIRA</text>
+  <text x="72" y="734" fill="#fca5a5" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="28">animation / science fiction / action / thriller</text>
+</svg>

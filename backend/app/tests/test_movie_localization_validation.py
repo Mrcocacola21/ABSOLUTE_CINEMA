@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 from pydantic import ValidationError
 
 from app.core.constants import MovieStatuses
-from app.schemas.movie import MovieCreate, MovieUpdate
+from app.schemas.movie import MovieCreate, MovieRead, MovieUpdate
 
 
 def build_valid_movie_payload() -> dict[str, object]:
@@ -115,3 +117,23 @@ def test_movie_update_rejects_invalid_language_in_partial_localized_updates(
         MovieUpdate(**payload)
 
     assert any(expected_message in message for message in extract_validation_messages(error.value))
+
+
+def test_movie_read_accepts_legacy_localized_text_already_stored_in_database() -> None:
+    now = datetime.now(tz=timezone.utc)
+
+    movie = MovieRead(
+        id="legacy-movie-1",
+        title={"uk": "TEST", "en": "TEST"},
+        description={"uk": "TEST", "en": "TEST"},
+        duration_minutes=95,
+        poster_url=None,
+        age_rating="PG-13",
+        genres=["drama"],
+        status=MovieStatuses.PLANNED,
+        created_at=now,
+        updated_at=None,
+    )
+
+    assert movie.title.uk == "TEST"
+    assert movie.description.en == "TEST"

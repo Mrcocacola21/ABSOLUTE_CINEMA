@@ -137,6 +137,51 @@ async def test_past_scheduled_sessions_are_not_returned_in_public_schedule_after
 
 
 @pytest.mark.asyncio
+async def test_public_schedule_tolerates_legacy_localized_movie_documents(
+    client: httpx.AsyncClient,
+    database,
+) -> None:
+    now = datetime.now(tz=timezone.utc)
+    movie_result = await database[DatabaseCollections.MOVIES].insert_one(
+        {
+            "title": {"uk": "TEST", "en": "TEST"},
+            "description": {"uk": "TEST", "en": "TEST"},
+            "duration_minutes": 100,
+            "poster_url": None,
+            "age_rating": "PG",
+            "genres": ["drama"],
+            "status": "planned",
+            "created_at": now - timedelta(days=1),
+            "updated_at": None,
+        }
+    )
+    movie_id = str(movie_result.inserted_id)
+    session_result = await database[DatabaseCollections.SESSIONS].insert_one(
+        {
+            "movie_id": movie_id,
+            "start_time": now + timedelta(hours=3),
+            "end_time": now + timedelta(hours=5),
+            "price": 180,
+            "status": "scheduled",
+            "total_seats": 96,
+            "available_seats": 96,
+            "created_at": now - timedelta(days=1),
+            "updated_at": None,
+        }
+    )
+
+    response = await client.get(
+        f"{API_PREFIX}/schedule",
+        params={"sort_by": "start_time", "sort_order": "asc", "limit": 20, "offset": 0},
+    )
+
+    assert response.status_code == 200
+    schedule_items = response.json()["data"]
+    assert [item["id"] for item in schedule_items] == [str(session_result.inserted_id)]
+    assert schedule_items[0]["movie_title"] == {"uk": "TEST", "en": "TEST"}
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("params", "expected_message"),
     [

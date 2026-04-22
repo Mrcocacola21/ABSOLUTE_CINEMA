@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
+from app.api.docs import NOT_FOUND_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE, merge_openapi_responses
 from app.api.dependencies.services import get_schedule_service
 from app.core.responses import ApiResponse
 from app.factories.response_factory import ApiResponseFactory
@@ -13,7 +14,14 @@ from app.services.schedule import ScheduleService
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
-@router.get("/{session_id}/seats", response_model=ApiResponse[SessionSeatsRead])
+@router.get(
+    "/{session_id}/seats",
+    response_model=ApiResponse[SessionSeatsRead],
+    summary="Get session seat availability",
+    description="Return the seat map and remaining availability for one session.",
+    response_description="Wrapped seat availability data.",
+    responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
+)
 async def get_session_seats(
     session_id: str,
     schedule_service: ScheduleService = Depends(get_schedule_service),

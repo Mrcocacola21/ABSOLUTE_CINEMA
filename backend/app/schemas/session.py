@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date as calendar_date, datetime
 from typing import Final
 
 from pydantic import Field, field_validator, model_validator
@@ -36,13 +36,17 @@ def _validate_session_price(value: float | None) -> float | None:
 class SessionBase(BaseSchema):
     """Shared session fields."""
 
-    movie_id: str
-    start_time: datetime
-    end_time: datetime
-    price: float = Field(gt=0, le=SESSION_PRICE_MAX)
-    status: str = SessionStatuses.SCHEDULED
-    total_seats: int = Field(ge=1)
-    available_seats: int = Field(ge=0)
+    movie_id: str = Field(description="Identifier of the movie shown in this session.")
+    start_time: datetime = Field(description="Session start time in ISO 8601 format.")
+    end_time: datetime = Field(description="Session end time in ISO 8601 format.")
+    price: float = Field(gt=0, le=SESSION_PRICE_MAX, description="Ticket price for the session.")
+    status: str = Field(
+        default=SessionStatuses.SCHEDULED,
+        description="Session lifecycle status.",
+        json_schema_extra={"enum": list(SESSION_STATUS_VALUES)},
+    )
+    total_seats: int = Field(ge=1, description="Total seat count available in the hall for this session.")
+    available_seats: int = Field(ge=0, description="Remaining available seats for this session.")
 
     @field_validator("price")
     @classmethod
@@ -71,10 +75,10 @@ class SessionBase(BaseSchema):
 class SessionCreate(BaseSchema):
     """Payload for creating a session slot for an existing movie."""
 
-    movie_id: str
-    start_time: datetime
-    end_time: datetime
-    price: float = Field(gt=0, le=SESSION_PRICE_MAX)
+    movie_id: str = Field(description="Identifier of the movie being scheduled.")
+    start_time: datetime = Field(description="Requested session start time in ISO 8601 format.")
+    end_time: datetime = Field(description="Requested session end time in ISO 8601 format.")
+    price: float = Field(gt=0, le=SESSION_PRICE_MAX, description="Requested ticket price for the session.")
 
     @field_validator("price")
     @classmethod
@@ -93,10 +97,15 @@ class SessionCreate(BaseSchema):
 class SessionUpdate(BaseSchema):
     """Payload for updating a session."""
 
-    movie_id: str | None = None
-    start_time: datetime | None = None
-    end_time: datetime | None = None
-    price: float | None = Field(default=None, gt=0, le=SESSION_PRICE_MAX)
+    movie_id: str | None = Field(default=None, description="Optional new movie identifier.")
+    start_time: datetime | None = Field(default=None, description="Optional new start time.")
+    end_time: datetime | None = Field(default=None, description="Optional new end time.")
+    price: float | None = Field(
+        default=None,
+        gt=0,
+        le=SESSION_PRICE_MAX,
+        description="Optional new ticket price.",
+    )
 
     @field_validator("price")
     @classmethod
@@ -115,11 +124,14 @@ class SessionUpdate(BaseSchema):
 class SessionBatchCreate(BaseSchema):
     """Payload for creating the same session slot on multiple calendar dates."""
 
-    movie_id: str
-    start_time: datetime
-    end_time: datetime
-    price: float = Field(gt=0, le=SESSION_PRICE_MAX)
-    dates: list[date] = Field(min_length=1)
+    movie_id: str = Field(description="Identifier of the movie being scheduled.")
+    start_time: datetime = Field(description="Template start time applied to each requested date.")
+    end_time: datetime = Field(description="Template end time applied to each requested date.")
+    price: float = Field(gt=0, le=SESSION_PRICE_MAX, description="Ticket price used for each created session.")
+    dates: list[calendar_date] = Field(
+        min_length=1,
+        description="Calendar dates on which to create the requested slot.",
+    )
 
     @field_validator("price")
     @classmethod
@@ -140,54 +152,60 @@ class SessionBatchCreate(BaseSchema):
 class SessionRead(SessionBase):
     """Session DTO returned by the API."""
 
-    id: str
-    created_at: datetime
-    updated_at: datetime | None = None
+    id: str = Field(description="Session identifier.")
+    created_at: datetime = Field(description="Session creation timestamp.")
+    updated_at: datetime | None = Field(default=None, description="Last session update timestamp, if any.")
 
 
 class SessionDetailsRead(SessionRead):
     """Session DTO enriched with movie information."""
 
-    movie: MovieRead
+    movie: MovieRead = Field(description="Nested movie payload for the session.")
 
 
 class SessionBatchRejectedDateRead(BaseSchema):
     """One requested date that could not be created in batch mode."""
 
-    date: date
-    start_time: datetime
-    end_time: datetime
-    code: str
-    message: str
-    blocking_session_id: str | None = None
+    date: calendar_date = Field(description="Requested date that could not be scheduled.")
+    start_time: datetime = Field(description="Resolved start time for the rejected date.")
+    end_time: datetime = Field(description="Resolved end time for the rejected date.")
+    code: str = Field(description="Machine-readable rejection code.")
+    message: str = Field(description="Human-readable reason the date was rejected.")
+    blocking_session_id: str | None = Field(default=None, description="Conflicting session identifier, when applicable.")
 
 
 class SessionBatchCreateRead(BaseSchema):
     """Result of a batch session creation attempt."""
 
-    requested_dates: list[date]
+    requested_dates: list[calendar_date] = Field(description="All dates included in the batch request.")
     requested_count: int = Field(ge=0)
     created_count: int = Field(ge=0)
     rejected_count: int = Field(ge=0)
-    created_sessions: list[SessionDetailsRead] = Field(default_factory=list)
-    rejected_dates: list[SessionBatchRejectedDateRead] = Field(default_factory=list)
+    created_sessions: list[SessionDetailsRead] = Field(default_factory=list, description="Sessions created successfully.")
+    rejected_dates: list[SessionBatchRejectedDateRead] = Field(
+        default_factory=list,
+        description="Requested dates rejected during batch processing.",
+    )
 
 
 class ScheduleItemRead(BaseSchema):
     """Schedule item optimized for list views."""
 
-    id: str
-    movie_id: str
-    movie_title: LocalizedText
-    poster_url: str | None = None
-    age_rating: str | None = None
-    genres: list[str] = Field(default_factory=list)
-    start_time: datetime
-    end_time: datetime
-    price: float = Field(gt=0, le=SESSION_PRICE_MAX)
-    status: str
-    available_seats: int = Field(ge=0)
-    total_seats: int = Field(ge=1)
+    id: str = Field(description="Session identifier.")
+    movie_id: str = Field(description="Identifier of the related movie.")
+    movie_title: LocalizedText = Field(description="Localized movie title shown in schedule cards and lists.")
+    poster_url: str | None = Field(default=None, description="Poster URL or asset path for the related movie.")
+    age_rating: str | None = Field(default=None, description="Optional movie age-rating label.")
+    genres: list[str] = Field(default_factory=list, description="Normalized genre codes for the related movie.")
+    start_time: datetime = Field(description="Session start time.")
+    end_time: datetime = Field(description="Session end time.")
+    price: float = Field(gt=0, le=SESSION_PRICE_MAX, description="Ticket price for this session.")
+    status: str = Field(
+        description="Session lifecycle status.",
+        json_schema_extra={"enum": list(SESSION_STATUS_VALUES)},
+    )
+    available_seats: int = Field(ge=0, description="Remaining available seats for this session.")
+    total_seats: int = Field(ge=1, description="Total seats available in the hall.")
 
     @field_validator("price")
     @classmethod
@@ -205,9 +223,17 @@ class ScheduleItemRead(BaseSchema):
 class ScheduleQueryParams(BaseSchema):
     """Query parameters supported by the schedule endpoint."""
 
-    sort_by: str = "start_time"
-    sort_order: str = "asc"
-    movie_id: str | None = None
+    sort_by: str = Field(
+        default="start_time",
+        description="Schedule sort field.",
+        json_schema_extra={"enum": list(ALLOWED_SORT_FIELDS)},
+    )
+    sort_order: str = Field(
+        default="asc",
+        description="Schedule sort direction.",
+        json_schema_extra={"enum": list(ALLOWED_SORT_ORDERS)},
+    )
+    movie_id: str | None = Field(default=None, description="Optional movie identifier filter.")
 
     @field_validator("sort_by")
     @classmethod
@@ -229,9 +255,9 @@ class ScheduleQueryParams(BaseSchema):
 class SessionSeatsRead(BaseSchema):
     """Seat map data for a specific session."""
 
-    session_id: str
-    rows_count: int = Field(ge=1)
-    seats_per_row: int = Field(ge=1)
-    total_seats: int = Field(ge=1)
-    available_seats: int = Field(ge=0)
-    seats: list[SeatAvailabilityRead]
+    session_id: str = Field(description="Session identifier.")
+    rows_count: int = Field(ge=1, description="Number of seat rows in the hall.")
+    seats_per_row: int = Field(ge=1, description="Number of seats in each row.")
+    total_seats: int = Field(ge=1, description="Total seat count in the hall.")
+    available_seats: int = Field(ge=0, description="Remaining available seats.")
+    seats: list[SeatAvailabilityRead] = Field(description="Flat list describing availability for every seat in the hall.")

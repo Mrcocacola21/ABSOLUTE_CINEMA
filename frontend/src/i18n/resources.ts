@@ -159,6 +159,13 @@ export const resources = {
         empty: {
           notFound: "Page not found",
         },
+        pagination: {
+          label: "Pagination",
+          previous: "Previous page",
+          next: "Next page",
+          pageIndicator: "Page {{current}} of {{total}}",
+          goToPage: "Go to page {{page}}",
+        },
       },
       home: {
         hero: {
@@ -168,6 +175,7 @@ export const resources = {
         },
         spotlight: {
           activeRibbon: "Tickets on sale",
+          plannedRibbon: "Coming soon",
           activeSummary: "{{sessions}} upcoming sessions | from {{price}}",
           movieFallback: "Upcoming sessions are already open for booking and schedule browsing.",
           plannedFallback: "This title is already in the catalog and waiting for its first scheduled session.",
@@ -197,6 +205,11 @@ export const resources = {
         },
         errors: {
           title: "Unable to load the home page",
+        },
+        pagination: {
+          previous: "Previous page",
+          next: "Next page",
+          pageIndicator: "Page {{current}} of {{total}}",
         },
       },
       movies: {
@@ -1032,6 +1045,13 @@ export const resources = {
         empty: {
           notFound: "Сторінку не знайдено",
         },
+        pagination: {
+          label: "Пагінація",
+          previous: "Попередня сторінка",
+          next: "Наступна сторінка",
+          pageIndicator: "Сторінка {{current}} з {{total}}",
+          goToPage: "Перейти на сторінку {{page}}",
+        },
       },
       home: {
         hero: {
@@ -1041,6 +1061,7 @@ export const resources = {
         },
         spotlight: {
           activeRibbon: "Квитки у продажу",
+          plannedRibbon: "Скоро в програмі",
           activeSummary: "{{sessions}} майбутніх сеансів | від {{price}}",
           movieFallback: "Найближчі сеанси вже відкриті для бронювання та перегляду розкладу.",
           plannedFallback: "Цей фільм уже є в каталозі та очікує на свій перший сеанс.",
@@ -1068,6 +1089,11 @@ export const resources = {
         },
         errors: {
           title: "Не вдалося завантажити головну сторінку",
+        },
+        pagination: {
+          previous: "Попередня сторінка",
+          next: "Наступна сторінка",
+          pageIndicator: "Сторінка {{current}} з {{total}}",
         },
       },
       movies: {

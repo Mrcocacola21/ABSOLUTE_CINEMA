@@ -86,7 +86,7 @@ The application already contains a meaningful set of implemented features. The m
 
 ### Public movie browsing
 
-The frontend exposes a public-facing movie catalog and a homepage that highlight what the cinema is currently showing and what is coming next. Movie entries include localized title and description fields, duration, optional poster URL, optional age rating, normalized genres, and the current movie lifecycle status.
+The frontend exposes a public-facing movie catalog and a homepage that highlight what the cinema is currently showing and what is coming next. Movie entries include localized title and description fields, duration, optional poster references, optional age rating, normalized genres, and the current movie lifecycle status.
 
 The catalog is not limited to currently active films in the UI. While the public backend endpoint defaults to active-only responses unless `include_inactive=true` is supplied, the frontend intentionally requests inactive-inclusive movie data so that it can present:
 
@@ -94,12 +94,14 @@ The catalog is not limited to currently active films in the UI. While the public
 - planned movies that are prepared for future scheduling,
 - deactivated titles that still exist in the catalog for reference.
 
+Because the seeded catalog is now substantially larger, the homepage spotlight sections and the full movie catalog also use client-side pagination to keep browsing manageable without turning the demo into an infinite-scroll UI.
+
 ### Public schedule browsing
 
-The public schedule is available through both API and UI. The backend exposes upcoming scheduled sessions only, and the frontend renders that data in two complementary ways:
+The public schedule is available through both API and UI. The backend exposes upcoming scheduled sessions only through a paginated API, and the frontend renders that data in two complementary ways:
 
 - a visual one-day chronoboard-style view for timeline browsing,
-- a list view with additional client-side filtering and sorting.
+- a list view with additional client-side filtering, sorting, and pagination.
 
 This gives users two practical ways to find screenings: by scanning a day layout or by using list-oriented controls such as date direction, title search, and occupancy-oriented sorting.
 
@@ -233,14 +235,15 @@ The current repository now applies a stricter but still demo-friendly validation
 
 ### Demo seed data
 
-The backend also includes an explicit demo seeding command that loads a deterministic presentation dataset. The seeded catalog is intentionally anime-oriented and includes:
+The backend also includes an explicit demo seeding command that loads a deterministic presentation dataset. The current seed builds a 30-title anime-oriented catalog together with 20 sessions, 5 demo users, 9 grouped orders, and 20 tickets. It includes:
 
 - localized movies in `uk` and `en`,
 - a mix of `active`, `planned`, and `deactivated` titles,
 - upcoming, completed, and cancelled sessions,
 - demo users with login credentials,
 - sample grouped orders and tickets so attendance, profile, and reporting views look populated,
-- local poster assets under `frontend/public/demo-posters/` so the seeded catalog does not depend on third-party image hosts.
+- external poster URLs for the seeded movie documents by default,
+- optional local SVG poster assets under `frontend/public/demo-posters/`, which are still supported because `poster_url` accepts either absolute HTTP(S) URLs or root-relative asset paths.
 
 ### Transactional consistency layer
 
@@ -724,7 +727,7 @@ Important fields include:
 | `title` | Localized title object |
 | `description` | Localized description object |
 | `duration_minutes` | Runtime used in planning validation |
-| `poster_url` | Optional image URL |
+| `poster_url` | Optional absolute image URL or root-relative asset path |
 | `age_rating` | Optional age suitability label |
 | `genres` | Canonical genre codes |
 | `status` | `planned`, `active`, or `deactivated` |
@@ -1277,7 +1280,7 @@ Admins can create a movie with:
 - Ukrainian and English title,
 - Ukrainian and English description,
 - duration,
-- poster URL,
+- poster URL or asset path,
 - optional age rating,
 - normalized genre codes,
 - lifecycle status consistent with admin rules.
@@ -1680,6 +1683,8 @@ The backend is mounted under the `API_V1_PREFIX`, which is `/api/v1` by default.
 
 Responses use a standard envelope with fields such as `success`, `message`, `data`, and optional `meta`.
 
+The generated OpenAPI document is also curated rather than purely default-generated: it includes repository contact metadata, explicit tag descriptions, reusable error-response contracts, and Swagger UI settings that keep authorization and request timing visible during manual verification.
+
 ### Auth
 
 | Endpoint | Purpose |
@@ -1690,6 +1695,7 @@ Responses use a standard envelope with fields such as `success`, `message`, `dat
 Important notes:
 
 - Login uses an OAuth2 password form style payload.
+- Swagger UI's `Authorize` button uses a dedicated hidden `POST /api/v1/auth/token` exchange, while the application itself still logs in through `POST /api/v1/auth/login`.
 - Admin role assignment happens during registration if the email is listed in `ADMIN_EMAILS`.
 - Registration payloads are strict. Unexpected extra fields such as client-supplied `role` are rejected with request validation errors rather than being silently ignored.
 - The JWT is used only to identify the account. Protected requests still reload the current user from MongoDB, so deleted or inactive accounts are rejected even if the token was issued earlier.
@@ -1718,7 +1724,8 @@ Important notes:
 Important notes:
 
 - Public schedule returns upcoming `scheduled` sessions only.
-- Public query support on the backend currently centers on pagination, sorting, and optional `movie_id` filtering.
+- Public query support on the backend currently centers on `limit`/`offset` pagination, `sort_by`/`sort_order`, and optional `movie_id` filtering.
+- Schedule list responses include `meta.pagination` with total-count and current-page information.
 - Several richer UI filters on the frontend are client-side helpers applied after fetching schedule data.
 
 ### Tickets
@@ -2214,6 +2221,7 @@ The following backend test files exist in `backend/app/tests/`:
 | `test_indexes.py` | Index bootstrap and legacy seat-index replacement behavior |
 | `test_management_services.py` | Management service rules, movie normalization, lifecycle constraints, profile update guardrails |
 | `test_movie_localization_validation.py` | Language-aware validation for localized movie titles and descriptions |
+| `test_openapi.py` | OpenAPI metadata, Swagger auth flow, and documented error-contract regression coverage |
 | `test_pagination.py` | Pagination helper behavior |
 | `test_schedule_strategy.py` | Schedule sorting strategy logic |
 | `test_security.py` | Password hashing and security helpers |
@@ -2529,7 +2537,7 @@ Docker Compose runs development servers with bind mounts and polling helpers. It
 
 ### No poster upload pipeline
 
-Movies currently store `poster_url` values. There is no built-in media upload, storage, or transformation pipeline.
+Movies currently store `poster_url` values as either external HTTP(S) links or root-relative static asset paths. There is still no built-in media upload, storage, or transformation pipeline.
 
 ### Legacy data normalization is opportunistic rather than migration-driven
 
@@ -2537,7 +2545,7 @@ The backend can normalize legacy localized fields and genre inputs, but the repo
 
 ### Some browse behavior is intentionally demo-scale
 
-The public schedule and several repository list operations use bounded list sizes rather than large-scale pagination everywhere. This is reasonable for a demo/curriculum repository, but it is not the same as a production-scale browsing architecture.
+The public schedule API is paginated and several frontend catalog/planning surfaces now paginate client-side, but the overall browse model is still intentionally small-scale. It is reasonable for a demo/curriculum repository, but it is not the same as a production-scale browsing architecture with server-driven pagination everywhere.
 
 ## 27. Future Improvements
 

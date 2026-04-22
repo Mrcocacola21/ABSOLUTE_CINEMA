@@ -24,7 +24,7 @@ def test_build_demo_seed_data_returns_valid_presentation_ready_dataset() -> None
 
     assert dataset.collection_counts == {
         "users": 5,
-        "movies": 10,
+        "movies": 30,
         "sessions": 20,
         "orders": 9,
         "tickets": 20,
@@ -39,7 +39,7 @@ def test_build_demo_seed_data_returns_valid_presentation_ready_dataset() -> None
         SessionStatuses.COMPLETED,
         SessionStatuses.CANCELLED,
     }
-    assert all(str(movie["poster_url"]).startswith("/demo-posters/") for movie in dataset.movies)
+    assert all(str(movie["poster_url"]).startswith("https://upload.wikimedia.org/") for movie in dataset.movies)
 
 
 def test_demo_credentials_include_seeded_admin_account() -> None:
@@ -63,12 +63,12 @@ def test_demo_seed_summary_logging_uses_logger_without_exposing_passwords(
             seed_version="demo-seed-v1",
             counts={
                 "users": 5,
-                "movies": 10,
+                "movies": 30,
                 "sessions": 20,
                 "orders": 9,
                 "tickets": 20,
             },
-            movie_status_counts={"active": 4},
+            movie_status_counts={"active": 6, "planned": 18, "deactivated": 6},
             session_status_counts={"scheduled": 8},
         )
     )

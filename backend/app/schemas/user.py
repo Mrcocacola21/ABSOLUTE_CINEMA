@@ -31,11 +31,22 @@ class UserCreate(BaseSchema):
         populate_by_name=True,
         extra="forbid",
         str_strip_whitespace=True,
+        json_schema_extra={
+            "example": {
+                "name": "Olena Kovalenko",
+                "email": "olena@example.com",
+                "password": "CinemaPass123",
+            }
+        },
     )
 
-    name: str = Field(min_length=2, max_length=255)
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    name: str = Field(min_length=2, max_length=255, description="Display name shown in the profile area.")
+    email: EmailStr = Field(description="Unique user email used for sign-in.")
+    password: str = Field(
+        min_length=8,
+        max_length=128,
+        description="Plain-text password accepted during registration before server-side hashing.",
+    )
 
     @field_validator("name")
     @classmethod
@@ -56,8 +67,15 @@ class UserRead(BaseSchema):
     id: str
     name: str
     email: EmailStr
-    role: str = Roles.USER
-    is_active: bool = True
+    role: str = Field(
+        default=Roles.USER,
+        description="User role assigned by the backend.",
+        json_schema_extra={"enum": [Roles.USER, Roles.ADMIN]},
+    )
+    is_active: bool = Field(
+        default=True,
+        description="Whether the account can still authenticate and access protected endpoints.",
+    )
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -70,12 +88,37 @@ class UserUpdate(BaseSchema):
         populate_by_name=True,
         extra="forbid",
         str_strip_whitespace=True,
+        json_schema_extra={
+            "examples": [
+                {"name": "Updated Cinema Guest"},
+                {"email": "updated@example.com", "current_password": "CinemaPass123"},
+                {"password": "NewCinemaPass123", "current_password": "CinemaPass123"},
+            ]
+        },
     )
 
-    name: str | None = Field(default=None, min_length=2, max_length=255)
-    email: EmailStr | None = None
-    password: str | None = Field(default=None, min_length=8, max_length=128)
-    current_password: str | None = Field(default=None, min_length=8, max_length=128)
+    name: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=255,
+        description="Optional new display name.",
+    )
+    email: EmailStr | None = Field(
+        default=None,
+        description="Optional new email address. Requires `current_password`.",
+    )
+    password: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=128,
+        description="Optional new password. Requires `current_password`.",
+    )
+    current_password: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=128,
+        description="Current password used to authorize email or password changes.",
+    )
 
     @field_validator("name")
     @classmethod

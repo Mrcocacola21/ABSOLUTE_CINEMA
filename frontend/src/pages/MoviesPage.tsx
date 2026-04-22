@@ -6,12 +6,15 @@ import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { getGenreLabel, type GenreCode } from "@/shared/genres";
 import { compareLocalizedText } from "@/shared/localization";
 import { getMovieStatusPriority } from "@/shared/movieStatus";
+import { usePagination } from "@/shared/pagination";
 import { buildMovieSearchText } from "@/shared/scheduleBrowse";
+import { PaginationControls } from "@/shared/ui/PaginationControls";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, MovieStatus, ScheduleItem } from "@/types/domain";
 import { MovieCatalogCard } from "@/widgets/movies/MovieCatalogCard";
 
 type StatusFilter = "all" | MovieStatus;
+const MOVIES_PAGE_SIZE = 9;
 
 export function MoviesPage() {
   const { t, i18n } = useTranslation();
@@ -107,6 +110,11 @@ export function MoviesPage() {
         return compareLocalizedText(left.title, right.title, i18n.language);
       });
   }, [genre, i18n.language, movies, query, status]);
+
+  const moviesPagination = usePagination(filteredMovies, {
+    pageSize: MOVIES_PAGE_SIZE,
+    resetKey: JSON.stringify({ genre, query, status }),
+  });
 
   function resetFilters() {
     setQuery("");
@@ -229,22 +237,30 @@ export function MoviesPage() {
       ) : null}
 
       {!isLoading && !errorMessage && filteredMovies.length > 0 ? (
-        <section className="cards-grid movie-catalog-grid">
-          {filteredMovies.map((movie) => {
-            const sessions = sessionsByMovieId.get(movie.id) ?? [];
-            const nextSession = sessions[0];
-            const lastSession = sessions[sessions.length - 1];
+        <section className="catalog-results-stack">
+          <section className="cards-grid movie-catalog-grid">
+            {moviesPagination.pageItems.map((movie) => {
+              const sessions = sessionsByMovieId.get(movie.id) ?? [];
+              const nextSession = sessions[0];
+              const lastSession = sessions[sessions.length - 1];
 
-            return (
-              <MovieCatalogCard
-                key={movie.id}
-                movie={movie}
-                sessionsCount={sessions.length}
-                nextSession={nextSession}
-                lastSession={lastSession}
-              />
-            );
-          })}
+              return (
+                <MovieCatalogCard
+                  key={movie.id}
+                  movie={movie}
+                  sessionsCount={sessions.length}
+                  nextSession={nextSession}
+                  lastSession={lastSession}
+                />
+              );
+            })}
+          </section>
+
+          <PaginationControls
+            page={moviesPagination.page}
+            totalPages={moviesPagination.totalPages}
+            onPageChange={moviesPagination.setPage}
+          />
         </section>
       ) : null}
     </>

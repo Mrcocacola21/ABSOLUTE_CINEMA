@@ -1,0 +1,20 @@
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 900" role="img" aria-labelledby="title desc">
+    <title id="title">Nausicaa Valley Of The Wind demo poster</title>
+    <desc id="desc">Stylized gradient poster for the Cinema Showcase demo catalog.</desc>
+    <defs>
+      <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+        <stop offset="0%" stop-color="#082f49"/>
+        <stop offset="100%" stop-color="#16a34a"/>
+      </linearGradient>
+    </defs>
+    <rect width="600" height="900" fill="url(#bg)"/>
+    <circle cx="430" cy="237" r="132" fill="#86efac" opacity="0.22"/>
+    <circle cx="230" cy="588" r="168" fill="#ecfeff" opacity="0.08"/>
+    <path d="M76 248 C168 210, 250 208, 340 250 S494 322, 530 286" fill="none" stroke="#86efac" stroke-width="10" stroke-linecap="round" opacity="0.42"/>
+    <rect x="62" y="228" width="476" height="458" rx="40" fill="#020617" opacity="0.15"/>
+    <text x="72" y="112" fill="#ecfeff" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="28" letter-spacing="5">CINEMA SHOWCASE</text>
+    <text x="72" y="312" fill="#ecfeff" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="76" font-weight="700">NAUSICAA</text>
+<text x="72" y="404" fill="#ecfeff" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="76" font-weight="700">VALLEY OF</text>
+<text x="72" y="496" fill="#ecfeff" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="76" font-weight="700">THE WIND</text>
+    <text x="72" y="734" fill="#86efac" font-family="Trebuchet MS, DejaVu Sans, sans-serif" font-size="28">animation / science fiction / adventure / action</text>
+  </svg>

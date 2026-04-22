@@ -6,6 +6,7 @@ import { useScheduleQueryParams } from "@/hooks/useScheduleQueryParams";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { isGenreCode } from "@/shared/genres";
 import { isMovieActive } from "@/shared/movieStatus";
+import { usePagination } from "@/shared/pagination";
 import {
   filterBoardScheduleItems,
   filterScheduleListItems,
@@ -17,12 +18,15 @@ import {
   sortPublicScheduleListItems,
 } from "@/shared/scheduleBrowse";
 import { formatScheduleDayLabel, toScheduleDayKey } from "@/shared/scheduleTimeline";
+import { PaginationControls } from "@/shared/ui/PaginationControls";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, ScheduleItem } from "@/types/domain";
 import { ScheduleBoardControls } from "@/widgets/schedule/ScheduleBoardControls";
 import { ScheduleChronoboard } from "@/widgets/schedule/ScheduleChronoboard";
 import { ScheduleList } from "@/widgets/schedule/ScheduleList";
 import { ScheduleToolbar } from "@/widgets/schedule/ScheduleToolbar";
+
+const SCHEDULE_LIST_PAGE_SIZE = 6;
 
 function buildMoviesById(movies: Movie[]): Record<string, Movie> {
   return movies.reduce<Record<string, Movie>>((accumulator, movie) => {
@@ -167,6 +171,16 @@ export function SchedulePage() {
     () => sortPublicScheduleListItems(listFilteredItems, dateSort, seatSort, i18n.language),
     [dateSort, i18n.language, listFilteredItems, seatSort],
   );
+
+  const scheduleListPagination = usePagination(listItems, {
+    pageSize: SCHEDULE_LIST_PAGE_SIZE,
+    resetKey: JSON.stringify({
+      dateSort,
+      listDay: values.listDay,
+      query: values.query,
+      seatSort,
+    }),
+  });
 
   const boardResultsLabel = t("schedule.board.resultsLabel", {
     sessions: boardItems.length,
@@ -334,7 +348,13 @@ export function SchedulePage() {
               </div>
             </div>
 
-            <ScheduleList items={listItems} />
+            <ScheduleList items={scheduleListPagination.pageItems} />
+
+            <PaginationControls
+              page={scheduleListPagination.page}
+              totalPages={scheduleListPagination.totalPages}
+              onPageChange={scheduleListPagination.setPage}
+            />
           </section>
         </section>
       ) : null}

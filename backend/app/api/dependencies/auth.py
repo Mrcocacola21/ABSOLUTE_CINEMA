@@ -15,8 +15,12 @@ from app.services.user import UserService
 
 settings = get_settings()
 oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.api_v1_prefix}/auth/login",
+    tokenUrl=f"{settings.api_v1_prefix}/auth/token",
     auto_error=False,
+    description=(
+        "Use Swagger's Authorize button to exchange email and password for a JWT, "
+        "or call POST /api/v1/auth/login and paste `data.access_token` manually."
+    ),
 )
 
 

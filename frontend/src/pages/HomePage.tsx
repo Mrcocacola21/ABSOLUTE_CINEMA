@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
@@ -14,6 +14,17 @@ import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, ScheduleItem } from "@/types/domain";
 import { HomeMovieBanner } from "@/widgets/movies/HomeMovieBanner";
 
+const HOME_SECTION_PAGE_SIZE = 8;
+
+function getTotalPages(itemsCount: number): number {
+  return Math.max(1, Math.ceil(itemsCount / HOME_SECTION_PAGE_SIZE));
+}
+
+function getPageItems<T>(items: T[], page: number): T[] {
+  const startIndex = (page - 1) * HOME_SECTION_PAGE_SIZE;
+  return items.slice(startIndex, startIndex + HOME_SECTION_PAGE_SIZE);
+}
+
 export function HomePage() {
   const { t, i18n } = useTranslation();
   const { role } = useAuth();
@@ -21,6 +32,8 @@ export function HomePage() {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [activePage, setActivePage] = useState(1);
+  const [plannedPage, setPlannedPage] = useState(1);
 
   async function loadHomeData() {
     setIsLoading(true);
@@ -67,6 +80,16 @@ export function HomePage() {
         .sort((left, right) => compareLocalizedText(left.title, right.title, i18n.language)),
     [i18n.language, movies],
   );
+  const activeTotalPages = useMemo(() => getTotalPages(activeMovies.length), [activeMovies.length]);
+  const plannedTotalPages = useMemo(() => getTotalPages(plannedMovies.length), [plannedMovies.length]);
+  const visibleActiveMovies = useMemo(
+    () => getPageItems(activeMovies, activePage),
+    [activeMovies, activePage],
+  );
+  const visiblePlannedMovies = useMemo(
+    () => getPageItems(plannedMovies, plannedPage),
+    [plannedMovies, plannedPage],
+  );
 
   const featuredActiveMovie = activeMovies[0] ?? null;
   const featuredPlannedMovie = plannedMovies[0] ?? null;
@@ -92,6 +115,48 @@ export function HomePage() {
         (item): item is string => Boolean(item),
       )
     : [];
+
+  useEffect(() => {
+    setActivePage((currentPage) => Math.min(currentPage, activeTotalPages));
+  }, [activeTotalPages]);
+
+  useEffect(() => {
+    setPlannedPage((currentPage) => Math.min(currentPage, plannedTotalPages));
+  }, [plannedTotalPages]);
+
+  function renderSectionPagination(
+    page: number,
+    totalPages: number,
+    onPageChange: Dispatch<SetStateAction<number>>,
+  ) {
+    if (totalPages <= 1) {
+      return null;
+    }
+
+    return (
+      <div className="home-section__pagination">
+        <button
+          className="button--ghost"
+          type="button"
+          disabled={page <= 1}
+          onClick={() => onPageChange((currentPage) => Math.max(1, currentPage - 1))}
+        >
+          {t("home.pagination.previous")}
+        </button>
+        <span className="home-section__pagination-label">
+          {t("home.pagination.pageIndicator", { current: page, total: totalPages })}
+        </span>
+        <button
+          className="button--ghost"
+          type="button"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange((currentPage) => Math.min(totalPages, currentPage + 1))}
+        >
+          {t("home.pagination.next")}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -234,19 +299,22 @@ export function HomePage() {
                 <h2 className="section-title">{t("home.sections.nowShowing.title")}</h2>
                 <p className="home-section__intro">{t("home.sections.nowShowing.intro")}</p>
               </div>
-              <div className="stats-row">
-                <span className="badge">
-                  {activeMovies.length} {t("common.labels.movies")}
-                </span>
-                <span className="badge">
-                  {items.length} {t("common.labels.upcomingSessions")}
-                </span>
+              <div className="home-section__controls">
+                <div className="stats-row">
+                  <span className="badge">
+                    {activeMovies.length} {t("common.labels.movies")}
+                  </span>
+                  <span className="badge">
+                    {items.length} {t("common.labels.upcomingSessions")}
+                  </span>
+                </div>
+                {renderSectionPagination(activePage, activeTotalPages, setActivePage)}
               </div>
             </div>
 
             {activeMovies.length > 0 ? (
               <div className="home-banner-grid">
-                {activeMovies.map((movie) => {
+                {visibleActiveMovies.map((movie) => {
                   const fullMovie = moviesById[movie.id];
 
                   if (!fullMovie) {
@@ -280,16 +348,19 @@ export function HomePage() {
                 <h2 className="section-title">{t("home.sections.comingSoon.title")}</h2>
                 <p className="home-section__intro">{t("home.sections.comingSoon.intro")}</p>
               </div>
-              <div className="stats-row">
-                <span className="badge">
-                  {plannedMovies.length} {t("common.states.planned")}
-                </span>
+              <div className="home-section__controls">
+                <div className="stats-row">
+                  <span className="badge">
+                    {plannedMovies.length} {t("common.states.planned")}
+                  </span>
+                </div>
+                {renderSectionPagination(plannedPage, plannedTotalPages, setPlannedPage)}
               </div>
             </div>
 
             {plannedMovies.length > 0 ? (
               <div className="home-banner-grid home-banner-grid--planned">
-                {plannedMovies.map((movie) => (
+                {visiblePlannedMovies.map((movie) => (
                   <HomeMovieBanner key={movie.id} variant="planned" movie={movie} />
                 ))}
               </div>

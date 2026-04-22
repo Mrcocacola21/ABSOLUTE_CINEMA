@@ -8,9 +8,13 @@ import {
   getMovieStatusBadgeClassName,
   isMovieScheduleReady,
 } from "@/shared/movieStatus";
+import { usePagination } from "@/shared/pagination";
 import { formatStateLabel } from "@/shared/presentation";
+import { PaginationControls } from "@/shared/ui/PaginationControls";
 import type { Movie } from "@/types/domain";
 import { getMovieMonogram } from "@/widgets/admin/chronoboard/utils";
+
+const ADMIN_CATALOG_PAGE_SIZE = 5;
 
 interface MovieCatalogPanelProps {
   catalogMovies: Movie[];
@@ -67,6 +71,10 @@ export function MovieCatalogPanel({
 }: MovieCatalogPanelProps) {
   const { t, i18n } = useTranslation();
   const [genreQuery, setGenreQuery] = useState("");
+  const catalogPagination = usePagination(catalogMovies, {
+    pageSize: ADMIN_CATALOG_PAGE_SIZE,
+    resetKey: movieQuery.trim().toLowerCase(),
+  });
   const selectedGenresCount = movieForm.genres.length;
   const normalizedGenreQuery = genreQuery.trim().toLowerCase();
   const visibleGenreOptions = GENRE_OPTIONS.filter((option) =>
@@ -299,7 +307,7 @@ export function MovieCatalogPanel({
           </label>
 
           <div className="admin-catalog__list">
-            {catalogMovies.map((movie) => {
+            {catalogPagination.pageItems.map((movie) => {
               const movieTitle = getLocalizedText(movie.title, i18n.language);
               const movieDescription = getLocalizedText(movie.description, i18n.language);
               const genreLabel = getGenreLabels(movie.genres, i18n.language).join(", ");
@@ -385,6 +393,12 @@ export function MovieCatalogPanel({
               </section>
             ) : null}
           </div>
+
+          <PaginationControls
+            page={catalogPagination.page}
+            totalPages={catalogPagination.totalPages}
+            onPageChange={catalogPagination.setPage}
+          />
         </section>
       </div>
     </section>

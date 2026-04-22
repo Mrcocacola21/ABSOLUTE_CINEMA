@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
+from app.api.docs import NOT_FOUND_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE, merge_openapi_responses
 from app.api.dependencies.pagination import get_pagination_params, get_schedule_query_params
 from app.api.dependencies.services import get_schedule_service
 from app.core.responses import ApiResponse, ResponseMeta
@@ -15,7 +16,17 @@ from app.services.schedule import ScheduleService
 router = APIRouter(prefix="/schedule", tags=["schedule"])
 
 
-@router.get("", response_model=ApiResponse[list[ScheduleItemRead]])
+@router.get(
+    "",
+    response_model=ApiResponse[list[ScheduleItemRead]],
+    summary="Browse the public schedule",
+    description=(
+        "Return upcoming public sessions with pagination, optional filtering by movie, and explicit sort controls. "
+        "Each item is enriched with localized movie title data for direct UI rendering."
+    ),
+    response_description="Wrapped paginated schedule list.",
+    responses=VALIDATION_ERROR_RESPONSE,
+)
 async def get_schedule(
     pagination: PaginationParams = Depends(get_pagination_params),
     query_params: ScheduleQueryParams = Depends(get_schedule_query_params),
@@ -30,7 +41,14 @@ async def get_schedule(
     return ApiResponseFactory.success(data=items, message="Schedule loaded.", meta=meta)
 
 
-@router.get("/{session_id}", response_model=ApiResponse[SessionDetailsRead])
+@router.get(
+    "/{session_id}",
+    response_model=ApiResponse[SessionDetailsRead],
+    summary="Get session details",
+    description="Return one scheduled session with the nested movie payload used by the public session-details page.",
+    response_description="Wrapped session details with nested movie information.",
+    responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
+)
 async def get_session_details(
     session_id: str,
     schedule_service: ScheduleService = Depends(get_schedule_service),

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import httpx
 import pytest
 from bson import ObjectId
@@ -462,6 +464,34 @@ async def test_public_movie_details_can_include_planned_movies_when_requested(
     assert catalog_response.json()["data"]["id"] == planned_movie["id"]
     assert catalog_response.json()["data"]["status"] == "planned"
     assert catalog_response.json()["data"]["title"] == planned_movie["title"]
+
+
+@pytest.mark.asyncio
+async def test_public_movies_catalog_tolerates_legacy_localized_movie_documents(
+    client: httpx.AsyncClient,
+    database,
+) -> None:
+    now = datetime.now(tz=timezone.utc)
+    insert_result = await database[DatabaseCollections.MOVIES].insert_one(
+        {
+            "title": {"uk": "TEST", "en": "TEST"},
+            "description": {"uk": "TEST", "en": "TEST"},
+            "duration_minutes": 100,
+            "poster_url": None,
+            "age_rating": "PG",
+            "genres": ["drama"],
+            "status": "planned",
+            "created_at": now,
+            "updated_at": None,
+        }
+    )
+
+    response = await client.get(f"{API_PREFIX}/movies", params={"include_inactive": "true"})
+
+    assert response.status_code == 200
+    movies = response.json()["data"]
+    assert [movie["id"] for movie in movies] == [str(insert_result.inserted_id)]
+    assert movies[0]["title"] == {"uk": "TEST", "en": "TEST"}
 
 
 @pytest.mark.asyncio

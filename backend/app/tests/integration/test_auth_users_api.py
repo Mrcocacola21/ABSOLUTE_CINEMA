@@ -141,6 +141,30 @@ async def test_successful_login_returns_access_token(
 
 
 @pytest.mark.asyncio
+async def test_swagger_oauth2_token_endpoint_returns_raw_token_payload(
+    register_user,
+    client: httpx.AsyncClient,
+) -> None:
+    register_response = await register_user(email="swagger-token@example.com", name="Swagger Token User")
+    assert register_response.status_code == 201
+
+    response = await client.post(
+        f"{API_PREFIX}/auth/token",
+        data={
+            "username": "swagger-token@example.com",
+            "password": DEFAULT_PASSWORD,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert set(body) == {"access_token", "token_type", "expires_in"}
+    assert body["access_token"]
+    assert body["token_type"] == "bearer"
+    assert body["expires_in"] > 0
+
+
+@pytest.mark.asyncio
 async def test_login_with_wrong_password_returns_auth_error(
     register_user,
     login_user,

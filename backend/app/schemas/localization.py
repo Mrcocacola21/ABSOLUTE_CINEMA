@@ -92,8 +92,16 @@ def _coerce_localized_text_payload(value: Any) -> Any:
 class LocalizedText(BaseSchema):
     """Localized text stored in both supported UI languages."""
 
-    uk: str = Field(min_length=1)
-    en: str = Field(min_length=1)
+    uk: str = Field(
+        min_length=1,
+        description="Ukrainian localized value.",
+        examples=["Інтерстеллар"],
+    )
+    en: str = Field(
+        min_length=1,
+        description="English localized value.",
+        examples=["Interstellar"],
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -113,8 +121,18 @@ class LocalizedText(BaseSchema):
 class LocalizedTextUpdate(BaseSchema):
     """Partial localized text update payload."""
 
-    uk: str | None = Field(default=None, min_length=1)
-    en: str | None = Field(default=None, min_length=1)
+    uk: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Updated Ukrainian localized value.",
+        examples=["Оновлений український опис"],
+    )
+    en: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Updated English localized value.",
+        examples=["Updated English description"],
+    )
 
     @model_validator(mode="before")
     @classmethod

@@ -19,17 +19,39 @@ from app.schemas.session import ScheduleQueryParams
 
 
 def get_pagination_params(
-    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_LIMIT)] = DEFAULT_PAGE_LIMIT,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[
+        int,
+        Query(
+            ge=1,
+            le=MAX_PAGE_LIMIT,
+            description="Maximum number of items to return in one response page.",
+        ),
+    ] = DEFAULT_PAGE_LIMIT,
+    offset: Annotated[
+        int,
+        Query(
+            ge=0,
+            description="Zero-based number of items to skip before the current page starts.",
+        ),
+    ] = 0,
 ) -> PaginationParams:
     """Build pagination parameters from request query arguments."""
     return PaginationParams(limit=limit, offset=offset)
 
 
 def get_schedule_query_params(
-    sort_by: Annotated[str, Query()] = DEFAULT_SORT_BY,
-    sort_order: Annotated[str, Query()] = DEFAULT_SORT_ORDER,
-    movie_id: Annotated[str | None, Query()] = None,
+    sort_by: Annotated[
+        str,
+        Query(description="Schedule sort field. Supported values are `start_time`, `price`, and `available_seats`."),
+    ] = DEFAULT_SORT_BY,
+    sort_order: Annotated[
+        str,
+        Query(description="Schedule sort order. Supported values are `asc` and `desc`."),
+    ] = DEFAULT_SORT_ORDER,
+    movie_id: Annotated[
+        str | None,
+        Query(description="Optional movie identifier used to return sessions for one movie only."),
+    ] = None,
 ) -> ScheduleQueryParams:
     """Build schedule filter and sorting parameters from the query string."""
     try:

@@ -22,7 +22,7 @@ async def test_demo_seed_command_is_repeatable_and_creates_login_ready_demo_data
 
     assert first_summary.counts == second_summary.counts == {
         "users": 5,
-        "movies": 10,
+        "movies": 30,
         "sessions": 20,
         "orders": 9,
         "tickets": 20,
@@ -58,4 +58,7 @@ async def test_demo_seed_command_is_repeatable_and_creates_login_ready_demo_data
 
     seeded_movie = await database[DatabaseCollections.MOVIES].find_one({"title.en": "Spirited Away"})
     assert seeded_movie is not None
-    assert seeded_movie["poster_url"] == "/demo-posters/spirited-away.svg"
+    assert seeded_movie["poster_url"] == (
+        "https://upload.wikimedia.org/wikipedia/en/thumb/d/db/Spirited_Away_Japanese_poster.png/"
+        "250px-Spirited_Away_Japanese_poster.png"
+    )

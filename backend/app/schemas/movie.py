@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime
 import re
-from typing import Any
+from typing import Any, cast
 
 from pydantic import Field, TypeAdapter, ValidationError, field_validator, model_validator
 from pydantic.networks import HttpUrl
@@ -150,48 +150,71 @@ def _populate_legacy_movie_status(value: Any) -> Any:
     }
 
 
+def _validate_movie_title(
+    value: LocalizedText | LocalizedTextUpdate | None,
+) -> LocalizedText | LocalizedTextUpdate | None:
+    return _validate_localized_text_language(
+        _validate_localized_text_length(
+            value,
+            field_name="title",
+            max_length=MOVIE_TITLE_MAX_LENGTH,
+        ),
+        field_name="title",
+    )
+
+
+def _validate_movie_description(
+    value: LocalizedText | LocalizedTextUpdate | None,
+) -> LocalizedText | LocalizedTextUpdate | None:
+    return _validate_localized_text_language(
+        _validate_localized_text_length(
+            value,
+            field_name="description",
+            max_length=MOVIE_DESCRIPTION_MAX_LENGTH,
+        ),
+        field_name="description",
+    )
+
+
 class MovieBase(BaseSchema):
     """Shared movie fields."""
 
-    title: LocalizedText
-    description: LocalizedText
-    duration_minutes: int = Field(ge=MOVIE_DURATION_MINUTES_MIN, le=MOVIE_DURATION_MINUTES_MAX)
-    poster_url: str | None = None
-    age_rating: str | None = Field(default=None, max_length=MOVIE_AGE_RATING_MAX_LENGTH)
-    genres: list[str] = Field(default_factory=list)
-    status: str = MovieStatuses.PLANNED
+    title: LocalizedText = Field(
+        description="Localized movie title used across the public catalog, schedule, and admin views.",
+    )
+    description: LocalizedText = Field(
+        description="Localized movie description shown on movie details screens and admin forms.",
+    )
+    duration_minutes: int = Field(
+        ge=MOVIE_DURATION_MINUTES_MIN,
+        le=MOVIE_DURATION_MINUTES_MAX,
+        description="Movie runtime in minutes.",
+    )
+    poster_url: str | None = Field(
+        default=None,
+        description="External HTTP(S) poster URL or root-relative demo asset path.",
+    )
+    age_rating: str | None = Field(
+        default=None,
+        max_length=MOVIE_AGE_RATING_MAX_LENGTH,
+        description="Optional age-rating label such as `PG-13`, `16+`, or `R`.",
+    )
+    genres: list[str] = Field(
+        default_factory=list,
+        description="Normalized genre codes used by the frontend for badges and filtering.",
+        examples=[["science_fiction", "drama"]],
+    )
+    status: str = Field(
+        default=MovieStatuses.PLANNED,
+        description="Movie lifecycle status managed by the backend.",
+        json_schema_extra={"enum": list(MOVIE_STATUS_VALUES)},
+    )
 
     @model_validator(mode="before")
     @classmethod
     def populate_legacy_status(cls, value: Any) -> Any:
         """Accept legacy payloads/documents that still send `is_active`."""
         return _populate_legacy_movie_status(value)
-
-    @field_validator("title")
-    @classmethod
-    def validate_title(cls, value: LocalizedText) -> LocalizedText:
-        """Keep localized movie titles compact enough for catalog and schedule views."""
-        return _validate_localized_text_language(
-            _validate_localized_text_length(
-                value,
-                field_name="title",
-                max_length=MOVIE_TITLE_MAX_LENGTH,
-            ),
-            field_name="title",
-        )
-
-    @field_validator("description")
-    @classmethod
-    def validate_description(cls, value: LocalizedText) -> LocalizedText:
-        """Keep localized movie descriptions within a presentation-friendly size."""
-        return _validate_localized_text_language(
-            _validate_localized_text_length(
-                value,
-                field_name="description",
-                max_length=MOVIE_DESCRIPTION_MAX_LENGTH,
-            ),
-            field_name="description",
-        )
 
     @field_validator("poster_url", mode="before")
     @classmethod
@@ -223,21 +246,55 @@ class MovieBase(BaseSchema):
 class MovieCreate(MovieBase):
     """Payload for creating a movie."""
 
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: LocalizedText) -> LocalizedText:
+        """Require language-matched localized titles for newly created movies."""
+        return cast(LocalizedText, _validate_movie_title(value))
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, value: LocalizedText) -> LocalizedText:
+        """Require language-matched localized descriptions for newly created movies."""
+        return cast(LocalizedText, _validate_movie_description(value))
+
 
 class MovieUpdate(BaseSchema):
     """Payload for updating a movie."""
 
-    title: LocalizedTextUpdate | None = None
-    description: LocalizedTextUpdate | None = None
+    title: LocalizedTextUpdate | None = Field(
+        default=None,
+        description="Partial localized title update.",
+    )
+    description: LocalizedTextUpdate | None = Field(
+        default=None,
+        description="Partial localized description update.",
+    )
     duration_minutes: int | None = Field(
         default=None,
         ge=MOVIE_DURATION_MINUTES_MIN,
         le=MOVIE_DURATION_MINUTES_MAX,
+        description="Updated movie runtime in minutes.",
     )
-    poster_url: str | None = None
-    age_rating: str | None = Field(default=None, max_length=MOVIE_AGE_RATING_MAX_LENGTH)
-    genres: list[str] | None = None
-    status: str | None = None
+    poster_url: str | None = Field(
+        default=None,
+        description="Updated poster URL or root-relative asset path.",
+    )
+    age_rating: str | None = Field(
+        default=None,
+        max_length=MOVIE_AGE_RATING_MAX_LENGTH,
+        description="Updated age-rating label.",
+    )
+    genres: list[str] | None = Field(
+        default=None,
+        description="Updated list of normalized genre codes.",
+        examples=[["drama", "mystery"]],
+    )
+    status: str | None = Field(
+        default=None,
+        description="Updated movie lifecycle status.",
+        json_schema_extra={"enum": list(MOVIE_STATUS_VALUES)},
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -249,27 +306,13 @@ class MovieUpdate(BaseSchema):
     @classmethod
     def validate_title(cls, value: LocalizedTextUpdate | None) -> LocalizedTextUpdate | None:
         """Apply the same title length rules to partial updates."""
-        return _validate_localized_text_language(
-            _validate_localized_text_length(
-                value,
-                field_name="title",
-                max_length=MOVIE_TITLE_MAX_LENGTH,
-            ),
-            field_name="title",
-        )
+        return cast(LocalizedTextUpdate | None, _validate_movie_title(value))
 
     @field_validator("description")
     @classmethod
     def validate_description(cls, value: LocalizedTextUpdate | None) -> LocalizedTextUpdate | None:
         """Apply the same description limits to partial updates."""
-        return _validate_localized_text_language(
-            _validate_localized_text_length(
-                value,
-                field_name="description",
-                max_length=MOVIE_DESCRIPTION_MAX_LENGTH,
-            ),
-            field_name="description",
-        )
+        return cast(LocalizedTextUpdate | None, _validate_movie_description(value))
 
     @field_validator("poster_url", mode="before")
     @classmethod
@@ -299,11 +342,15 @@ class MovieUpdate(BaseSchema):
 
 
 class MovieRead(MovieBase):
-    """Movie DTO returned by the API."""
+    """Movie DTO returned by the API.
 
-    id: str
-    created_at: datetime
-    updated_at: datetime | None = None
+    Read models stay tolerant of legacy localized text already stored in MongoDB,
+    while create/update payloads continue to enforce the stricter language rules.
+    """
+
+    id: str = Field(description="Movie identifier.")
+    created_at: datetime = Field(description="Movie creation timestamp in ISO 8601 format.")
+    updated_at: datetime | None = Field(default=None, description="Last movie update timestamp, if any.")
 
 
 def merge_movie_localized_updates(

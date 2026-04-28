@@ -7,6 +7,7 @@ import type {
   LocalizedText,
   Movie,
   MovieStatus,
+  OrderValidationResult,
   Session,
   SessionDetails,
   TicketListItem,
@@ -152,6 +153,20 @@ export async function getAttendanceRequest() {
 export async function getAttendanceSessionDetailsRequest(sessionId: string) {
   const { data } = await apiClient.get<ApiResponse<AttendanceSessionDetails>>(
     `/admin/attendance/sessions/${sessionId}`,
+  );
+  return data;
+}
+
+export async function validateOrderTokenRequest(token: string) {
+  const { data } = await apiClient.get<ApiResponse<OrderValidationResult>>(
+    `/admin/orders/validate/${encodeURIComponent(token)}`,
+  );
+  return data;
+}
+
+export async function checkInOrderRequest(orderId: string) {
+  const { data } = await apiClient.post<ApiResponse<OrderValidationResult>>(
+    `/admin/orders/${encodeURIComponent(orderId)}/check-in`,
   );
   return data;
 }

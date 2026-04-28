@@ -17,6 +17,7 @@ from app.schemas.movie import MovieRead
 from app.schemas.session import SessionRead
 from app.schemas.ticket import TicketListRead, TicketPurchaseRequest, TicketRead
 from app.schemas.user import UserRead
+from app.security.order_validation import create_order_validation_token
 
 
 class TicketService:
@@ -97,6 +98,13 @@ class TicketService:
                 [str(ticket["user_id"]) for ticket in ticket_documents]
             )
             user_map = {str(user["id"]): user for user in users}
+        order_ids = [
+            str(ticket["order_id"])
+            for ticket in ticket_documents
+            if ticket.get("order_id")
+        ]
+        order_documents = await self.order_repository.list_by_ids(order_ids)
+        order_map = {str(order["id"]): order for order in order_documents}
 
         now = datetime.now(tz=timezone.utc)
         result: list[TicketListRead] = []
@@ -110,6 +118,7 @@ class TicketService:
                 continue
 
             user = user_map.get(ticket.user_id)
+            order = order_map.get(str(ticket.order_id)) if ticket.order_id else None
             result.append(
                 TicketListRead(
                     **ticket.model_dump(mode="python"),
@@ -121,6 +130,15 @@ class TicketService:
                     is_cancellable=self._is_ticket_cancellable(document, session.model_dump(mode="python"), now),
                     user_name=str(user["name"]) if user is not None else None,
                     user_email=str(user["email"]) if user is not None else None,
+                    order_status=str(order["status"]) if order is not None else None,
+                    order_created_at=order.get("created_at") if order is not None else None,
+                    order_total_price=float(order["total_price"]) if order is not None else None,
+                    order_tickets_count=int(order["tickets_count"]) if order is not None else None,
+                    order_validation_token=(
+                        create_order_validation_token(str(order["id"]))
+                        if order is not None and include_user_details
+                        else None
+                    ),
                 )
             )
         return result
@@ -135,4 +153,5 @@ class TicketService:
             ticket_document["status"] == TicketStatuses.PURCHASED
             and session_document["status"] in {SessionStatuses.SCHEDULED, SessionStatuses.CANCELLED}
             and session_document["start_time"] > now
+            and ticket_document.get("checked_in_at") is None
         )

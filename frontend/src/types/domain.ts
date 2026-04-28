@@ -4,6 +4,7 @@ export type LanguageCode = "uk" | "en";
 export type UserRole = "user" | "admin";
 export type MovieStatus = "planned" | "active" | "deactivated";
 export type OrderStatus = "completed" | "partially_cancelled" | "cancelled";
+export type OrderValidationState = "valid" | "cancelled" | "expired" | "already_used" | "invalid_token" | "order_not_found" | "order_unavailable";
 
 export interface LocalizedText {
   uk: string;
@@ -98,6 +99,7 @@ export interface Ticket {
   purchased_at: string;
   updated_at?: string | null;
   cancelled_at?: string | null;
+  checked_in_at?: string | null;
 }
 
 export interface TicketListItem extends Ticket {
@@ -109,6 +111,11 @@ export interface TicketListItem extends Ticket {
   is_cancellable: boolean;
   user_name?: string | null;
   user_email?: string | null;
+  order_status?: OrderStatus | null;
+  order_created_at?: string | null;
+  order_total_price?: number | null;
+  order_tickets_count?: number | null;
+  order_validation_token?: string | null;
 }
 
 export interface OrderTicket {
@@ -121,7 +128,9 @@ export interface OrderTicket {
   purchased_at: string;
   updated_at?: string | null;
   cancelled_at?: string | null;
+  checked_in_at?: string | null;
   is_cancellable: boolean;
+  valid_for_entry: boolean;
 }
 
 export interface Order {
@@ -139,10 +148,52 @@ export interface Order {
   age_rating?: string | null;
   session_start_time: string;
   session_end_time: string;
+  session_price: number;
   session_status: string;
   active_tickets_count: number;
   cancelled_tickets_count: number;
+  checked_in_tickets_count: number;
+  unchecked_active_tickets_count: number;
   tickets: OrderTicket[];
+}
+
+export interface OrderDetails extends Order {
+  valid_for_entry: boolean;
+  entry_status_code: string;
+  entry_status_message: string;
+  validation_token: string;
+  validation_url: string;
+}
+
+export interface OrderValidationTicket {
+  id: string;
+  seat_row: number;
+  seat_number: number;
+  status: string;
+  purchased_at: string;
+  cancelled_at?: string | null;
+  checked_in_at?: string | null;
+  valid_for_entry: boolean;
+}
+
+export interface OrderValidationResult {
+  scanned_at: string;
+  token_status: string;
+  order_id?: string | null;
+  is_valid_for_entry: boolean;
+  validity_code: OrderValidationState;
+  message: string;
+  can_check_in: boolean;
+  order_status?: OrderStatus | null;
+  movie_title?: LocalizedText | null;
+  session_start_time?: string | null;
+  session_end_time?: string | null;
+  session_status?: string | null;
+  active_tickets_count: number;
+  cancelled_tickets_count: number;
+  checked_in_tickets_count: number;
+  unchecked_active_tickets_count: number;
+  tickets: OrderValidationTicket[];
 }
 
 export interface AttendanceSessionSummary {

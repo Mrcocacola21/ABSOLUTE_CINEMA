@@ -3761,12 +3761,57 @@ img {
   background: transparent;
 }
 
+.admin-report-toolbar--attendance {
+  grid-template-columns: minmax(240px, 1.15fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.admin-report-toolbar--attendance .field > span:first-child,
 .admin-report-toolbar--bookings .field > span:first-child {
   color: var(--text-soft);
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
+}
+
+.admin-report-search-field {
+  align-self: stretch;
+}
+
+.admin-report-search-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-report-search-control input {
+  min-width: 0;
+}
+
+.admin-report-search-clear {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+.admin-report-search-clear:hover {
+  color: #fff;
+  border-color: rgba(244, 166, 98, 0.26);
+  background: rgba(244, 166, 98, 0.1);
+}
+
+.admin-report-search-field .field__hint {
+  margin-top: 2px;
 }
 
 .admin-report-toolbar__actions {
@@ -4555,6 +4600,146 @@ img {
 .admin-report-feed__buyer span {
   color: var(--text-muted);
   font-size: 0.92rem;
+}
+
+.admin-booking-order-list {
+  display: grid;
+  gap: 14px;
+  max-height: 680px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.admin-booking-order-card {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.024));
+}
+
+.admin-booking-order-card__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-booking-order-card__identity {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.admin-booking-order-card__identity strong {
+  font-size: 1.08rem;
+  line-height: 1.2;
+}
+
+.admin-booking-order-card__identity p {
+  margin: 0;
+}
+
+.admin-booking-order-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-booking-order-card__details {
+  min-height: 34px;
+  padding: 7px 12px;
+}
+
+.admin-booking-order-card__facts {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.8fr);
+  gap: 10px;
+}
+
+.admin-booking-order-card__facts > div {
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.028);
+}
+
+.admin-booking-order-card__facts span,
+.admin-booking-ticket-row__seat span {
+  display: block;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-booking-order-card__facts strong,
+.admin-booking-order-card__facts p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-booking-order-card__facts strong {
+  display: block;
+  margin-top: 5px;
+  color: #fff;
+}
+
+.admin-booking-order-card__facts p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.admin-booking-ticket-list {
+  display: grid;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-booking-ticket-row {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.admin-booking-ticket-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.admin-booking-ticket-row__seat {
+  display: grid;
+  gap: 5px;
+}
+
+.admin-booking-ticket-row__seat strong {
+  font-size: 1.05rem;
+  color: #fff;
+}
+
+.admin-booking-ticket-row__main {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.admin-booking-ticket-row__main p {
+  margin: 0;
+}
+
+.admin-booking-ticket-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .chrono-workbench {
@@ -5555,6 +5740,19 @@ img {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .admin-booking-order-card__facts {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-booking-ticket-row {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .admin-booking-ticket-row__meta {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
   .admin-attendance-row__footer,
   .admin-attendance-detail-section__header {
     flex-direction: column;
@@ -5699,8 +5897,13 @@ img {
   }
 
   .admin-report-feed__top,
-  .admin-attendance-row__header {
+  .admin-attendance-row__header,
+  .admin-booking-order-card__header {
     flex-direction: column;
+  }
+
+  .admin-booking-order-card__actions {
+    justify-content: flex-start;
   }
 
   .admin-attendance-row__tags {
@@ -5714,6 +5917,14 @@ img {
   .admin-attendance-row__action {
     width: 100%;
     justify-content: center;
+  }
+
+  .admin-booking-ticket-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-booking-ticket-row__meta {
+    grid-column: auto;
   }
 
   .admin-form__genre-picker {

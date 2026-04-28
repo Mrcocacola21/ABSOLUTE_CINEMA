@@ -198,6 +198,31 @@ class TicketRepository(BaseRepository):
         )
         return result.modified_count
 
+    async def check_in_many_by_order(
+        self,
+        order_id: str,
+        *,
+        checked_in_at: datetime,
+        updated_at: datetime,
+        db_session: AsyncIOMotorClientSession | None = None,
+    ) -> int:
+        """Mark all active unchecked tickets in an order as checked in."""
+        result = await self.collection.update_many(
+            {
+                "order_id": order_id,
+                "status": TicketStatuses.PURCHASED,
+                "checked_in_at": None,
+            },
+            {
+                "$set": {
+                    "checked_in_at": checked_in_at,
+                    "updated_at": updated_at,
+                }
+            },
+            session=db_session,
+        )
+        return result.modified_count
+
     async def update_many_status_by_session(
         self,
         session_id: str,

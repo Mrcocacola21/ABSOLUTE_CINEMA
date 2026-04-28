@@ -503,6 +503,9 @@ export function ProfilePage() {
                           <strong>{formatCurrency(order.total_price, i18n.language)}</strong>
                         </div>
 
+                        <Link to={`/me/orders/${order.id}`} className="button profile-order-card__cta">
+                          {t("common.actions.viewDetails")}
+                        </Link>
                         <Link to={`/schedule/${order.session_id}`} className="button--ghost profile-order-card__cta">
                           {t("common.actions.viewSession")}
                         </Link>

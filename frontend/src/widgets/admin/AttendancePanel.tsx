@@ -33,6 +33,26 @@ interface BookingSessionOption {
   ticketCount: number;
 }
 
+interface BookingOrderGroup {
+  orderId: string;
+  validationToken: string | null;
+  userId: string;
+  customerName: string | null;
+  customerEmail: string | null;
+  movieTitle: LocalizedText;
+  sessionId: string;
+  sessionStartTime: string;
+  sessionEndTime: string;
+  sessionStatus: string;
+  orderStatus: string | null;
+  orderCreatedAt: string;
+  orderTotalPrice: number;
+  orderTicketsCount: number;
+  firstPurchasedAt: string;
+  latestPurchasedAt: string;
+  tickets: TicketListItem[];
+}
+
 const attendanceStatusFilters: AttendanceStatusFilter[] = ["all", "scheduled", "completed", "cancelled"];
 const attendanceSortOptions: AttendanceSortOption[] = ["latest", "highest", "lowest"];
 const bookingSortOptions: BookingSortOption[] = ["latest", "oldest"];
@@ -73,6 +93,10 @@ function getBookingSessionLabel(movieTitle: LocalizedText, startTime: string, la
   return `${getLocalizedText(movieTitle, language)} | ${formatDateTime(startTime, language)}`;
 }
 
+function getShortOrderId(orderId: string): string {
+  return orderId.slice(-8).toUpperCase();
+}
+
 function MetricGrid({
   cards,
   className,
@@ -104,6 +128,7 @@ export function AttendancePanel({
   const { t, i18n } = useTranslation();
   const [statusFilter, setStatusFilter] = useState<AttendanceStatusFilter>("all");
   const [sortOption, setSortOption] = useState<AttendanceSortOption>("latest");
+  const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<ReportTabId>("attendance");
   const [bookingSessionFilter, setBookingSessionFilter] = useState("all");
   const [bookingSearchQuery, setBookingSearchQuery] = useState("");
@@ -148,7 +173,26 @@ export function AttendancePanel({
           .find((session) => session.session_id !== bestSession?.session_id) ?? null
       : null;
 
-  const filteredSessions = sessions.filter((session) => statusFilter === "all" || session.status === statusFilter);
+  const normalizedAttendanceSearchQuery = attendanceSearchQuery.trim().toLowerCase();
+  const filteredSessions = sessions.filter((session) => {
+    if (statusFilter !== "all" && session.status !== statusFilter) {
+      return false;
+    }
+
+    if (!normalizedAttendanceSearchQuery) {
+      return true;
+    }
+
+    const searchableParts = [
+      getLocalizedText(session.movie_title, i18n.language),
+      formatDateTime(session.start_time, i18n.language),
+      session.start_time,
+      session.status,
+      formatStateLabel(session.status),
+    ];
+
+    return searchableParts.join(" ").toLowerCase().includes(normalizedAttendanceSearchQuery);
+  });
   const visibleSessions = [...filteredSessions].sort((left, right) => {
     if (sortOption === "highest") {
       return (
@@ -202,9 +246,63 @@ export function AttendancePanel({
     bookingSessionFilter === "all"
       ? null
       : bookingSessionOptions.find((session) => session.sessionId === bookingSessionFilter) ?? null;
+  const bookingOrdersMap = new Map<string, BookingOrderGroup>();
+
+  for (const ticket of tickets) {
+    const orderId = ticket.order_id ?? ticket.id;
+    const existingOrder = bookingOrdersMap.get(orderId);
+    if (existingOrder) {
+      existingOrder.tickets.push(ticket);
+      existingOrder.firstPurchasedAt =
+        new Date(ticket.purchased_at).getTime() < new Date(existingOrder.firstPurchasedAt).getTime()
+          ? ticket.purchased_at
+          : existingOrder.firstPurchasedAt;
+      existingOrder.latestPurchasedAt =
+        new Date(ticket.purchased_at).getTime() > new Date(existingOrder.latestPurchasedAt).getTime()
+          ? ticket.purchased_at
+          : existingOrder.latestPurchasedAt;
+      continue;
+    }
+
+    bookingOrdersMap.set(orderId, {
+      orderId,
+      validationToken: ticket.order_validation_token ?? null,
+      userId: ticket.user_id,
+      customerName: ticket.user_name ?? null,
+      customerEmail: ticket.user_email ?? null,
+      movieTitle: ticket.movie_title,
+      sessionId: ticket.session_id,
+      sessionStartTime: ticket.session_start_time,
+      sessionEndTime: ticket.session_end_time,
+      sessionStatus: ticket.session_status,
+      orderStatus: ticket.order_status ?? null,
+      orderCreatedAt: ticket.order_created_at ?? ticket.purchased_at,
+      orderTotalPrice: ticket.order_total_price ?? ticket.price,
+      orderTicketsCount: ticket.order_tickets_count ?? 1,
+      firstPurchasedAt: ticket.purchased_at,
+      latestPurchasedAt: ticket.purchased_at,
+      tickets: [ticket],
+    });
+  }
+
+  const bookingOrders = [...bookingOrdersMap.values()].map((order) => {
+    const sortedTickets = [...order.tickets].sort(
+      (left, right) =>
+        left.seat_row - right.seat_row ||
+        left.seat_number - right.seat_number ||
+        new Date(left.purchased_at).getTime() - new Date(right.purchased_at).getTime(),
+    );
+    const ticketTotal = sortedTickets.reduce((sum, ticket) => sum + ticket.price, 0);
+    return {
+      ...order,
+      orderTotalPrice: order.orderTotalPrice || ticketTotal,
+      orderTicketsCount: order.orderTicketsCount || sortedTickets.length,
+      tickets: sortedTickets,
+    };
+  });
   const normalizedBookingSearchQuery = bookingSearchQuery.trim().toLowerCase();
-  const filteredBookings = tickets.filter((ticket) => {
-    if (bookingSessionFilter !== "all" && ticket.session_id !== bookingSessionFilter) {
+  const filteredBookingOrders = bookingOrders.filter((order) => {
+    if (bookingSessionFilter !== "all" && order.sessionId !== bookingSessionFilter) {
       return false;
     }
 
@@ -212,28 +310,44 @@ export function AttendancePanel({
       return true;
     }
 
-    const sessionLabel = getBookingSessionLabel(ticket.movie_title, ticket.session_start_time, i18n.language);
+    const sessionLabel = getBookingSessionLabel(order.movieTitle, order.sessionStartTime, i18n.language);
+    const ticketSearchText = order.tickets
+      .map((ticket) =>
+        [
+          ticket.id,
+          `${ticket.seat_row}-${ticket.seat_number}`,
+          ticket.status,
+          ticket.cancelled_at ?? "",
+          ticket.checked_in_at ?? "",
+        ].join(" "),
+      )
+      .join(" ");
     const searchableParts = [
-      getLocalizedText(ticket.movie_title, i18n.language),
+      order.orderId,
+      getShortOrderId(order.orderId),
+      order.orderStatus ?? "",
+      getLocalizedText(order.movieTitle, i18n.language),
       sessionLabel,
-      ticket.session_start_time,
-      ticket.user_name ?? "",
-      ticket.user_email ?? "",
-      `${ticket.seat_row}-${ticket.seat_number}`,
+      order.sessionStartTime,
+      order.customerName ?? "",
+      order.customerEmail ?? "",
+      order.userId,
+      ticketSearchText,
     ];
 
     return searchableParts.join(" ").toLowerCase().includes(normalizedBookingSearchQuery);
   });
 
-  const visibleBookings = [...filteredBookings].sort((left, right) => {
+  const visibleBookingOrders = [...filteredBookingOrders].sort((left, right) => {
     if (bookingSortOption === "oldest") {
-      return new Date(left.purchased_at).getTime() - new Date(right.purchased_at).getTime();
+      return new Date(left.orderCreatedAt).getTime() - new Date(right.orderCreatedAt).getTime();
     }
 
-    return new Date(right.purchased_at).getTime() - new Date(left.purchased_at).getTime();
+    return new Date(right.orderCreatedAt).getTime() - new Date(left.orderCreatedAt).getTime();
   });
-  const visibleBookingSessionsCount = new Set(visibleBookings.map((ticket) => ticket.session_id)).size;
-  const visibleBookingBuyersCount = new Set(visibleBookings.map((ticket) => ticket.user_id)).size;
+  const visibleBookingTicketsCount = visibleBookingOrders.reduce((sum, order) => sum + order.tickets.length, 0);
+  const visibleBookingSessionsCount = new Set(visibleBookingOrders.map((order) => order.sessionId)).size;
+  const visibleBookingBuyersCount = new Set(visibleBookingOrders.map((order) => order.userId)).size;
 
   const reportSummaryCards: ReportMetricCard[] = report
     ? [
@@ -265,8 +379,15 @@ export function AttendancePanel({
 
   const bookingSummaryCards: ReportMetricCard[] = [
     {
+      label: t("admin.reports.bookings.summary.visibleOrders", { defaultValue: "Visible orders" }),
+      value: visibleBookingOrders.length,
+      detail: t("admin.reports.bookings.summary.visibleOrdersDetail", {
+        defaultValue: "Grouped bookings shown after applying the current filters.",
+      }),
+    },
+    {
       label: t("admin.reports.bookings.summary.visibleTickets"),
-      value: visibleBookings.length,
+      value: visibleBookingTicketsCount,
       detail: t("admin.reports.bookings.summary.visibleTicketsDetail"),
     },
     {
@@ -308,7 +429,7 @@ export function AttendancePanel({
     {
       id: "bookings",
       label: t("admin.reports.tabs.bookings"),
-      count: tickets.length,
+      count: bookingOrders.length,
     },
     {
       id: "accounts",
@@ -374,7 +495,28 @@ export function AttendancePanel({
           </div>
         </div>
 
-        <div className="admin-report-toolbar">
+        <div className="admin-report-toolbar admin-report-toolbar--attendance">
+          <label className="field field--search admin-report-search-field">
+            <span>{t("admin.reports.attendance.searchLabel")}</span>
+            <div className="admin-report-search-control">
+              <input
+                type="search"
+                value={attendanceSearchQuery}
+                placeholder={t("admin.reports.attendance.searchPlaceholder")}
+                onChange={(event) => setAttendanceSearchQuery(event.target.value)}
+              />
+              {attendanceSearchQuery ? (
+                <button
+                  className="admin-report-search-clear"
+                  type="button"
+                  onClick={() => setAttendanceSearchQuery("")}
+                >
+                  {t("admin.reports.attendance.searchClear")}
+                </button>
+              ) : null}
+            </div>
+            <p className="field__hint">{t("admin.reports.attendance.searchHint")}</p>
+          </label>
           <div className="admin-report-toolbar__group">
             <span className="admin-report-toolbar__label">{t("common.labels.status")}</span>
             <div className="admin-report-toggle-group">
@@ -529,13 +671,18 @@ export function AttendancePanel({
             ) : (
               <section className="empty-state empty-state--panel">
                 <h2>{t("admin.reports.attendance.filteredEmptyTitle")}</h2>
-                <p>{t("admin.reports.attendance.filteredEmptyText")}</p>
+                <p>
+                  {normalizedAttendanceSearchQuery
+                    ? t("admin.reports.attendance.searchEmptyText")
+                    : t("admin.reports.attendance.filteredEmptyText")}
+                </p>
                 <button
                   className="button--ghost"
                   type="button"
                   onClick={() => {
                     setStatusFilter("all");
                     setSortOption("latest");
+                    setAttendanceSearchQuery("");
                   }}
                 >
                   {t("common.actions.resetFilters")}
@@ -573,8 +720,18 @@ export function AttendancePanel({
             <p className="muted">{t("admin.reports.bookings.intro")}</p>
           </div>
           <div className="admin-report-panel__header-meta">
-            <span className="badge">{t("admin.reports.bookings.totalCount", { count: tickets.length })}</span>
-            <span className="badge">{t("admin.reports.bookings.filteredCount", { count: visibleBookings.length })}</span>
+            <span className="badge">
+              {t("admin.reports.bookings.totalOrdersCount", {
+                count: bookingOrders.length,
+                defaultValue: "{{count}} total orders",
+              })}
+            </span>
+            <span className="badge">
+              {t("admin.reports.bookings.filteredOrdersCount", {
+                count: visibleBookingOrders.length,
+                defaultValue: "{{count}} shown",
+              })}
+            </span>
           </div>
         </div>
 
@@ -586,9 +743,11 @@ export function AttendancePanel({
             </div>
             <div className="toolbar-panel__results">
               <p className="toolbar-panel__results-value">
-                {t("admin.reports.bookings.resultsSummary", {
-                  count: visibleBookings.length,
+                {t("admin.reports.bookings.orderResultsSummary", {
+                  count: visibleBookingOrders.length,
+                  tickets: visibleBookingTicketsCount,
                   sessions: visibleBookingSessionsCount,
+                  defaultValue: "{{count}} orders with {{tickets}} tickets across {{sessions}} sessions.",
                 })}
               </p>
             </div>
@@ -653,39 +812,131 @@ export function AttendancePanel({
 
         <MetricGrid cards={bookingSummaryCards} className="admin-report-mini-grid" />
 
-        {tickets.length === 0 ? (
+        {bookingOrders.length === 0 ? (
           <section className="empty-state empty-state--panel">
             <h2>{t("admin.reports.bookings.emptyTitle")}</h2>
             <p>{t("admin.reports.bookings.emptyText")}</p>
           </section>
-        ) : visibleBookings.length > 0 ? (
-          <div className="list admin-report-feed">
-            {visibleBookings.map((ticket) => (
-              <article key={ticket.id} className="admin-report-feed__item">
-                <div className="admin-report-feed__top">
-                  <div className="admin-report-feed__copy">
-                    <strong>{getLocalizedText(ticket.movie_title, i18n.language)}</strong>
+        ) : visibleBookingOrders.length > 0 ? (
+          <div className="admin-booking-order-list">
+            {visibleBookingOrders.map((order) => (
+              <article key={order.orderId} className="admin-booking-order-card">
+                <div className="admin-booking-order-card__header">
+                  <div className="admin-booking-order-card__identity">
+                    <span className="admin-report-summary__eyebrow">
+                      {t("admin.reports.bookings.orderLabel", {
+                        id: getShortOrderId(order.orderId),
+                        defaultValue: "Order #{{id}}",
+                      })}
+                    </span>
+                    <strong>{getLocalizedText(order.movieTitle, i18n.language)}</strong>
                     <p className="muted">
-                      {formatDateTime(ticket.session_start_time, i18n.language)} |{" "}
-                      {t("admin.reports.bookingSeat", { seat: `${ticket.seat_row}-${ticket.seat_number}` })}
+                      {formatDateTime(order.sessionStartTime, i18n.language)} |{" "}
+                      {formatStateLabel(order.sessionStatus)}
                     </p>
                   </div>
-                  <span className="badge">{formatCurrency(ticket.price, i18n.language)}</span>
+                  <div className="admin-booking-order-card__actions">
+                    <span className="badge">
+                      {order.orderStatus
+                        ? formatStateLabel(order.orderStatus)
+                        : t("admin.reports.bookings.noOrderStatus", { defaultValue: "Order status unavailable" })}
+                    </span>
+                    <span className="badge">
+                      {t("admin.reports.bookings.ticketCount", {
+                        count: order.orderTicketsCount,
+                        defaultValue: "{{count}} tickets",
+                      })}
+                    </span>
+                    {order.validationToken ? (
+                      <Link
+                        className="button--ghost admin-booking-order-card__details"
+                        to={`/admin/order-validation/${encodeURIComponent(order.validationToken)}`}
+                      >
+                        {t("common.actions.viewDetails")}
+                      </Link>
+                    ) : null}
+                  </div>
                 </div>
 
-                <div className="admin-report-feed__buyer">
-                  <strong>{ticket.user_name || t("admin.reports.bookings.buyerFallback")}</strong>
-                  <span>{ticket.user_email || ticket.user_id}</span>
+                <div className="admin-booking-order-card__facts">
+                  <div>
+                    <span>{t("admin.reports.bookings.customer", { defaultValue: "Customer" })}</span>
+                    <strong>{order.customerName || t("admin.reports.bookings.buyerFallback")}</strong>
+                    <p>{order.customerEmail || order.userId}</p>
+                  </div>
+                  <div>
+                    <span>{t("admin.reports.bookings.createdAt", { defaultValue: "Created" })}</span>
+                    <strong>{formatDateTime(order.orderCreatedAt, i18n.language)}</strong>
+                    <p>
+                      {t("admin.reports.bookings.firstPurchased", {
+                        date: formatDateTime(order.firstPurchasedAt, i18n.language),
+                        defaultValue: "First ticket {{date}}",
+                      })}
+                    </p>
+                  </div>
+                  <div>
+                    <span>{t("common.labels.total")}</span>
+                    <strong>{formatCurrency(order.orderTotalPrice, i18n.language)}</strong>
+                    <p>
+                      {t("admin.reports.bookings.sessionTickets", {
+                        count: order.tickets.length,
+                        defaultValue: "{{count}} tickets in this view",
+                      })}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="stats-row">
-                  <span className="badge">{formatStateLabel(ticket.status)}</span>
-                  <span className="badge">{formatStateLabel(ticket.session_status)}</span>
-                  <span className="badge">
-                    {t("admin.reports.bookings.purchasedLabel", {
-                      date: formatDateTime(ticket.purchased_at, i18n.language),
-                    })}
-                  </span>
+                <div className="admin-booking-ticket-list">
+                  {order.tickets.map((ticket) => {
+                    const ticketStateLabel = ticket.checked_in_at
+                      ? t("admin.reports.bookings.ticketCheckedIn", { defaultValue: "Checked in" })
+                      : ticket.cancelled_at
+                        ? t("common.states.cancelled")
+                        : formatStateLabel(ticket.status);
+
+                    return (
+                      <article key={ticket.id} className="admin-booking-ticket-row">
+                        <div className="admin-booking-ticket-row__seat">
+                          <span>{t("common.labels.seat")}</span>
+                          <strong>{ticket.seat_row}-{ticket.seat_number}</strong>
+                        </div>
+                        <div className="admin-booking-ticket-row__main">
+                          <strong>
+                            {t("admin.reports.bookings.ticketSeat", {
+                              row: ticket.seat_row,
+                              seat: ticket.seat_number,
+                              defaultValue: "Row {{row}}, seat {{seat}}",
+                            })}
+                          </strong>
+                          <p className="muted">
+                            {t("admin.reports.bookings.purchasedLabel", {
+                              date: formatDateTime(ticket.purchased_at, i18n.language),
+                            })}
+                          </p>
+                        </div>
+                        <div className="admin-booking-ticket-row__meta">
+                          <span className="badge">{ticketStateLabel}</span>
+                          <span className="badge">{formatCurrency(ticket.price, i18n.language)}</span>
+                          {ticket.checked_in_at ? (
+                            <span className="badge">
+                              {t("admin.reports.bookings.checkedInAt", {
+                                date: formatDateTime(ticket.checked_in_at, i18n.language),
+                                defaultValue: "Used {{date}}",
+                              })}
+                            </span>
+                          ) : null}
+                          {ticket.cancelled_at ? (
+                            <span className="badge">
+                              {t("admin.reports.bookings.cancelledAt", {
+                                date: formatDateTime(ticket.cancelled_at, i18n.language),
+                                defaultValue: "Cancelled {{date}}",
+                              })}
+                            </span>
+                          ) : null}
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               </article>
             ))}

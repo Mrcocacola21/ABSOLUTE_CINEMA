@@ -71,3 +71,4 @@ class TicketDocument(TypedDict):
     purchased_at: datetime
     updated_at: NotRequired[datetime | None]
     cancelled_at: NotRequired[datetime | None]
+    checked_in_at: NotRequired[datetime | None]

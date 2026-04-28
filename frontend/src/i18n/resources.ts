@@ -591,6 +591,11 @@ export const resources = {
             title: "Session performance board",
             intro: "Filter and sort sessions to compare fill rates, spot weak demand, and monitor the hall lineup.",
             showingResults: "{{visible}} of {{total}} sessions",
+            searchLabel: "Search sessions",
+            searchPlaceholder: "Movie title, date, time, or status",
+            searchHint: "Search works together with the status filter and sort order.",
+            searchClear: "Clear",
+            searchEmptyText: "No sessions match this search. Clear the search or adjust the status filter.",
             filters: {
               all: "All",
               scheduled: "Scheduled",
@@ -1475,6 +1480,11 @@ export const resources = {
             title: "Панель ефективності сеансів",
             intro: "Фільтруйте й сортуйте сеанси, щоб порівнювати заповнення, бачити слабкий попит і контролювати лінійку показів.",
             showingResults: "{{visible}} із {{total}} сеансів",
+            searchLabel: "Пошук сеансів",
+            searchPlaceholder: "Назва фільму, дата, час або статус",
+            searchHint: "Пошук працює разом із фільтром статусу та сортуванням.",
+            searchClear: "Очистити",
+            searchEmptyText: "Немає сеансів, що відповідають пошуку. Очистьте пошук або змініть фільтр статусу.",
             filters: {
               all: "Усі",
               scheduled: "Заплановані",

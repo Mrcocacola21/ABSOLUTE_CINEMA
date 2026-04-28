@@ -310,6 +310,9 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                             "cancelled_at": {
                                 "bsonType": ["date", "null"],
                             },
+                            "checked_in_at": {
+                                "bsonType": ["date", "null"],
+                            },
                         },
                     }
                 },
@@ -326,6 +329,7 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                                 "$and": [
                                     {"$eq": ["$status", TicketStatuses.CANCELLED]},
                                     {"$ne": [{"$ifNull": ["$cancelled_at", None]}, None]},
+                                    {"$eq": [{"$ifNull": ["$checked_in_at", None]}, None]},
                                 ]
                             },
                         ]

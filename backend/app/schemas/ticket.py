@@ -55,6 +55,7 @@ class TicketRead(BaseSchema):
     purchased_at: datetime
     updated_at: datetime | None = None
     cancelled_at: datetime | None = None
+    checked_in_at: datetime | None = None
 
     @model_validator(mode="after")
     def validate_ticket_state(self) -> "TicketRead":
@@ -65,6 +66,8 @@ class TicketRead(BaseSchema):
             raise ValueError("Cancelled tickets must include cancelled_at.")
         if self.status == TicketStatuses.PURCHASED and self.cancelled_at is not None:
             raise ValueError("Purchased tickets cannot include cancelled_at.")
+        if self.status == TicketStatuses.CANCELLED and self.checked_in_at is not None:
+            raise ValueError("Cancelled tickets cannot be checked in.")
         return self
 
 
@@ -79,3 +82,8 @@ class TicketListRead(TicketRead):
     is_cancellable: bool
     user_name: str | None = None
     user_email: EmailStr | None = None
+    order_status: str | None = None
+    order_created_at: datetime | None = None
+    order_total_price: float | None = None
+    order_tickets_count: int | None = None
+    order_validation_token: str | None = None

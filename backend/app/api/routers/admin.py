@@ -15,11 +15,12 @@ from app.api.docs import (
     VALIDATION_ERROR_RESPONSE,
     merge_openapi_responses,
 )
-from app.api.dependencies.services import get_admin_service, get_ticket_service, get_user_service
+from app.api.dependencies.services import get_admin_service, get_order_service, get_ticket_service, get_user_service
 from app.core.responses import ApiResponse
 from app.factories.response_factory import ApiResponseFactory
 from app.schemas.common import DeleteResultRead
 from app.schemas.movie import MovieCreate, MovieRead, MovieUpdate
+from app.schemas.order import OrderValidationRead
 from app.schemas.report import AttendanceReportRead, AttendanceSessionDetailsRead
 from app.schemas.session import (
     SessionBatchCreate,
@@ -32,6 +33,7 @@ from app.schemas.session import (
 from app.schemas.ticket import TicketListRead
 from app.schemas.user import UserRead
 from app.services.admin import AdminService
+from app.services.order import OrderService
 from app.services.ticket import TicketService
 from app.services.user import UserService
 
@@ -392,6 +394,47 @@ async def list_tickets(
     """Return all tickets for admin views."""
     tickets = await ticket_service.list_admin_tickets(requested_by=admin_user)
     return ApiResponseFactory.success(data=tickets, message="Admin tickets loaded.")
+
+
+@router.get(
+    "/orders/validate/{token}",
+    response_model=ApiResponse[OrderValidationRead],
+    summary="Validate an order QR token",
+    description=(
+        "Validate a signed order QR token against the live order, ticket, and session state. "
+        "Only administrators can use this endpoint."
+    ),
+    response_description="Wrapped order validation result for staff use.",
+)
+async def validate_order_token(
+    token: str,
+    admin_user: UserRead = Depends(get_current_admin),
+    order_service: OrderService = Depends(get_order_service),
+) -> ApiResponse[OrderValidationRead]:
+    """Validate a scanned customer order QR token."""
+    result = await order_service.validate_order_token(token=token, requested_by=admin_user)
+    return ApiResponseFactory.success(data=result, message="Order validation completed.")
+
+
+@router.post(
+    "/orders/{order_id}/check-in",
+    response_model=ApiResponse[OrderValidationRead],
+    summary="Check in an order",
+    description=(
+        "Mark every active unchecked ticket in an order as checked in. "
+        "Only administrators can perform this admission action."
+    ),
+    response_description="Wrapped validation result after check-in.",
+    responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
+)
+async def check_in_order(
+    order_id: str,
+    admin_user: UserRead = Depends(get_current_admin),
+    order_service: OrderService = Depends(get_order_service),
+) -> ApiResponse[OrderValidationRead]:
+    """Confirm entry for all currently valid unchecked tickets in an order."""
+    result = await order_service.check_in_order(order_id=order_id, requested_by=admin_user)
+    return ApiResponseFactory.success(data=result, message="Order checked in successfully.")
 
 
 @router.get(

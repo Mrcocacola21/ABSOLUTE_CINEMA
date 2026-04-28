@@ -127,6 +127,8 @@ class TicketCancellationCommand:
             return "Ticket has already been cancelled."
         if ticket_document["status"] != TicketStatuses.PURCHASED:
             return "Only purchased tickets can be cancelled."
+        if ticket_document.get("checked_in_at") is not None:
+            return "Checked-in tickets cannot be cancelled."
         if session_document["status"] == SessionStatuses.COMPLETED:
             return "Tickets for completed sessions cannot be cancelled."
         if session_document["status"] not in {SessionStatuses.SCHEDULED, SessionStatuses.CANCELLED}:

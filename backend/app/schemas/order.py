@@ -99,7 +99,9 @@ class OrderTicketRead(BaseSchema):
     purchased_at: datetime
     updated_at: datetime | None = None
     cancelled_at: datetime | None = None
+    checked_in_at: datetime | None = None
     is_cancellable: bool
+    valid_for_entry: bool
 
     @model_validator(mode="after")
     def validate_ticket_state(self) -> "OrderTicketRead":
@@ -110,6 +112,8 @@ class OrderTicketRead(BaseSchema):
             raise ValueError("Cancelled tickets must include cancelled_at.")
         if self.status == TicketStatuses.PURCHASED and self.cancelled_at is not None:
             raise ValueError("Purchased tickets cannot include cancelled_at.")
+        if self.status == TicketStatuses.CANCELLED and self.checked_in_at is not None:
+            raise ValueError("Cancelled tickets cannot be checked in.")
         return self
 
 
@@ -122,11 +126,55 @@ class OrderListRead(OrderRead):
     age_rating: str | None = None
     session_start_time: datetime
     session_end_time: datetime
+    session_price: float = Field(gt=0)
     session_status: str
     active_tickets_count: int = Field(ge=0)
     cancelled_tickets_count: int = Field(ge=0)
+    checked_in_tickets_count: int = Field(default=0, ge=0)
+    unchecked_active_tickets_count: int = Field(default=0, ge=0)
     tickets: list[OrderTicketRead]
 
 
 class OrderDetailsRead(OrderListRead):
     """Dedicated schema for order details responses."""
+
+    valid_for_entry: bool
+    entry_status_code: str
+    entry_status_message: str
+    validation_token: str
+    validation_url: str
+
+
+class OrderValidationTicketRead(BaseSchema):
+    """Ticket data returned to staff during QR validation."""
+
+    id: str
+    seat_row: int = Field(ge=1)
+    seat_number: int = Field(ge=1)
+    status: str
+    purchased_at: datetime
+    cancelled_at: datetime | None = None
+    checked_in_at: datetime | None = None
+    valid_for_entry: bool
+
+
+class OrderValidationRead(BaseSchema):
+    """Staff-facing result of validating an order QR code."""
+
+    scanned_at: datetime
+    token_status: str
+    order_id: str | None = None
+    is_valid_for_entry: bool
+    validity_code: str
+    message: str
+    can_check_in: bool = False
+    order_status: str | None = None
+    movie_title: LocalizedText | None = None
+    session_start_time: datetime | None = None
+    session_end_time: datetime | None = None
+    session_status: str | None = None
+    active_tickets_count: int = Field(default=0, ge=0)
+    cancelled_tickets_count: int = Field(default=0, ge=0)
+    checked_in_tickets_count: int = Field(default=0, ge=0)
+    unchecked_active_tickets_count: int = Field(default=0, ge=0)
+    tickets: list[OrderValidationTicketRead] = Field(default_factory=list)

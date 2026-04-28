@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Response
 
 from app.api.dependencies.auth import get_current_user
 from app.api.docs import (
@@ -98,6 +98,28 @@ async def get_my_order(
     """Return one grouped order belonging to the authenticated user."""
     order = await order_service.get_current_user_order(order_id=order_id, current_user=current_user)
     return ApiResponseFactory.success(data=order, message="Order loaded.")
+
+
+@router.get(
+    "/me/orders/{order_id}/pdf",
+    summary="Download one of my orders as PDF",
+    description="Generate a customer-facing PDF receipt with a QR code for staff validation.",
+    response_description="PDF order receipt.",
+)
+async def download_my_order_pdf(
+    order_id: str,
+    current_user: UserRead = Depends(get_current_user),
+    order_service: OrderService = Depends(get_order_service),
+) -> Response:
+    """Return a PDF receipt for one grouped order belonging to the authenticated user."""
+    pdf_bytes = await order_service.build_current_user_order_pdf(order_id=order_id, current_user=current_user)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="cinema-order-{order_id[-8:]}.pdf"',
+        },
+    )
 
 
 @router.patch(

@@ -1,4 +1,4 @@
-import { Link, Navigate, Outlet } from "react-router-dom";
+import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/features/auth/useAuth";
@@ -12,6 +12,7 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
   const { t } = useTranslation();
   const { isAuthenticated, isAuthLoading, role } = useAuth();
+  const location = useLocation();
 
   if (isAuthLoading) {
     return (
@@ -30,6 +31,7 @@ export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
         replace
         state={{
           statusMessage: t("auth.prompts.signInToContinue"),
+          from: `${location.pathname}${location.search}`,
         }}
       />
     );

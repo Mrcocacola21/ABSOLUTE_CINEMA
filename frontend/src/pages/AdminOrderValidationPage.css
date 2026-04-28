@@ -1,0 +1,203 @@
+.admin-validation-page {
+  display: grid;
+  gap: 20px;
+}
+
+.admin-validation-hero {
+  align-items: center;
+}
+
+.admin-validation-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.admin-validation-form .field {
+  min-width: 0;
+}
+
+.admin-validation-form .button {
+  min-height: 48px;
+}
+
+.admin-validation-result {
+  display: grid;
+  gap: 18px;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.admin-validation-result.is-valid {
+  border-color: rgba(119, 194, 157, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(119, 194, 157, 0.1), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.035));
+}
+
+.admin-validation-result.is-invalid {
+  border-color: rgba(227, 123, 118, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(227, 123, 118, 0.1), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.035));
+}
+
+.admin-validation-result.is-cancelled,
+.admin-validation-result.is-invalid_token,
+.admin-validation-result.is-order_not_found,
+.admin-validation-result.is-order_unavailable {
+  border-color: rgba(227, 123, 118, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(227, 123, 118, 0.1), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.035));
+}
+
+.admin-validation-result.is-expired,
+.admin-validation-result.is-already_used {
+  border-color: rgba(244, 166, 98, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(244, 166, 98, 0.11), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.035));
+}
+
+.admin-validation-result__status,
+.admin-validation-ticket {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-validation-result__headline {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-validation-result__headline p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.admin-validation-action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(119, 194, 157, 0.22);
+  background: rgba(119, 194, 157, 0.08);
+}
+
+.admin-validation-action p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.admin-validation-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-validation-facts > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.admin-validation-facts span {
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.admin-validation-facts strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fff;
+}
+
+.admin-validation-ticket-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-validation-ticket {
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.admin-validation-ticket.is-valid {
+  border-color: rgba(119, 194, 157, 0.22);
+}
+
+.admin-validation-ticket.is-invalid {
+  border-color: rgba(227, 123, 118, 0.2);
+}
+
+.order-detail-validity {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.order-detail-validity.is-valid {
+  border-color: rgba(119, 194, 157, 0.26);
+  background: rgba(119, 194, 157, 0.1);
+  color: #dffce9;
+}
+
+.order-detail-validity.is-invalid {
+  border-color: rgba(227, 123, 118, 0.25);
+  background: rgba(227, 123, 118, 0.12);
+  color: #ffe1df;
+}
+
+.order-detail-validity.is-cancelled,
+.order-detail-validity.is-invalid_token,
+.order-detail-validity.is-order_not_found,
+.order-detail-validity.is-order_unavailable {
+  border-color: rgba(227, 123, 118, 0.25);
+  background: rgba(227, 123, 118, 0.12);
+  color: #ffe1df;
+}
+
+.order-detail-validity.is-expired,
+.order-detail-validity.is-already_used {
+  border-color: rgba(244, 166, 98, 0.28);
+  background: rgba(244, 166, 98, 0.12);
+  color: #ffe9cc;
+}
+
+.admin-validation-ticket__time {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 900px) {
+  .admin-validation-form,
+  .admin-validation-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-validation-ticket {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

@@ -77,6 +77,14 @@ class SessionCancellationCommand:
         if cancellation_blocker is not None:
             raise ConflictException(cancellation_blocker)
 
+        active_tickets = await self.ticket_repository.list_by_session(
+            session_id,
+            active_only=True,
+            db_session=db_session,
+        )
+        if any(ticket.get("checked_in_at") is not None for ticket in active_tickets):
+            raise ConflictException("Sessions with checked-in tickets cannot be cancelled.")
+
         updated_session = await self.session_repository.cancel_future_scheduled_session(
             session_id=session_id,
             current_time=now,
@@ -84,11 +92,6 @@ class SessionCancellationCommand:
             db_session=db_session,
         )
         if updated_session is not None:
-            active_tickets = await self.ticket_repository.list_by_session(
-                session_id,
-                active_only=True,
-                db_session=db_session,
-            )
             if active_tickets:
                 cancelled_count = await self.ticket_repository.update_many_status_by_session(
                     session_id,

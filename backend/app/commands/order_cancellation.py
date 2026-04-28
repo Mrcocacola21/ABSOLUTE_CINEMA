@@ -87,6 +87,7 @@ class OrderCancellationCommand:
             if ticket["status"] == TicketStatuses.PURCHASED
         ]
         cancellation_blocker = self._get_order_cancellation_blocker(
+            active_tickets=active_tickets,
             active_tickets_count=len(active_tickets),
             session_document=session_document,
             now=now,
@@ -130,12 +131,15 @@ class OrderCancellationCommand:
     def _get_order_cancellation_blocker(
         self,
         *,
+        active_tickets: list[dict[str, object]],
         active_tickets_count: int,
         session_document: dict[str, object],
         now: datetime,
     ) -> str | None:
         if active_tickets_count <= 0:
             return "Order has already been cancelled."
+        if any(ticket.get("checked_in_at") is not None for ticket in active_tickets):
+            return "Orders with checked-in tickets cannot be cancelled."
         if session_document["status"] == SessionStatuses.COMPLETED:
             return "Orders for completed sessions cannot be cancelled."
         if session_document["status"] not in {SessionStatuses.SCHEDULED, SessionStatuses.CANCELLED}:

@@ -1,6 +1,6 @@
 # Cinema Showcase
 
-> A full-stack one-hall cinema web application with a FastAPI backend, React frontend, MongoDB persistence, transactional seat booking, and an admin chronoboard for movie and session planning.
+> A full-stack one-hall cinema web application with a FastAPI backend, React frontend, MongoDB persistence, transactional seat booking, PDF order receipts, staff QR check-in, and an admin chronoboard for movie and session planning.
 
 Cinema Showcase is a repository for a single-screen cinema system. It combines public browsing, authenticated booking, and administrator planning inside one codebase. The project is intentionally narrow in scope: there is one physical hall, one timeline of screenings, one shared seat map per session, and a small but coherent domain model built around movies, sessions, tickets, orders, and users.
 
@@ -44,8 +44,8 @@ This README documents the repository as it exists now. It is written to be usefu
 Cinema Showcase is a one-hall cinema management and booking application. It provides:
 
 - A public interface for browsing movies and upcoming sessions.
-- An authenticated customer flow for purchasing multiple seats and managing booked tickets.
-- An admin interface for maintaining the movie catalog, planning the screening calendar, tracking attendance, and managing sessions through a dedicated chronoboard view.
+- An authenticated customer flow for purchasing multiple seats, reviewing order details, downloading receipt PDFs, and managing booked tickets.
+- An admin interface for maintaining the movie catalog, planning the screening calendar, tracking attendance, validating order QR codes, and managing sessions through a dedicated chronoboard view.
 
 The repository is structured as a monorepo with:
 
@@ -62,8 +62,8 @@ From a business perspective, the application solves a set of common cinema workf
 - Present a movie catalog to visitors.
 - Publish a schedule of upcoming screenings.
 - Allow registered users to inspect a session, view seat availability, and book one or more seats.
-- Store bookings in a way that supports grouped purchases and later cancellation logic.
-- Give administrators tools to create films, plan and duplicate sessions, cancel screenings, and inspect attendance and booking activity.
+- Store bookings in a way that supports grouped purchases, receipt generation, check-in state, and later cancellation logic.
+- Give administrators tools to create films, plan and duplicate sessions, cancel screenings, inspect attendance and booking activity, and validate customer order QR codes.
 
 The one-hall model matters because it influences both the user experience and the backend rules:
 
@@ -75,8 +75,8 @@ The one-hall model matters because it influences both the user experience and th
 The system serves several categories of users:
 
 - Public visitors can browse movies, open movie pages, inspect upcoming sessions, and view seat availability.
-- Registered users can log in, purchase one or more seats for a session, review their order history, cancel individual tickets, and manage their own profile.
-- Administrators can manage the movie catalog, plan or edit sessions, cancel or delete sessions under the allowed rules, inspect tickets and user accounts, and use the chronoboard to organize the one-hall schedule.
+- Registered users can log in, purchase one or more seats for a session, review their order history, open order details, download PDF receipts, cancel individual tickets, and manage their own profile.
+- Administrators can manage the movie catalog, plan or edit sessions, cancel or delete sessions under the allowed rules, inspect tickets and user accounts, validate/check in order QR codes, and use the chronoboard to organize the one-hall schedule.
 
 The repository is clearly aimed at academic/demo usage rather than a production cinema deployment. That is reflected in the local Docker setup, the single-node MongoDB replica set, the absence of external payment processing, and the deliberate focus on correctness of booking flows rather than on broader operational concerns.
 
@@ -150,6 +150,12 @@ The project does not treat every ticket purchase as an isolated event anymore. I
 
 The repository still keeps a compatibility endpoint for single-ticket purchase at `POST /tickets/purchase`, but the modern booking flow is order-centric, and the frontend session purchase flow is already built around `POST /orders/purchase`.
 
+### Order details, PDF receipts, and QR validation
+
+Users can open a dedicated order details page from their profile. The details view shows the grouped order, every nested ticket, entry-validity state, and the related session metadata.
+
+The backend can also generate a customer-facing PDF receipt for an order. The PDF includes a signed QR validation URL that points staff to the admin validation page, where the QR is checked against live order, ticket, and session state rather than treated as a static receipt.
+
 ### Partial ticket cancellation
 
 Users can cancel one ticket from a multi-ticket order without destroying the whole order. When that happens:
@@ -166,6 +172,10 @@ This is one of the more important domain features because it demonstrates why th
 The backend also supports cancelling all active tickets belonging to one order in a single action. The API endpoint is `PATCH /orders/{order_id}/cancel`.
 
 In the current repository state, this is implemented on the backend and covered by tests. The frontend profile page exposes ticket-level cancellation but does not currently provide a dedicated "cancel full order" button. Full-order cancellation can still be exercised through Swagger UI, Postman, or any other authenticated API client.
+
+### Staff check-in
+
+Administrators can validate a customer's order QR code and mark all currently valid unchecked tickets in the order as checked in. After check-in, those tickets keep their historical purchase data but receive `checked_in_at` timestamps and are no longer valid for a second entry scan.
 
 ### Session cancellation cascade
 
@@ -277,6 +287,8 @@ Cinema Showcase is implemented with a conventional but solid web stack. The choi
 | passlib + bcrypt | Password hashing |
 | python-multipart | OAuth2 password form handling for login |
 | email-validator | Email validation support in schemas |
+| qrcode + Pillow | QR code image generation for order validation receipts |
+| ReportLab | PDF receipt generation for customer orders |
 
 ### Frontend stack
 
@@ -438,9 +450,9 @@ The backend application lives in `backend/app/`. It is intentionally modular. Th
 | `app/schemas/` | Pydantic request/response and DTO models |
 | `app/db/` | Connection management, validators, indexes, transaction runner, collection names |
 | `app/core/` | Settings, constants, exceptions, logging, genre registry, response contracts |
-| `app/security/` | Password hashing and JWT helpers |
+| `app/security/` | Password hashing, JWT helpers, and signed order validation tokens |
 | `app/factories/` | Response and schedule DTO builders |
-| `app/builders/` | Attendance report construction |
+| `app/builders/` | Attendance report construction and order PDF rendering |
 | `app/strategies/` | Schedule sorting strategies |
 | `app/utils/` | Pagination, identifier conversion, order aggregate helpers |
 | `app/tests/` | Unit and integration tests |
@@ -455,8 +467,8 @@ The router layer is split by concern rather than by HTTP verb:
 - `sessions.py` handles public session seat availability.
 - `orders.py` handles grouped purchase and full-order cancellation.
 - `tickets.py` handles compatibility single-ticket purchase, current-user tickets, and ticket cancellation.
-- `users.py` handles current-user profile and grouped order access.
-- `admin.py` handles administrative catalog, schedule, ticket, user, and reporting endpoints.
+- `users.py` handles current-user profile, grouped order access, and order PDF downloads.
+- `admin.py` handles administrative catalog, schedule, ticket, user, reporting, order validation, and check-in endpoints.
 - `health.py` provides a health check endpoint used by Docker healthchecks.
 
 Routers are intentionally thin. They receive validated payloads, inject the appropriate service, and return standardized API response envelopes.
@@ -471,7 +483,7 @@ Service classes own the application-level use cases:
 - `MovieStatusManager` handles automatic synchronization of movie statuses based on future sessions.
 - `ScheduleService` builds public schedule and seat map responses.
 - `TicketService` handles ticket reads, compatibility purchase, and ticket cancellation.
-- `OrderService` handles grouped purchase, grouped order listing/details, and full-order cancellation.
+- `OrderService` handles grouped purchase, grouped order listing/details, PDF receipt generation, QR validation, check-in, and full-order cancellation.
 - `AdminService` coordinates admin-facing CRUD, planning, session updates, cancellation, deletion, and attendance reporting.
 
 Services are where routing concerns stop and application concerns begin. They do not usually talk directly to HTTP primitives. Instead, they work with repositories, schemas, and command objects.
@@ -700,9 +712,10 @@ The shared frontend layer contains a large amount of the repository's UI intelli
 The authenticated user experience is split between:
 
 - `SessionDetailsPage` for making bookings,
-- `ProfilePage` for reviewing profile and grouped order history.
+- `ProfilePage` for reviewing profile and grouped order history,
+- `OrderDetailsPage` for inspecting one grouped order, downloading the PDF receipt, and seeing entry-validity state.
 
-The profile page is worth calling out because it reflects the backend's grouped order model. Orders are shown with nested tickets, and ticket-level cancellation is available directly there. However, the full-order cancellation endpoint currently remains an API feature rather than a dedicated profile-page control.
+The profile and order details pages are worth calling out because they reflect the backend's grouped order model. Orders are shown with nested tickets, ticket-level cancellation is available directly, and the order detail view exposes the PDF receipt generated for staff QR validation. However, the full-order cancellation endpoint currently remains an API feature rather than a dedicated profile-page control.
 
 ## 8. Core Domain Model
 
@@ -800,12 +813,13 @@ Important fields include:
 | `status` | `purchased` or `cancelled` |
 | `purchased_at` | Purchase timestamp |
 | `cancelled_at` | Cancellation timestamp when applicable |
+| `checked_in_at` | Staff check-in timestamp when the ticket has been accepted for entry |
 
 Relationships and lifecycle:
 
 - A ticket belongs to one session and one user.
 - In current application flows, tickets are usually created under an order.
-- Ticket status drives occupancy, cancellation behavior, and order aggregate recalculation.
+- Ticket status and check-in state drive occupancy, cancellation behavior, entry validation, and order aggregate recalculation.
 
 ### Order
 
@@ -832,7 +846,7 @@ Important nuance about stored order aggregates:
 
 - `tickets_count` reflects how many tickets belong to the order in total.
 - `total_price` reflects the sum of all tickets in that order, not only currently active ones.
-- Current-user order responses also provide `active_tickets_count` and `cancelled_tickets_count` so the frontend can distinguish the current state from the historical total.
+- Current-user order responses also provide `active_tickets_count`, `cancelled_tickets_count`, `checked_in_tickets_count`, and `unchecked_active_tickets_count` so the frontend can distinguish the current state from the historical total and entry-validity state.
 
 ## 9. Movie Model Details
 
@@ -1002,6 +1016,20 @@ Full-order cancellation works at order level. When an authenticated owner or an 
 - the order aggregate is refreshed and ends up in `cancelled` state if no active tickets remain.
 
 Because the repository keeps historical ticket records instead of deleting them, order cancellation is a state transition, not a destructive delete.
+
+### Order entry validation and check-in
+
+Order details include customer-facing entry metadata:
+
+- `valid_for_entry`,
+- `entry_status_code`,
+- `entry_status_message`,
+- `validation_token`,
+- `validation_url`.
+
+The validation token is a signed JWT-style payload whose subject is the order ID and whose token type is dedicated to order validation. Staff-facing validation decodes the token, reloads the live order, session, movie, and tickets, and then classifies the order as valid, cancelled, expired, already used, or invalid.
+
+Admin check-in marks all active unchecked tickets in the order with `checked_in_at`. Checked-in tickets remain historical purchased tickets, but they are no longer cancellable or valid for repeat entry.
 
 ### How seat availability is synchronized
 
@@ -1250,7 +1278,15 @@ The profile page loads grouped current-user orders from `/users/me/orders`. This
 - movie and session metadata,
 - order status,
 - nested ticket rows,
-- counts of active and cancelled tickets.
+- counts of active, cancelled, checked-in, and unchecked active tickets.
+
+From the profile page, a user can open a dedicated order detail view at `/me/orders/{orderId}`. That page shows the full grouped receipt, ticket-level entry validity, checked-in counts, session details, and a PDF download action.
+
+### Download order PDF
+
+The order PDF is generated on demand by the backend through `/users/me/orders/{order_id}/pdf`. It contains the grouped receipt data and a QR code whose URL points to the admin order-validation page.
+
+The QR code is not the authority by itself. It carries a signed validation token, and the admin validation endpoint checks the current order, ticket, and session state when staff scan or paste it.
 
 ### Cancel one ticket
 
@@ -1354,10 +1390,22 @@ The chronoboard is the main admin planning surface. It allows the administrator 
 The admin dashboard includes reporting views for:
 
 - session attendance summaries,
-- ticket activity/bookings,
+- grouped booking/order activity with nested ticket rows,
 - user account overview.
 
 This makes the admin area not only a planner but also a monitoring surface.
+
+### Validate order QR and check in
+
+Administrators can open `/admin/order-validation`, paste or scan a customer PDF QR payload, and validate the signed order token. The validation result shows:
+
+- whether the token is trusted,
+- whether the order is currently valid for entry,
+- movie and session context,
+- active, cancelled, checked-in, and remaining ticket counts,
+- each ticket's seat and entry-validity state.
+
+When the order is valid for entry, the admin can check it in. This stamps every active unchecked ticket in the order with `checked_in_at`, after which the same QR validates as already used.
 
 ### Planning and scheduling workflows
 
@@ -1754,6 +1802,7 @@ Important notes:
 Important notes:
 
 - This is the preferred booking API for the current frontend session purchase flow.
+- Successful purchase responses use the enriched order detail shape, including entry-validation metadata and nested ticket validity flags.
 - There is no separate admin-only order router; admins may still cancel orders via the regular endpoint because backend authorization allows it.
 
 ### Users and profile
@@ -1763,6 +1812,7 @@ Important notes:
 | `GET /api/v1/users/me` | Current authenticated user |
 | `GET /api/v1/users/me/orders` | Grouped order history |
 | `GET /api/v1/users/me/orders/{order_id}` | One grouped order detail |
+| `GET /api/v1/users/me/orders/{order_id}/pdf` | Download a PDF receipt with a staff validation QR code |
 | `PATCH /api/v1/users/me` | Update current user profile |
 | `DELETE /api/v1/users/me` | Deactivate current user account |
 
@@ -1783,6 +1833,7 @@ Important notes:
 | Admin tickets | `GET /api/v1/admin/tickets` | Ticket overview |
 | Admin users | `GET /api/v1/admin/users` | User overview |
 | Admin reporting | `GET /api/v1/admin/attendance` | Attendance/report summary |
+| Admin order validation | `GET /api/v1/admin/orders/validate/{token}`, `POST /api/v1/admin/orders/{order_id}/check-in` | Validate signed order QR tokens and confirm entry |
 
 ### Health
 
@@ -1808,6 +1859,7 @@ Create a local `backend/.env` by copying that example file. The real `.env` file
 | `DEBUG` | `true` | Debug-oriented behavior toggle |
 | `API_V1_PREFIX` | `/api/v1` | Global API prefix |
 | `BACKEND_CORS_ORIGINS` | `["http://localhost:5173","http://127.0.0.1:5173"]` | Allowed frontend origins |
+| `FRONTEND_BASE_URL` | `http://localhost:5173` | Base frontend URL encoded into order validation QR links |
 | `MONGODB_URI` | `mongodb://localhost:27017/?replicaSet=rs0&directConnection=true` | MongoDB connection string |
 | `MONGODB_DB_NAME` | `cinema_showcase` | Main application database name |
 | `JWT_SECRET_KEY` | `change-this-secret` | JWT signing secret |
@@ -2225,6 +2277,7 @@ The following backend test files exist in `backend/app/tests/`:
 | `test_management_services.py` | Management service rules, movie normalization, lifecycle constraints, profile update guardrails |
 | `test_movie_localization_validation.py` | Language-aware validation for localized movie titles and descriptions |
 | `test_openapi.py` | OpenAPI metadata, Swagger auth flow, and documented error-contract regression coverage |
+| `test_order_validation_pdf.py` | Signed order validation tokens and PDF receipt generation |
 | `test_pagination.py` | Pagination helper behavior |
 | `test_schedule_strategy.py` | Schedule sorting strategy logic |
 | `test_security.py` | Password hashing and security helpers |
@@ -2245,6 +2298,7 @@ The integration suite lives in `backend/app/tests/integration/`:
 | `test_auth_users_api.py` | Registration, login, `/users/me`, password changes, strict profile updates, and account deactivation behavior |
 | `test_demo_seed.py` | Explicit demo seed command behavior and seeded collection insertion |
 | `test_movies_api.py` | Public/admin movie behavior, lifecycle transitions, deactivation/reactivation rules, include-inactive access |
+| `test_order_details_api.py` | Current-user order details, PDF download, admin QR validation, and check-in behavior |
 | `test_orders_api.py` | Multi-ticket grouped purchase, race/conflict handling, rollback, retry behavior, partial and full cancellation |
 | `test_schedule_api.py` | Public schedule listing, details, seat map, time-based completion synchronization |
 | `test_sessions_api.py` | Session create/update/delete/cancel rules, overlap rejection, batch planning behavior, cascade rollback |
@@ -2316,7 +2370,7 @@ docker compose run --rm -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet
 docker compose run --rm -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true" backend pytest app/tests/integration/test_access_control_api.py app/tests/integration/test_schedule_api.py app/tests/integration/test_orders_api.py app/tests/integration/test_tickets_api.py app/tests/integration/test_sessions_api.py -o addopts=
 ```
 
-### Latest validation audit verification
+### Validation audit verification
 
 After the validation and Swagger-readiness audit, the following checks were run successfully:
 
@@ -2329,7 +2383,7 @@ git diff --check
 
 Observed results:
 
-- backend test suite: `190 passed`,
+- backend test suite: passed,
 - frontend production build: passed, with the existing Vite large chunk warning,
 - OpenAPI strict write schemas: all checked schemas reported `additionalProperties: false`,
 - diff whitespace check: no whitespace errors, only Git line-ending conversion warnings on Windows.
@@ -2346,6 +2400,9 @@ At a practical system level, the tests verify that:
 - concurrent seat conflicts are rejected safely,
 - partial ticket cancellation updates order and session state correctly,
 - full-order cancellation works,
+- order PDFs are generated with signed QR validation payloads,
+- admin QR validation distinguishes valid, cancelled, expired, already-used, invalid, and missing-order cases,
+- admin check-in stamps tickets and blocks repeat entry/cancellation,
 - session cancellation cascades through tickets and orders,
 - validators and indexes required for consistency are bootstrapped correctly.
 
@@ -2374,7 +2431,19 @@ If you want to manually verify the most important behaviors in a running environ
    - session availability is reduced by the correct number of seats,
    - those seats now appear occupied in the seat map.
 
-### 2. Verify partial ticket cancellation
+### 2. Verify order PDF and staff QR check-in
+
+1. Open a purchased order from the profile page through its details action.
+2. Download the order PDF and confirm it opens as a receipt with the order's ticket data.
+3. Log in as an admin and open `/admin/order-validation`.
+4. Paste the QR validation URL or signed token from the order detail/PDF flow.
+5. Confirm that:
+   - the validation result reports the order as valid for entry,
+   - movie, session, order, ticket, and seat data are shown,
+   - checking in the order marks all active unchecked tickets as checked in,
+   - validating the same QR again reports it as already used.
+
+### 3. Verify partial ticket cancellation
 
 1. Use an order containing at least two purchased tickets.
 2. Open the profile page.
@@ -2386,7 +2455,7 @@ If you want to manually verify the most important behaviors in a running environ
    - exactly one seat is restored to availability,
    - other tickets in the same order remain active.
 
-### 3. Verify full-order cancellation
+### 4. Verify full-order cancellation
 
 This flow is currently best tested through Swagger UI or another API client because the frontend does not expose a dedicated full-order cancellation button.
 
@@ -2398,7 +2467,7 @@ This flow is currently best tested through Swagger UI or another API client beca
    - the order status becomes `cancelled`,
    - all affected seats become available again.
 
-### 4. Verify session-cancellation cascade
+### 5. Verify session-cancellation cascade
 
 1. Buy one or more tickets for a future session.
 2. Log in as an admin.
@@ -2410,7 +2479,7 @@ This flow is currently best tested through Swagger UI or another API client beca
    - grouped orders tied to the session reflect cancellation state,
    - the seat map no longer shows those seats as occupied.
 
-### 5. Verify admin planning flows
+### 6. Verify admin planning flows
 
 1. Create a new movie in the admin area with both localized title and description fields.
 2. Use the chronoboard planning shelf to select that movie.
@@ -2422,7 +2491,7 @@ This flow is currently best tested through Swagger UI or another API client beca
    - overlap rules block conflicting placements,
    - duplicate-to-dates behavior reports partial success or rejection clearly when conflicts exist.
 
-### 6. Verify localization behavior
+### 7. Verify localization behavior
 
 1. Open the frontend and switch between Ukrainian and English.
 2. Confirm that:
@@ -2431,7 +2500,7 @@ This flow is currently best tested through Swagger UI or another API client beca
    - genre labels switch language,
    - the app continues to function normally after switching.
 
-### 7. Verify movie lifecycle behavior
+### 8. Verify movie lifecycle behavior
 
 1. Create a new movie without sessions and confirm it is `planned`.
 2. Schedule a future session for it and confirm it becomes `active`.
@@ -2499,6 +2568,7 @@ Within the current repository scope, admins can:
 - use the chronoboard for schedule planning,
 - inspect tickets and users,
 - view attendance/reporting data,
+- validate customer order QR codes and check in valid orders,
 - cancel tickets or orders through authorized backend flows.
 
 ## 26. Current Limitations
@@ -2531,7 +2601,7 @@ The backend supports full-order cancellation, but the current profile UI exposes
 
 ### No dedicated admin order-management UI
 
-Admins can inspect tickets, users, and attendance/reporting views, but there is no dedicated admin order list or order-management panel comparable to the movie/session management surfaces.
+Admins can inspect grouped booking activity in reporting views and validate/check in a specific order through the QR workflow, but there is no dedicated standalone admin order-management panel comparable to the movie/session management surfaces.
 
 ### One-hall domain only
 
@@ -2587,7 +2657,7 @@ Component tests and a small end-to-end test suite would improve confidence in:
 
 ### Add admin order views
 
-A dedicated admin order list and order detail panel would complement the existing tickets/users/attendance views and make grouped booking management more complete.
+A dedicated admin order list and order detail panel would complement the existing attendance booking groups and QR validation page, making grouped booking management more complete outside the admission workflow.
 
 ### Add background lifecycle and reconciliation jobs
 
@@ -2629,6 +2699,7 @@ Cinema Showcase already demonstrates a complete and technically meaningful one-h
 - a React frontend with public, authenticated, and admin experiences,
 - a MongoDB data model that uses validators, indexes, and replica-set-backed transactions,
 - real booking flows built around orders, tickets, seat maps, and cancellation behavior,
+- customer order receipts with signed QR validation and staff check-in,
 - an admin planning surface tailored to the one-hall scheduling problem.
 
 Within its intended scope, the project is more than a simple CRUD demo. It shows careful thinking about lifecycle modeling, localization, catalog normalization, booking consistency, and operator workflows. At the same time, it remains honest about its current boundaries: one hall, development-focused infrastructure, no external payments, and limited frontend automation.

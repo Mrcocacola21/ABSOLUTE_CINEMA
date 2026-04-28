@@ -126,6 +126,7 @@ class OrderPurchaseCommand:
                                 "purchased_at": now,
                                 "updated_at": None,
                                 "cancelled_at": None,
+                                "checked_in_at": None,
                             },
                             db_session=db_session,
                         )

@@ -31,7 +31,15 @@ export function LoginPage() {
     setIsSubmitting(true);
     try {
       await login(email.trim(), password);
-      navigate("/profile");
+      const redirectPath =
+        typeof location.state === "object" &&
+        location.state &&
+        "from" in location.state &&
+        typeof location.state.from === "string" &&
+        location.state.from.startsWith("/")
+          ? location.state.from
+          : "/profile";
+      navigate(redirectPath);
     } catch (error) {
       setErrorMessage(extractApiErrorMessage(error, t("auth.login.failed")));
     } finally {

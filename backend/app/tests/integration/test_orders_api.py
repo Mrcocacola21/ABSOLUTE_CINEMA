@@ -888,6 +888,17 @@ async def test_user_cannot_cancel_another_users_order_but_admin_can(
     assert purchase_response.status_code == 201
     order_id = purchase_response.json()["data"]["id"]
 
+    own_orders_response = await client.get(f"{API_PREFIX}/users/me/orders", headers=user_auth["headers"])
+    assert own_orders_response.status_code == 200
+    assert own_orders_response.json()["data"] == []
+
+    forbidden_read = await client.get(
+        f"{API_PREFIX}/users/me/orders/{order_id}",
+        headers=user_auth["headers"],
+    )
+    assert forbidden_read.status_code == 403
+    assert forbidden_read.json()["error"]["message"] == "You can only access your own orders."
+
     forbidden_cancel = await client.patch(
         f"{API_PREFIX}/orders/{order_id}/cancel",
         headers=user_auth["headers"],
@@ -905,6 +916,33 @@ async def test_user_cannot_cancel_another_users_order_but_admin_can(
     stored_order = await database[DatabaseCollections.ORDERS].find_one({"_id": ObjectId(order_id)})
     assert stored_order is not None
     assert stored_order["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_order_purchase_rejects_attempt_to_override_authenticated_user(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Order User Override Movie", duration_minutes=120)
+    session = await create_session(movie_id=movie["id"], start_hour=21, duration_minutes=150, price=280)
+
+    response = await client.post(
+        f"{API_PREFIX}/orders/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seats": [{"seat_row": 8, "seat_number": 5}],
+            "user_id": str(ObjectId()),
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "request_validation_error"
+    assert body["error"]["message"] == "Extra inputs are not permitted"
 
 
 @pytest.mark.asyncio

@@ -179,7 +179,9 @@ export function ChronoboardInspector({
               <span>{t("common.labels.price")}</span>
               <input
                 required
-                min={0}
+                min={0.01}
+                max={1000}
+                step="0.01"
                 type="number"
                 disabled={isBusy}
                 value={draftPlacement.price}
@@ -404,7 +406,9 @@ export function ChronoboardInspector({
               <span>{t("common.labels.price")}</span>
               <input
                 required
-                min={0}
+                min={0.01}
+                max={1000}
+                step="0.01"
                 type="number"
                 disabled={isBusy}
                 value={editingDraft.price}

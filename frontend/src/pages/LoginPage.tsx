@@ -30,7 +30,7 @@ export function LoginPage() {
     setErrorMessage("");
     setIsSubmitting(true);
     try {
-      await login(email, password);
+      await login(email.trim(), password);
       navigate("/profile");
     } catch (error) {
       setErrorMessage(extractApiErrorMessage(error, t("auth.login.failed")));
@@ -63,6 +63,7 @@ export function LoginPage() {
               type="email"
               disabled={isSubmitting}
               required
+              autoComplete="email"
             />
           </label>
           <label className="field">
@@ -73,6 +74,7 @@ export function LoginPage() {
               type="password"
               disabled={isSubmitting}
               required
+              autoComplete="current-password"
             />
           </label>
         </div>

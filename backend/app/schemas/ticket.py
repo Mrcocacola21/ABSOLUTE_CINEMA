@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import EmailStr, Field, model_validator
+from pydantic import ConfigDict, EmailStr, Field, model_validator
 
 from app.core.constants import TicketStatuses
 from app.schemas.common import BaseSchema
@@ -16,9 +16,29 @@ TICKET_STATUS_VALUES = (TicketStatuses.PURCHASED, TicketStatuses.CANCELLED)
 class TicketPurchaseRequest(BaseSchema):
     """Payload for purchasing a ticket."""
 
-    session_id: str
-    seat_row: int = Field(ge=1)
-    seat_number: int = Field(ge=1)
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "example": {
+                "session_id": "6803a522e5d4c4d94e7e1a10",
+                "seat_row": 3,
+                "seat_number": 8,
+            }
+        },
+    )
+
+    session_id: str = Field(description="Identifier of the scheduled session being purchased.")
+    seat_row: int = Field(
+        ge=1,
+        description="One-based seat row inside the configured one-hall layout.",
+    )
+    seat_number: int = Field(
+        ge=1,
+        description="One-based seat number inside the selected row.",
+    )
 
 
 class TicketRead(BaseSchema):

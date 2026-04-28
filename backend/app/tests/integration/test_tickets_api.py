@@ -332,6 +332,7 @@ async def test_current_user_can_list_and_cancel_tickets_and_admin_can_list_all_t
     database,
     admin_auth: dict[str, object],
     user_auth: dict[str, object],
+    create_authenticated_user,
     create_movie,
     create_session,
 ) -> None:
@@ -350,17 +351,37 @@ async def test_current_user_can_list_and_cancel_tickets_and_admin_can_list_all_t
     assert purchase_response.status_code == 201
     ticket = purchase_response.json()["data"]
 
+    second_user = await create_authenticated_user(email="other-ticket-list@example.com", name="Other Ticket List")
+    second_purchase_response = await client.post(
+        f"{API_PREFIX}/tickets/purchase",
+        headers=second_user["headers"],
+        json={
+            "session_id": session["id"],
+            "seat_row": 5,
+            "seat_number": 7,
+        },
+    )
+    assert second_purchase_response.status_code == 201
+    second_ticket = second_purchase_response.json()["data"]
+
     my_tickets_response = await client.get(f"{API_PREFIX}/tickets/me", headers=user_auth["headers"])
     assert my_tickets_response.status_code == 200
     my_tickets = my_tickets_response.json()["data"]
     assert len(my_tickets) == 1
+    assert my_tickets[0]["id"] == ticket["id"]
+    assert my_tickets[0]["id"] != second_ticket["id"]
     assert my_tickets[0]["movie_title"] == movie["title"]
     assert my_tickets[0]["is_cancellable"] is True
+    assert my_tickets[0]["user_email"] is None
 
     admin_tickets_response = await client.get(f"{API_PREFIX}/admin/tickets", headers=admin_auth["headers"])
     assert admin_tickets_response.status_code == 200
-    admin_ticket = admin_tickets_response.json()["data"][0]
-    assert admin_ticket["user_email"] == "user@example.com"
+    admin_tickets = admin_tickets_response.json()["data"]
+    assert {admin_ticket["id"] for admin_ticket in admin_tickets} == {ticket["id"], second_ticket["id"]}
+    assert {admin_ticket["user_email"] for admin_ticket in admin_tickets} == {
+        "user@example.com",
+        "other-ticket-list@example.com",
+    }
 
     cancel_response = await client.patch(
         f"{API_PREFIX}/tickets/{ticket['id']}/cancel",
@@ -374,7 +395,7 @@ async def test_current_user_can_list_and_cancel_tickets_and_admin_can_list_all_t
     stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
     stored_ticket = await database[DatabaseCollections.TICKETS].find_one({"_id": ObjectId(ticket["id"])})
     assert stored_session is not None
-    assert stored_session["available_seats"] == stored_session["total_seats"]
+    assert stored_session["available_seats"] == stored_session["total_seats"] - 1
     assert stored_ticket is not None
     assert stored_ticket["status"] == "cancelled"
 
@@ -385,7 +406,35 @@ async def test_current_user_can_list_and_cancel_tickets_and_admin_can_list_all_t
         seat for seat in seats_payload["seats"] if seat["row"] == 5 and seat["number"] == 6
     )
     assert released_seat["is_available"] is True
-    assert seats_payload["available_seats"] == seats_payload["total_seats"]
+    assert seats_payload["available_seats"] == seats_payload["total_seats"] - 1
+
+
+@pytest.mark.asyncio
+async def test_ticket_purchase_rejects_attempt_to_override_authenticated_user(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Ticket User Override Movie", duration_minutes=120)
+    session = await create_session(movie_id=movie["id"], start_hour=18, duration_minutes=160)
+
+    response = await client.post(
+        f"{API_PREFIX}/tickets/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seat_row": 1,
+            "seat_number": 4,
+            "user_id": str(ObjectId()),
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "request_validation_error"
+    assert body["error"]["message"] == "Extra inputs are not permitted"
 
 
 @pytest.mark.asyncio

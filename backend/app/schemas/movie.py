@@ -7,7 +7,7 @@ from datetime import datetime
 import re
 from typing import Any, cast
 
-from pydantic import Field, TypeAdapter, ValidationError, field_validator, model_validator
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, field_validator, model_validator
 from pydantic.networks import HttpUrl
 
 from app.core.constants import MOVIE_STATUS_VALUES, MovieStatuses
@@ -246,6 +246,13 @@ class MovieBase(BaseSchema):
 class MovieCreate(MovieBase):
     """Payload for creating a movie."""
 
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
     @field_validator("title")
     @classmethod
     def validate_title(cls, value: LocalizedText) -> LocalizedText:
@@ -261,6 +268,13 @@ class MovieCreate(MovieBase):
 
 class MovieUpdate(BaseSchema):
     """Payload for updating a movie."""
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
 
     title: LocalizedTextUpdate | None = Field(
         default=None,

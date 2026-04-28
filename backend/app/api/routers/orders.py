@@ -27,7 +27,11 @@ router = APIRouter(prefix="/orders", tags=["orders"], responses=AUTHENTICATION_E
     response_model=ApiResponse[OrderDetailsRead],
     status_code=status.HTTP_201_CREATED,
     summary="Purchase an order",
-    description="Purchase multiple seats for the same session as one grouped order.",
+    description=(
+        "Purchase one or more specific seats for the same future scheduled session as a grouped order. "
+        "The authenticated user is taken from the bearer token; duplicate seats, sold seats, invalid "
+        "coordinates, cancelled sessions, completed sessions, and sessions that already started are rejected."
+    ),
     response_description="Wrapped purchased order details.",
     responses=merge_openapi_responses(CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )
@@ -45,7 +49,10 @@ async def purchase_order(
     "/{order_id}/cancel",
     response_model=ApiResponse[OrderDetailsRead],
     summary="Cancel an order",
-    description="Cancel all active tickets inside one order owned by the current user.",
+    description=(
+        "Cancel all still-active tickets inside one grouped order before the linked session starts. "
+        "Normal users can cancel only their own orders; administrators can cancel any order."
+    ),
     response_description="Wrapped cancelled order details.",
     responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )

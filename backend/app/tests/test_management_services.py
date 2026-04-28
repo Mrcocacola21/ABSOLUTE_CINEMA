@@ -13,7 +13,7 @@ from app.schemas.localization import LocalizedText
 from app.schemas.movie import MovieUpdate
 from app.schemas.movie import MovieRead
 from app.schemas.movie import MovieCreate
-from app.schemas.session import SessionCreate
+from app.schemas.session import SessionBatchCreate, SessionCreate, SessionUpdate
 from app.schemas.ticket import TicketRead
 from app.schemas.user import UserCreate, UserRead, UserUpdate
 from app.services.admin import AdminService
@@ -402,6 +402,43 @@ def test_movie_create_schema_rejects_overlong_localized_title() -> None:
         )
 
 
+def test_movie_write_schemas_reject_unexpected_fields() -> None:
+    with pytest.raises(ValidationError) as create_error:
+        MovieCreate(
+            title={"uk": "123", "en": "Dune"},
+            description={"uk": "123", "en": "Science fiction"},
+            duration_minutes=155,
+            genres=["science_fiction"],
+            status=MovieStatuses.PLANNED,
+            is_active=True,
+        )
+
+    assert any(error["type"] == "extra_forbidden" for error in create_error.value.errors())
+
+    with pytest.raises(ValidationError) as update_error:
+        MovieUpdate(status=MovieStatuses.DEACTIVATED, is_active=False)
+
+    assert any(error["type"] == "extra_forbidden" for error in update_error.value.errors())
+
+
+def test_movie_localized_text_rejects_unexpected_language_keys() -> None:
+    with pytest.raises(ValidationError) as create_error:
+        MovieCreate(
+            title={"uk": "123", "en": "Dune", "ru": "Dune"},
+            description={"uk": "123", "en": "Science fiction"},
+            duration_minutes=155,
+            genres=["science_fiction"],
+            status=MovieStatuses.PLANNED,
+        )
+
+    assert any(error["type"] == "extra_forbidden" for error in create_error.value.errors())
+
+    with pytest.raises(ValidationError) as update_error:
+        MovieUpdate(title={"en": "Updated title", "ru": "Updated title"})
+
+    assert any(error["type"] == "extra_forbidden" for error in update_error.value.errors())
+
+
 def test_user_update_requires_current_password_for_sensitive_fields() -> None:
     with pytest.raises(ValueError):
         UserUpdate(email="new@example.com")
@@ -437,6 +474,40 @@ def test_session_create_rejects_prices_with_more_than_two_decimals() -> None:
             end_time=now + timedelta(days=1, hours=2),
             price=199.999,
         )
+
+
+def test_session_write_schemas_reject_unexpected_fields() -> None:
+    now = datetime.now(tz=timezone.utc)
+    start_time = now + timedelta(days=1)
+    end_time = start_time + timedelta(hours=2)
+
+    with pytest.raises(ValidationError) as create_error:
+        SessionCreate(
+            movie_id="movie-1",
+            start_time=start_time,
+            end_time=end_time,
+            price=200,
+            hall_id="vip",
+        )
+
+    assert any(error["type"] == "extra_forbidden" for error in create_error.value.errors())
+
+    with pytest.raises(ValidationError) as update_error:
+        SessionUpdate(price=220, available_seats=10)
+
+    assert any(error["type"] == "extra_forbidden" for error in update_error.value.errors())
+
+    with pytest.raises(ValidationError) as batch_error:
+        SessionBatchCreate(
+            movie_id="movie-1",
+            start_time=start_time,
+            end_time=end_time,
+            price=200,
+            dates=[start_time.date()],
+            total_seats=20,
+        )
+
+    assert any(error["type"] == "extra_forbidden" for error in batch_error.value.errors())
 
 
 def test_ticket_read_rejects_cancelled_status_without_cancelled_at() -> None:

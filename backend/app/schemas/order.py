@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from app.core.constants import ORDER_STATUS_VALUES, TicketStatuses
 from app.schemas.common import BaseSchema
@@ -16,15 +16,47 @@ TICKET_STATUS_VALUES = (TicketStatuses.PURCHASED, TicketStatuses.CANCELLED)
 class OrderSeatInput(BaseSchema):
     """One seat included in an order purchase request."""
 
-    seat_row: int = Field(ge=1)
-    seat_number: int = Field(ge=1)
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    seat_row: int = Field(
+        ge=1,
+        description="One-based seat row inside the configured one-hall layout.",
+    )
+    seat_number: int = Field(
+        ge=1,
+        description="One-based seat number inside the selected row.",
+    )
 
 
 class OrderPurchaseRequest(BaseSchema):
     """Payload for purchasing multiple seats for one session."""
 
-    session_id: str
-    seats: list[OrderSeatInput] = Field(min_length=1)
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "example": {
+                "session_id": "6803a522e5d4c4d94e7e1a10",
+                "seats": [
+                    {"seat_row": 4, "seat_number": 5},
+                    {"seat_row": 4, "seat_number": 6},
+                ],
+            }
+        },
+    )
+
+    session_id: str = Field(description="Identifier of the scheduled session being purchased.")
+    seats: list[OrderSeatInput] = Field(
+        min_length=1,
+        description="Unique seat coordinates to purchase in one grouped order.",
+    )
 
     @model_validator(mode="after")
     def validate_unique_seats(self) -> "OrderPurchaseRequest":

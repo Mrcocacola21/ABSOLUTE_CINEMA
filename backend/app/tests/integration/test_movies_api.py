@@ -277,6 +277,60 @@ async def test_admin_rejects_duplicate_genres_after_normalization(
 
 
 @pytest.mark.asyncio
+async def test_admin_movie_payloads_reject_unexpected_fields(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+) -> None:
+    create_response = await client.post(
+        f"{API_PREFIX}/admin/movies",
+        headers=admin_auth["headers"],
+        json={
+            "title": build_localized_text("123", en="Strict Payload"),
+            "description": build_localized_text("123", en="Strict payload description"),
+            "duration_minutes": 95,
+            "genres": ["drama"],
+            "status": "planned",
+            "is_active": True,
+        },
+    )
+
+    assert create_response.status_code == 422
+    create_body = create_response.json()
+    assert create_body["error"]["code"] == "request_validation_error"
+    assert create_body["error"]["message"] == "Extra inputs are not permitted"
+
+    localized_response = await client.post(
+        f"{API_PREFIX}/admin/movies",
+        headers=admin_auth["headers"],
+        json={
+            "title": {"uk": "123", "en": "Strict Payload", "ru": "Strict Payload"},
+            "description": build_localized_text("123", en="Strict payload description"),
+            "duration_minutes": 95,
+            "genres": ["drama"],
+            "status": "planned",
+        },
+    )
+
+    assert localized_response.status_code == 422
+    localized_body = localized_response.json()
+    assert localized_body["error"]["code"] == "request_validation_error"
+    assert localized_body["error"]["message"] == "Extra inputs are not permitted"
+
+    movie = await create_movie(title="Strict Update Target")
+    update_response = await client.patch(
+        f"{API_PREFIX}/admin/movies/{movie['id']}",
+        headers=admin_auth["headers"],
+        json={"status": "deactivated", "is_active": False},
+    )
+
+    assert update_response.status_code == 422
+    update_body = update_response.json()
+    assert update_body["error"]["code"] == "request_validation_error"
+    assert update_body["error"]["message"] == "Extra inputs are not permitted"
+
+
+@pytest.mark.asyncio
 async def test_admin_cannot_update_movie_with_invalid_localized_text_language(
     client: httpx.AsyncClient,
     admin_auth: dict[str, object],

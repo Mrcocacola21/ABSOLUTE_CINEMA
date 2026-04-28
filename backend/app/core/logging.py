@@ -142,9 +142,8 @@ def configure_logging(level: str = "INFO") -> None:
             },
             "loggers": {
                 LOGGER_NAME: {
-                    "handlers": ["console"],
                     "level": level.upper(),
-                    "propagate": False,
+                    "propagate": True,
                 }
             },
             "root": {

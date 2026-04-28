@@ -25,6 +25,7 @@ frontend/.env.*
 # Frontend
 node_modules/
 dist/
+frontend/tmp/
 frontend/test-*.pdf
 
 # Editor / OS

@@ -65,6 +65,8 @@ export function RegisterPage() {
               required
               minLength={2}
               maxLength={255}
+              pattern=".*\S.*"
+              autoComplete="name"
             />
           </label>
           <label className="field">
@@ -75,6 +77,7 @@ export function RegisterPage() {
               type="email"
               disabled={isSubmitting}
               required
+              autoComplete="email"
             />
           </label>
           <label className="field">
@@ -87,6 +90,7 @@ export function RegisterPage() {
               required
               minLength={8}
               maxLength={128}
+              autoComplete="new-password"
             />
           </label>
         </div>

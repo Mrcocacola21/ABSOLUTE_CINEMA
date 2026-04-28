@@ -27,7 +27,12 @@ router = APIRouter(prefix="/tickets", tags=["tickets"], responses=AUTHENTICATION
     response_model=ApiResponse[TicketRead],
     status_code=status.HTTP_201_CREATED,
     summary="Purchase a ticket",
-    description="Purchase one seat for a selected session as a standalone ticket.",
+    description=(
+        "Purchase exactly one specific seat for a future scheduled session. The authenticated "
+        "user is taken from the bearer token; clients cannot purchase on behalf of another user. "
+        "Invalid seat coordinates, sold seats, cancelled sessions, completed sessions, and sessions "
+        "that already started are rejected."
+    ),
     response_description="Wrapped purchased ticket record.",
     responses=merge_openapi_responses(CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )
@@ -45,7 +50,11 @@ async def purchase_ticket(
     "/me",
     response_model=ApiResponse[list[TicketListRead]],
     summary="List my tickets",
-    description="Return tickets belonging to the authenticated user.",
+    description=(
+        "Return only tickets belonging to the authenticated user, enriched with movie, session, "
+        "and `is_cancellable` data for the profile screen. Admin-only ticket visibility is exposed "
+        "separately under the `admin` tag."
+    ),
     response_description="Wrapped list of the current user's tickets.",
 )
 async def list_current_user_tickets(
@@ -61,7 +70,11 @@ async def list_current_user_tickets(
     "/{ticket_id}/cancel",
     response_model=ApiResponse[TicketRead],
     summary="Cancel a ticket",
-    description="Cancel a ticket owned by the current user or any ticket when the caller is an administrator.",
+    description=(
+        "Cancel a purchased ticket before the linked session starts. Normal users can cancel only "
+        "their own tickets; administrators can cancel any ticket. Repeated cancellation and tickets "
+        "for already started or completed sessions are rejected."
+    ),
     response_description="Wrapped cancelled ticket record.",
     responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )

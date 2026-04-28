@@ -60,3 +60,42 @@ def test_openapi_marks_protected_routes_and_error_contracts() -> None:
 
     assert schedule["summary"] == "Browse the public schedule"
     assert "422" in schedule["responses"]
+
+
+def test_openapi_describes_demo_auth_booking_and_profile_flows() -> None:
+    app = create_application()
+    spec = app.openapi()
+
+    register = spec["paths"]["/api/v1/auth/register"]["post"]
+    login = spec["paths"]["/api/v1/auth/login"]["post"]
+    profile_update = spec["paths"]["/api/v1/users/me"]["patch"]
+    profile_deactivate = spec["paths"]["/api/v1/users/me"]["delete"]
+    ticket_purchase = spec["paths"]["/api/v1/tickets/purchase"]["post"]
+    ticket_cancel = spec["paths"]["/api/v1/tickets/{ticket_id}/cancel"]["patch"]
+    order_purchase = spec["paths"]["/api/v1/orders/purchase"]["post"]
+    my_orders = spec["paths"]["/api/v1/users/me/orders"]["get"]
+
+    assert register["summary"] == "Register a new user"
+    assert "clients cannot self-register as administrators" in register["description"]
+    assert login["summary"] == "Log in and receive a JWT"
+    assert "form-encoded credentials" in login["description"]
+
+    assert profile_update["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "role and activation flags cannot be changed" in profile_update["description"]
+    assert profile_deactivate["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "Existing tokens stop working" in profile_deactivate["description"]
+
+    assert ticket_purchase["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "exactly one specific seat" in ticket_purchase["description"]
+    assert ticket_cancel["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "before the linked session starts" in ticket_cancel["description"]
+    assert order_purchase["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "one or more specific seats" in order_purchase["description"]
+    assert my_orders["security"] == [{"OAuth2PasswordBearer": []}]
+
+    ticket_schema = spec["components"]["schemas"]["TicketPurchaseRequest"]
+    order_schema = spec["components"]["schemas"]["OrderPurchaseRequest"]
+    assert ticket_schema["additionalProperties"] is False
+    assert ticket_schema["properties"]["seat_row"]["description"].startswith("One-based seat row")
+    assert order_schema["additionalProperties"] is False
+    assert "Unique seat coordinates" in order_schema["properties"]["seats"]["description"]

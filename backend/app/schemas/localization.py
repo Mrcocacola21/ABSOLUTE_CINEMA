@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from app.schemas.common import BaseSchema
 
@@ -78,6 +78,12 @@ def _coerce_localized_text_payload(value: Any) -> Any:
     if not isinstance(value, dict):
         return value
 
+    normalized = {
+        key: raw_value
+        for key, raw_value in value.items()
+        if key not in SUPPORTED_LANGUAGE_CODES
+    }
+
     uk = str(value.get("uk", "")).strip() if value.get("uk") is not None else ""
     en = str(value.get("en", "")).strip() if value.get("en") is not None else ""
 
@@ -86,11 +92,22 @@ def _coerce_localized_text_payload(value: Any) -> Any:
     if en and not uk:
         uk = en
 
-    return {"uk": uk, "en": en}
+    return {
+        **normalized,
+        "uk": uk,
+        "en": en,
+    }
 
 
 class LocalizedText(BaseSchema):
     """Localized text stored in both supported UI languages."""
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
 
     uk: str = Field(
         min_length=1,
@@ -121,6 +138,13 @@ class LocalizedText(BaseSchema):
 class LocalizedTextUpdate(BaseSchema):
     """Partial localized text update payload."""
 
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
     uk: str | None = Field(
         default=None,
         min_length=1,
@@ -145,7 +169,11 @@ class LocalizedTextUpdate(BaseSchema):
         if not isinstance(value, dict):
             return value
 
-        normalized: dict[str, str] = {}
+        normalized: dict[str, Any] = {
+            key: raw_value
+            for key, raw_value in value.items()
+            if key not in SUPPORTED_LANGUAGE_CODES
+        }
         if value.get("uk") is not None:
             normalized["uk"] = str(value["uk"]).strip()
         if value.get("en") is not None:

@@ -105,12 +105,14 @@ export function ProfilePage() {
       return;
     }
 
+    const normalizedName = form.name.trim().replace(/\s+/g, " ");
+    const normalizedEmail = form.email.trim().toLowerCase();
     const payload: Record<string, string> = {};
-    if (form.name !== currentUser.name) {
-      payload.name = form.name;
+    if (normalizedName !== currentUser.name) {
+      payload.name = normalizedName;
     }
-    if (form.email !== currentUser.email) {
-      payload.email = form.email;
+    if (normalizedEmail !== currentUser.email) {
+      payload.email = normalizedEmail;
     }
     if (form.password) {
       payload.password = form.password;
@@ -328,6 +330,10 @@ export function ProfilePage() {
               <span>{t("common.labels.name")}</span>
               <input
                 required
+                minLength={2}
+                maxLength={255}
+                pattern=".*\S.*"
+                autoComplete="name"
                 disabled={isSavingProfile || isDeactivatingAccount}
                 value={form.name}
                 onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
@@ -339,6 +345,7 @@ export function ProfilePage() {
                 required
                 disabled={isSavingProfile || isDeactivatingAccount}
                 type="email"
+                autoComplete="email"
                 value={form.email}
                 onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
               />
@@ -347,8 +354,10 @@ export function ProfilePage() {
               <span>{t("common.labels.newPassword")}</span>
               <input
                 minLength={8}
+                maxLength={128}
                 disabled={isSavingProfile || isDeactivatingAccount}
                 type="password"
+                autoComplete="new-password"
                 value={form.password}
                 onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
               />
@@ -357,8 +366,10 @@ export function ProfilePage() {
               <span>{t("common.labels.currentPassword")}</span>
               <input
                 minLength={8}
+                maxLength={128}
                 disabled={isSavingProfile || isDeactivatingAccount}
                 type="password"
+                autoComplete="current-password"
                 value={form.current_password}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, current_password: event.target.value }))

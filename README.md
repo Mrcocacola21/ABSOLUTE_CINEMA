@@ -226,12 +226,15 @@ The current repository now applies a stricter but still demo-friendly validation
 
 - movie titles and descriptions are trimmed, required in both locales, and limited to presentation-friendly lengths,
 - localized movie fields reject clearly wrong-language content while still allowing punctuation, numerals, and short technical fragments such as `IMAX`,
+- localized movie payloads accept only the supported `uk` and `en` keys instead of silently dropping unexpected language codes,
 - movie durations, age ratings, poster references, and genre lists are checked more intentionally,
+- movie and session create/update payloads reject unexpected fields, and the generated OpenAPI schemas expose that strict shape through `additionalProperties: false`,
 - session prices must be positive, realistic, and currency-shaped,
 - session slots must be long enough for the movie but cannot drift far beyond the runtime,
 - seat coordinates are validated against the fixed one-hall layout with clearer error messages,
 - ticket and nested order-ticket states are checked for consistent cancellation metadata,
-- profile updates normalize names/emails and reject no-op or same-password changes.
+- profile updates normalize names/emails and reject no-op or same-password changes,
+- the React forms provide early UX validation for the same practical limits while the backend remains the source of truth.
 
 ### Demo seed data
 
@@ -2312,6 +2315,24 @@ docker compose run --rm -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet
 ```bash
 docker compose run --rm -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true" backend pytest app/tests/integration/test_access_control_api.py app/tests/integration/test_schedule_api.py app/tests/integration/test_orders_api.py app/tests/integration/test_tickets_api.py app/tests/integration/test_sessions_api.py -o addopts=
 ```
+
+### Latest validation audit verification
+
+After the validation and Swagger-readiness audit, the following checks were run successfully:
+
+```bash
+docker compose run --rm -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true" backend pytest -o addopts=
+npm run build
+docker compose run --rm backend python -c "from app.main import app; schema=app.openapi(); names=['MovieCreate','MovieUpdate','SessionCreate','SessionUpdate','SessionBatchCreate','LocalizedText','LocalizedTextUpdate']; print({name: schema['components']['schemas'][name].get('additionalProperties') for name in names})"
+git diff --check
+```
+
+Observed results:
+
+- backend test suite: `190 passed`,
+- frontend production build: passed, with the existing Vite large chunk warning,
+- OpenAPI strict write schemas: all checked schemas reported `additionalProperties: false`,
+- diff whitespace check: no whitespace errors, only Git line-ending conversion warnings on Windows.
 
 ### What the tests verify in practical terms
 

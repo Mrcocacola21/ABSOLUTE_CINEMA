@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date as calendar_date, datetime
 from typing import Final
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from app.core.constants import (
     ALLOWED_SORT_FIELDS,
@@ -75,6 +75,13 @@ class SessionBase(BaseSchema):
 class SessionCreate(BaseSchema):
     """Payload for creating a session slot for an existing movie."""
 
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
     movie_id: str = Field(description="Identifier of the movie being scheduled.")
     start_time: datetime = Field(description="Requested session start time in ISO 8601 format.")
     end_time: datetime = Field(description="Requested session end time in ISO 8601 format.")
@@ -96,6 +103,13 @@ class SessionCreate(BaseSchema):
 
 class SessionUpdate(BaseSchema):
     """Payload for updating a session."""
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
 
     movie_id: str | None = Field(default=None, description="Optional new movie identifier.")
     start_time: datetime | None = Field(default=None, description="Optional new start time.")
@@ -123,6 +137,13 @@ class SessionUpdate(BaseSchema):
 
 class SessionBatchCreate(BaseSchema):
     """Payload for creating the same session slot on multiple calendar dates."""
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
 
     movie_id: str = Field(description="Identifier of the movie being scheduled.")
     start_time: datetime = Field(description="Template start time applied to each requested date.")

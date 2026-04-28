@@ -15,6 +15,11 @@ import type { Movie } from "@/types/domain";
 import { getMovieMonogram } from "@/widgets/admin/chronoboard/utils";
 
 const ADMIN_CATALOG_PAGE_SIZE = 5;
+const MOVIE_TITLE_MAX_LENGTH = 150;
+const MOVIE_DESCRIPTION_MAX_LENGTH = 2000;
+const MOVIE_DURATION_MINUTES_MIN = 40;
+const MOVIE_DURATION_MINUTES_MAX = 360;
+const MOVIE_AGE_RATING_MAX_LENGTH = 16;
 
 interface MovieCatalogPanelProps {
   catalogMovies: Movie[];
@@ -140,6 +145,9 @@ export function MovieCatalogPanel({
               <span>{t("common.labels.titleUk")}</span>
               <input
                 required
+                minLength={1}
+                maxLength={MOVIE_TITLE_MAX_LENGTH}
+                pattern=".*\S.*"
                 disabled={isBusy}
                 value={movieForm.title.uk}
                 onChange={(event) => onLocalizedMovieFormChange("title", "uk", event.target.value)}
@@ -149,6 +157,9 @@ export function MovieCatalogPanel({
               <span>{t("common.labels.titleEn")}</span>
               <input
                 required
+                minLength={1}
+                maxLength={MOVIE_TITLE_MAX_LENGTH}
+                pattern=".*\S.*"
                 disabled={isBusy}
                 value={movieForm.title.en}
                 onChange={(event) => onLocalizedMovieFormChange("title", "en", event.target.value)}
@@ -158,8 +169,9 @@ export function MovieCatalogPanel({
               <span>{t("common.labels.durationMinutes")}</span>
               <input
                 required
-                min={1}
-                max={600}
+                min={MOVIE_DURATION_MINUTES_MIN}
+                max={MOVIE_DURATION_MINUTES_MAX}
+                step={1}
                 type="number"
                 disabled={isBusy}
                 value={movieForm.duration_minutes}
@@ -169,6 +181,8 @@ export function MovieCatalogPanel({
             <label className="field">
               <span>{t("common.labels.ageRating")}</span>
               <input
+                maxLength={MOVIE_AGE_RATING_MAX_LENGTH}
+                pattern="[A-Za-z0-9+ \-]*"
                 disabled={isBusy}
                 value={movieForm.age_rating ?? ""}
                 onChange={(event) => onMovieFormChange("age_rating", event.target.value || undefined)}
@@ -178,6 +192,8 @@ export function MovieCatalogPanel({
               <span>{t("common.labels.descriptionUk")}</span>
               <textarea
                 required
+                minLength={1}
+                maxLength={MOVIE_DESCRIPTION_MAX_LENGTH}
                 disabled={isBusy}
                 value={movieForm.description.uk}
                 onChange={(event) => onLocalizedMovieFormChange("description", "uk", event.target.value)}
@@ -187,6 +203,8 @@ export function MovieCatalogPanel({
               <span>{t("common.labels.descriptionEn")}</span>
               <textarea
                 required
+                minLength={1}
+                maxLength={MOVIE_DESCRIPTION_MAX_LENGTH}
                 disabled={isBusy}
                 value={movieForm.description.en}
                 onChange={(event) => onLocalizedMovieFormChange("description", "en", event.target.value)}
@@ -195,7 +213,8 @@ export function MovieCatalogPanel({
             <label className="field">
               <span>{t("common.labels.posterUrl")}</span>
               <input
-                type="url"
+                type="text"
+                inputMode="url"
                 disabled={isBusy}
                 value={movieForm.poster_url ?? ""}
                 onChange={(event) => onMovieFormChange("poster_url", event.target.value || undefined)}

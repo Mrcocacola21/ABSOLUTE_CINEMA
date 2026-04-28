@@ -318,6 +318,65 @@ async def test_admin_rejects_invalid_session_prices_and_excessive_runtime_buffer
 
 
 @pytest.mark.asyncio
+async def test_admin_session_payloads_reject_unexpected_fields(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+) -> None:
+    movie = await create_movie(title="Strict Session Payload Movie", duration_minutes=120)
+    start_time, end_time = build_session_window(start_hour=10, duration_minutes=150)
+
+    create_response = await client.post(
+        f"{API_PREFIX}/admin/sessions",
+        headers=admin_auth["headers"],
+        json={
+            "movie_id": movie["id"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "price": 180,
+            "hall_id": "vip",
+        },
+    )
+
+    assert create_response.status_code == 422
+    create_body = create_response.json()
+    assert create_body["error"]["code"] == "request_validation_error"
+    assert create_body["error"]["message"] == "Extra inputs are not permitted"
+
+    update_response = await client.patch(
+        f"{API_PREFIX}/admin/sessions/{ObjectId()}",
+        headers=admin_auth["headers"],
+        json={
+            "price": 200,
+            "available_seats": 10,
+        },
+    )
+
+    assert update_response.status_code == 422
+    update_body = update_response.json()
+    assert update_body["error"]["code"] == "request_validation_error"
+    assert update_body["error"]["message"] == "Extra inputs are not permitted"
+
+    batch_response = await client.post(
+        f"{API_PREFIX}/admin/sessions/batch",
+        headers=admin_auth["headers"],
+        json={
+            "movie_id": movie["id"],
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "price": 180,
+            "dates": [start_time.date().isoformat()],
+            "total_seats": 120,
+        },
+    )
+
+    assert batch_response.status_code == 422
+    batch_body = batch_response.json()
+    assert batch_body["error"]["code"] == "request_validation_error"
+    assert batch_body["error"]["message"] == "Extra inputs are not permitted"
+
+
+@pytest.mark.asyncio
 async def test_admin_cannot_schedule_deactivated_movies(
     client: httpx.AsyncClient,
     admin_auth: dict[str, object],

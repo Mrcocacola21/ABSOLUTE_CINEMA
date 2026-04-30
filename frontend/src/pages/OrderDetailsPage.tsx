@@ -191,6 +191,12 @@ export function OrderDetailsPage() {
   const shortOrderId = order.id.slice(-8).toUpperCase();
   const validityClass = order.valid_for_entry ? "is-valid" : "is-invalid";
   const validTickets = order.tickets.filter((ticket) => ticket.valid_for_entry);
+  const entrySummary =
+    validTickets.length > 0
+      ? t("profile.orders.usableSummary", { count: validTickets.length })
+      : order.checked_in_tickets_count > 0
+        ? t("profile.orders.usedSummary", { count: order.checked_in_tickets_count })
+        : t("profile.orders.usableSummary", { count: validTickets.length });
 
   return (
     <div className="order-detail-page">
@@ -220,12 +226,7 @@ export function OrderDetailsPage() {
             <span className="badge">{t("profile.orders.shortId", { id: shortOrderId })}</span>
             <span className="badge">{formatStateLabel(order.status)}</span>
             {order.age_rating ? <span className="badge">{order.age_rating}</span> : null}
-            <span className="badge">
-              {t("profile.orders.activeSummary", {
-                active: order.active_tickets_count,
-                total: order.tickets_count,
-              })}
-            </span>
+            <span className="badge">{entrySummary}</span>
           </div>
         </div>
 

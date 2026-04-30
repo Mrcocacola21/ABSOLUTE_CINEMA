@@ -377,11 +377,15 @@ async def test_current_user_can_list_and_cancel_tickets_and_admin_can_list_all_t
     admin_tickets_response = await client.get(f"{API_PREFIX}/admin/tickets", headers=admin_auth["headers"])
     assert admin_tickets_response.status_code == 200
     admin_tickets = admin_tickets_response.json()["data"]
+    assert [admin_ticket["id"] for admin_ticket in admin_tickets] == [second_ticket["id"], ticket["id"]]
     assert {admin_ticket["id"] for admin_ticket in admin_tickets} == {ticket["id"], second_ticket["id"]}
     assert {admin_ticket["user_email"] for admin_ticket in admin_tickets} == {
         "user@example.com",
         "other-ticket-list@example.com",
     }
+    assert all("password" not in admin_ticket for admin_ticket in admin_tickets)
+    assert all("password_hash" not in admin_ticket for admin_ticket in admin_tickets)
+    assert all(admin_ticket["order_validation_token"] for admin_ticket in admin_tickets)
 
     cancel_response = await client.patch(
         f"{API_PREFIX}/tickets/{ticket['id']}/cancel",

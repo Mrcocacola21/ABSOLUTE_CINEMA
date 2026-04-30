@@ -22,9 +22,13 @@ from app.services.ticket import TicketService
 
 
 class FakeOrderRepository:
+    def __init__(self, orders: list[dict[str, object]] | None = None) -> None:
+        self.orders = orders or []
+
     async def list_by_ids(self, order_ids: list[str], *, db_session=None) -> list[dict[str, object]]:
-        _ = (order_ids, db_session)
-        return []
+        _ = db_session
+        requested_ids = set(order_ids)
+        return [order for order in self.orders if str(order["id"]) in requested_ids]
 
     async def get_by_id(
         self,
@@ -126,6 +130,9 @@ class FakeSessionRepository:
         self.session = {**document, "id": "session-1"}
         return self.session
 
+    async def list_all(self) -> list[dict[str, object]]:
+        return [self.session] if self.session is not None else []
+
     async def get_by_id(self, session_id: str, *, db_session=None) -> dict[str, object] | None:
         _ = db_session
         if self.session is None or self.session["id"] != session_id:
@@ -199,12 +206,49 @@ class FakeSessionRepository:
 
 
 class FakeTicketRepository:
-    def __init__(self, ticket: dict[str, object] | None = None) -> None:
+    def __init__(
+        self,
+        ticket: dict[str, object] | None = None,
+        tickets: list[dict[str, object]] | None = None,
+    ) -> None:
         self.ticket = ticket
+        self.tickets = tickets if tickets is not None else ([ticket] if ticket is not None else [])
 
     async def count_by_session(self, session_id: str, *, active_only: bool = True, db_session=None) -> int:
-        _ = (session_id, active_only, db_session)
-        return 0
+        _ = db_session
+        tickets = [
+            ticket
+            for ticket in self.tickets
+            if ticket["session_id"] == session_id
+        ]
+        if active_only:
+            tickets = [
+                ticket
+                for ticket in tickets
+                if ticket["status"] == TicketStatuses.PURCHASED
+            ]
+        return len(tickets)
+
+    async def list_by_session(
+        self,
+        session_id: str,
+        *,
+        active_only: bool = True,
+        db_session=None,
+    ) -> list[dict[str, object]]:
+        _ = db_session
+        tickets = [
+            ticket
+            for ticket in self.tickets
+            if ticket["session_id"] == session_id
+        ]
+        if active_only:
+            tickets = [
+                ticket
+                for ticket in tickets
+                if ticket["status"] == TicketStatuses.PURCHASED
+            ]
+        return sorted(tickets, key=lambda ticket: ticket["purchased_at"], reverse=True)
 
     async def get_by_id(self, ticket_id: str, *, db_session=None) -> dict[str, object] | None:
         _ = db_session
@@ -237,9 +281,12 @@ class FakeTicketRepository:
 
 
 class FakeUserRepository:
+    def __init__(self, users: list[dict[str, object]] | None = None) -> None:
+        self.users = users or []
+
     async def list_by_ids(self, user_ids: list[str]) -> list[dict[str, object]]:
-        _ = user_ids
-        return []
+        requested_ids = set(user_ids)
+        return [user for user in self.users if str(user["id"]) in requested_ids]
 
 
 async def fake_run_transaction_with_retry(callback, *, operation_name: str, **_: object):
@@ -313,20 +360,65 @@ def build_session(session_id: str = "session-1", *, start_time: datetime | None 
     }
 
 
-def build_ticket(ticket_id: str = "ticket-1") -> dict[str, object]:
+def build_ticket(
+    ticket_id: str = "ticket-1",
+    *,
+    order_id: str | None = None,
+    user_id: str = "user-1",
+    session_id: str = "session-1",
+    seat_row: int = 2,
+    seat_number: int = 5,
+    status: str = TicketStatuses.PURCHASED,
+    checked_in_at: datetime | None = None,
+    purchased_at: datetime | None = None,
+    cancelled_at: datetime | None = None,
+) -> dict[str, object]:
     now = datetime.now(tz=timezone.utc)
+    effective_purchased_at = purchased_at or now
+    effective_cancelled_at = cancelled_at
+    if status == TicketStatuses.CANCELLED and effective_cancelled_at is None:
+        effective_cancelled_at = effective_purchased_at + timedelta(minutes=5)
     return TicketRead(
         id=ticket_id,
-        user_id="user-1",
-        session_id="session-1",
-        seat_row=2,
-        seat_number=5,
+        order_id=order_id,
+        user_id=user_id,
+        session_id=session_id,
+        seat_row=seat_row,
+        seat_number=seat_number,
         price=200.0,
-        status=TicketStatuses.PURCHASED,
-        purchased_at=now,
+        status=status,
+        purchased_at=effective_purchased_at,
         updated_at=None,
-        cancelled_at=None,
+        cancelled_at=effective_cancelled_at,
+        checked_in_at=checked_in_at,
     ).model_dump(mode="python")
+
+
+def build_user_document(user_id: str = "user-1") -> dict[str, object]:
+    now = datetime.now(tz=timezone.utc)
+    return {
+        "id": user_id,
+        "name": "Regular User",
+        "email": "user@example.com",
+        "role": Roles.USER,
+        "is_active": True,
+        "created_at": now,
+        "updated_at": None,
+    }
+
+
+def build_order_document(order_id: str = "order-1") -> dict[str, object]:
+    now = datetime.now(tz=timezone.utc)
+    return {
+        "id": order_id,
+        "user_id": "user-1",
+        "session_id": "session-1",
+        "status": "partially_cancelled",
+        "total_price": 400.0,
+        "tickets_count": 2,
+        "created_at": now,
+        "updated_at": None,
+    }
 
 
 def test_movie_create_schema_accepts_localized_fields_and_normalizes_genres() -> None:
@@ -575,6 +667,105 @@ async def test_admin_service_prevents_deleting_movie_with_sessions() -> None:
         await service.delete_movie("movie-1", deleted_by=build_admin_user())
 
     assert movie_repository.deleted_movie_id is None
+
+
+@pytest.mark.asyncio
+async def test_admin_service_rejects_deactivating_movie_with_future_sessions() -> None:
+    movie_repository = FakeMovieRepository(movie=build_movie(status=MovieStatuses.ACTIVE))
+    session_repository = FakeSessionRepository(session=build_session())
+    service = AdminService(
+        movie_repository=movie_repository,
+        session_repository=session_repository,
+        ticket_repository=FakeTicketRepository(),
+        order_repository=FakeOrderRepository(),
+    )
+
+    with pytest.raises(ConflictException) as error:
+        await service.deactivate_movie("movie-1", deactivated_by=build_admin_user())
+
+    assert str(error.value) == "Movies with future scheduled sessions cannot be deactivated. Cancel or move those sessions first."
+    assert movie_repository.movie is not None
+    assert movie_repository.movie["status"] == MovieStatuses.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_admin_service_attendance_report_counts_active_checked_in_and_cancelled_tickets() -> None:
+    checked_in_at = datetime.now(tz=timezone.utc)
+    active_ticket = build_ticket(
+        "ticket-1",
+        seat_row=1,
+        seat_number=1,
+        checked_in_at=checked_in_at,
+    )
+    unchecked_ticket = build_ticket("ticket-2", seat_row=1, seat_number=2)
+    cancelled_ticket = build_ticket(
+        "ticket-3",
+        seat_row=1,
+        seat_number=3,
+        status=TicketStatuses.CANCELLED,
+    )
+    service = AdminService(
+        movie_repository=FakeMovieRepository(movie=build_movie(status=MovieStatuses.ACTIVE)),
+        session_repository=FakeSessionRepository(session=build_session()),
+        ticket_repository=FakeTicketRepository(tickets=[active_ticket, unchecked_ticket, cancelled_ticket]),
+        order_repository=FakeOrderRepository(),
+    )
+
+    report = await service.build_attendance_report(requested_by=build_admin_user())
+
+    assert report.total_sessions == 1
+    assert report.total_tickets_sold == 2
+    assert report.total_checked_in_tickets == 1
+    assert report.total_unchecked_active_tickets == 1
+    assert report.total_cancelled_tickets == 1
+    assert report.sessions[0].tickets_sold == 2
+    assert report.sessions[0].checked_in_tickets_count == 1
+    assert report.sessions[0].unchecked_active_tickets_count == 1
+    assert report.sessions[0].cancelled_tickets_count == 1
+    assert report.sessions[0].available_seats == report.sessions[0].total_seats - 2
+
+
+@pytest.mark.asyncio
+async def test_admin_service_attendance_details_exposes_cancelled_tickets_without_occupying_seats() -> None:
+    order = build_order_document()
+    active_ticket = build_ticket(
+        "ticket-1",
+        order_id=str(order["id"]),
+        seat_row=2,
+        seat_number=5,
+        checked_in_at=datetime.now(tz=timezone.utc),
+    )
+    cancelled_ticket = build_ticket(
+        "ticket-2",
+        order_id=str(order["id"]),
+        seat_row=2,
+        seat_number=6,
+        status=TicketStatuses.CANCELLED,
+    )
+    service = AdminService(
+        movie_repository=FakeMovieRepository(movie=build_movie(status=MovieStatuses.ACTIVE)),
+        session_repository=FakeSessionRepository(session=build_session()),
+        ticket_repository=FakeTicketRepository(tickets=[active_ticket, cancelled_ticket]),
+        order_repository=FakeOrderRepository(orders=[order]),
+        user_repository=FakeUserRepository(users=[build_user_document()]),
+    )
+
+    details = await service.get_attendance_session_details("session-1", requested_by=build_admin_user())
+
+    assert details.tickets_sold == 1
+    assert details.checked_in_tickets_count == 1
+    assert details.unchecked_active_tickets_count == 0
+    assert details.cancelled_tickets_count == 1
+    assert details.seat_map.available_seats == details.seat_map.total_seats - 1
+    assert len(details.occupied_tickets) == 1
+    assert details.occupied_tickets[0].seat_number == 5
+    assert details.occupied_tickets[0].user_email == "user@example.com"
+    assert details.occupied_tickets[0].order_status == "partially_cancelled"
+    assert len(details.cancelled_tickets) == 1
+    assert details.cancelled_tickets[0].seat_number == 6
+    assert next(
+        seat for seat in details.seat_map.seats if seat.row == 2 and seat.number == 6
+    ).is_available is True
 
 
 @pytest.mark.asyncio

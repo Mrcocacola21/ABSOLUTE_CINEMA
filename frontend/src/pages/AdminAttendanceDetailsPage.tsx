@@ -7,7 +7,7 @@ import { getAttendanceSessionDetailsRequest } from "@/api/admin";
 import { exportAttendanceSessionPdf } from "@/features/admin/attendancePdf";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { getIntlLocale, getLocalizedText } from "@/shared/localization";
-import { formatCurrency, formatDateTime, formatStateLabel, formatTime } from "@/shared/presentation";
+import { formatCurrency, formatStateLabel, formatTime } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
 import type { AttendanceSessionDetails, AttendanceTicketDetails, SeatAvailability } from "@/types/domain";
@@ -24,6 +24,18 @@ function buildStatusToneClass(status?: string | null): string {
   }
 
   return `admin-attendance-status-chip--${status.replace(/_/g, "-")}`;
+}
+
+function isTicketCancelled(ticket: AttendanceTicketDetails): boolean {
+  return ticket.status === "cancelled" || Boolean(ticket.cancelled_at);
+}
+
+function buildUsageToneClass(ticket: AttendanceTicketDetails): string {
+  if (isTicketCancelled(ticket)) {
+    return "admin-attendance-status-chip--cancelled";
+  }
+
+  return ticket.checked_in_at ? "admin-attendance-status-chip--used" : "admin-attendance-status-chip--not-used";
 }
 
 function formatPercent(value: number, language: string): string {
@@ -153,6 +165,44 @@ export function AdminAttendanceDetailsPage() {
   );
   const normalizedQuery = searchQuery.trim().toLowerCase();
 
+  function isTicketReadyForEntry(ticket: AttendanceTicketDetails): boolean {
+    return Boolean(
+      details &&
+        ticket.status === "purchased" &&
+        ticket.order_status !== "cancelled" &&
+        !ticket.checked_in_at &&
+        !isTicketCancelled(ticket) &&
+        details.session.status === "scheduled" &&
+        new Date(details.session.start_time).getTime() > Date.now(),
+    );
+  }
+
+  function getTicketUsageLabel(ticket: AttendanceTicketDetails): string {
+    if (isTicketCancelled(ticket)) {
+      return t("admin.reports.attendanceDetail.usage.cancelled");
+    }
+
+    return ticket.checked_in_at
+      ? t("admin.reports.attendanceDetail.usage.used")
+      : t("admin.reports.attendanceDetail.usage.notUsed");
+  }
+
+  function getTicketUsageDetail(ticket: AttendanceTicketDetails): string {
+    if (ticket.checked_in_at) {
+      return t("admin.reports.attendanceDetail.usage.checkedInAt", {
+        date: formatLongDateTime(ticket.checked_in_at, i18n.language),
+      });
+    }
+
+    if (isTicketCancelled(ticket)) {
+      return t("admin.reports.attendanceDetail.usage.cancelledDetail");
+    }
+
+    return isTicketReadyForEntry(ticket)
+      ? t("admin.reports.attendanceDetail.usage.notUsedDetail")
+      : t("admin.reports.attendanceDetail.usage.notCheckedInDetail");
+  }
+
   const visibleTickets = useMemo(() => {
     const tickets = details?.occupied_tickets ?? [];
     const filteredTickets = tickets.filter((ticket) => {
@@ -167,7 +217,10 @@ export function AdminAttendanceDetailsPage() {
         ticket.user_email ?? "",
         ticket.status,
         ticket.order_status ?? "",
+        getTicketUsageLabel(ticket),
+        getTicketUsageDetail(ticket),
         formatLongDateTime(ticket.purchased_at, i18n.language),
+        ticket.checked_in_at ? formatLongDateTime(ticket.checked_in_at, i18n.language) : "",
       ];
 
       return searchParts.join(" ").toLowerCase().includes(normalizedQuery);
@@ -188,7 +241,15 @@ export function AdminAttendanceDetailsPage() {
 
       return left.seat_row - right.seat_row;
     });
-  }, [details?.occupied_tickets, i18n.language, normalizedQuery, sortOption]);
+  }, [
+    details?.occupied_tickets,
+    details?.session.start_time,
+    details?.session.status,
+    i18n.language,
+    normalizedQuery,
+    sortOption,
+    t,
+  ]);
 
   const selectedTicket = useMemo(
     () =>
@@ -306,6 +367,8 @@ export function AdminAttendanceDetailsPage() {
     ? buildSeatKey(latestTicket.seat_row, latestTicket.seat_number)
     : "";
   const uniqueBuyerCount = new Set(details.occupied_tickets.map((ticket) => ticket.user_id)).size;
+  const usedTicketsCount = details.occupied_tickets.filter((ticket) => Boolean(ticket.checked_in_at)).length;
+  const validForEntryCount = details.occupied_tickets.filter((ticket) => isTicketReadyForEntry(ticket)).length;
   const selectedTicketBuyerName = selectedTicket?.user_name || buyerFallback;
   const latestTicketBuyerName = latestTicket?.user_name || buyerFallback;
   const sessionDateLabel = formatShortDate(details.session.start_time, i18n.language);
@@ -588,6 +651,12 @@ export function AdminAttendanceDetailsPage() {
             <span className="badge">
               {uniqueBuyerCount} {t("common.labels.users")}
             </span>
+            <span className="badge">
+              {t("admin.reports.attendanceDetail.usage.readyCount", { count: validForEntryCount })}
+            </span>
+            <span className="badge">
+              {t("admin.reports.attendanceDetail.usage.usedCount", { count: usedTicketsCount })}
+            </span>
             {selectedTicket ? <span className="badge">{selectedSeatLabel}</span> : null}
           </div>
         </div>
@@ -609,6 +678,12 @@ export function AdminAttendanceDetailsPage() {
                   <span className={`admin-attendance-status-chip ${buildStatusToneClass(selectedTicket.status)}`}>
                     {formatStateLabel(selectedTicket.status)}
                   </span>
+                  <span className={`admin-attendance-status-chip ${buildUsageToneClass(selectedTicket)}`}>
+                    {getTicketUsageLabel(selectedTicket)}
+                  </span>
+                  {selectedTicket.checked_in_at ? (
+                    <span className="badge">{getTicketUsageDetail(selectedTicket)}</span>
+                  ) : null}
                   <span
                     className={`admin-attendance-status-chip ${buildStatusToneClass(selectedTicket.order_status)}`}
                   >
@@ -710,6 +785,7 @@ export function AdminAttendanceDetailsPage() {
                   <th>{t("common.labels.users")}</th>
                   <th>{t("admin.reports.attendanceDetail.table.purchasedAt")}</th>
                   <th>{t("admin.reports.attendanceDetail.table.ticketStatus")}</th>
+                  <th>{t("admin.reports.attendanceDetail.table.entryUse")}</th>
                   <th>{t("admin.reports.attendanceDetail.table.orderStatus")}</th>
                 </tr>
               </thead>
@@ -743,6 +819,14 @@ export function AdminAttendanceDetailsPage() {
                         <span className={`admin-attendance-status-chip ${buildStatusToneClass(ticket.status)}`}>
                           {formatStateLabel(ticket.status)}
                         </span>
+                      </td>
+                      <td data-label={t("admin.reports.attendanceDetail.table.entryUse")}>
+                        <div className="admin-attendance-table__usage">
+                          <span className={`admin-attendance-status-chip ${buildUsageToneClass(ticket)}`}>
+                            {getTicketUsageLabel(ticket)}
+                          </span>
+                          <small>{getTicketUsageDetail(ticket)}</small>
+                        </div>
                       </td>
                       <td data-label={t("admin.reports.attendanceDetail.table.orderStatus")}>
                         <span

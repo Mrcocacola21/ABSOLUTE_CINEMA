@@ -16,7 +16,10 @@ import type {
 
 type AttendanceStatusFilter = "all" | "scheduled" | "completed" | "cancelled";
 type AttendanceSortOption = "latest" | "highest" | "lowest";
-type BookingSortOption = "latest" | "oldest";
+type BookingSortOption = "latest" | "oldest" | "mostTickets" | "highestValue";
+type BookingOrderStatusFilter = "all" | "completed" | "partially_cancelled" | "cancelled";
+type BookingTicketStateFilter = "all" | "active" | "unused" | "used" | "cancelled";
+type BookingDateMode = "session" | "purchase";
 type ReportTabId = "attendance" | "bookings" | "accounts";
 
 interface ReportMetricCard {
@@ -27,9 +30,16 @@ interface ReportMetricCard {
 
 interface BookingSessionOption {
   sessionId: string;
+  movieId: string | null;
   movieTitle: LocalizedText;
   startTime: string;
   status: string;
+  ticketCount: number;
+}
+
+interface BookingMovieOption {
+  movieId: string;
+  movieTitle: LocalizedText;
   ticketCount: number;
 }
 
@@ -39,6 +49,7 @@ interface BookingOrderGroup {
   userId: string;
   customerName: string | null;
   customerEmail: string | null;
+  movieId: string;
   movieTitle: LocalizedText;
   sessionId: string;
   sessionStartTime: string;
@@ -55,7 +66,9 @@ interface BookingOrderGroup {
 
 const attendanceStatusFilters: AttendanceStatusFilter[] = ["all", "scheduled", "completed", "cancelled"];
 const attendanceSortOptions: AttendanceSortOption[] = ["latest", "highest", "lowest"];
-const bookingSortOptions: BookingSortOption[] = ["latest", "oldest"];
+const bookingSortOptions: BookingSortOption[] = ["latest", "oldest", "mostTickets", "highestValue"];
+const bookingOrderStatusFilters: BookingOrderStatusFilter[] = ["all", "completed", "partially_cancelled", "cancelled"];
+const bookingTicketStateFilters: BookingTicketStateFilter[] = ["all", "active", "unused", "used", "cancelled"];
 
 interface AttendancePanelProps {
   report: AttendanceReport | null;
@@ -97,6 +110,52 @@ function getShortOrderId(orderId: string): string {
   return orderId.slice(-8).toUpperCase();
 }
 
+function getLocalDateInputValue(value: string): string {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function isTicketCancelled(ticket: TicketListItem): boolean {
+  return ticket.status === "cancelled" || Boolean(ticket.cancelled_at);
+}
+
+function isTicketUsed(ticket: TicketListItem): boolean {
+  return Boolean(ticket.checked_in_at);
+}
+
+function matchesBookingTicketState(ticket: TicketListItem, state: BookingTicketStateFilter): boolean {
+  if (state === "all") {
+    return true;
+  }
+
+  if (state === "cancelled") {
+    return isTicketCancelled(ticket);
+  }
+
+  if (state === "used") {
+    return !isTicketCancelled(ticket) && isTicketUsed(ticket);
+  }
+
+  if (state === "unused") {
+    return !isTicketCancelled(ticket) && !isTicketUsed(ticket);
+  }
+
+  return ticket.status === "purchased" && !isTicketCancelled(ticket);
+}
+
+function matchesSearchTerms(searchableValue: string, terms: string[]): boolean {
+  if (terms.length === 0) {
+    return true;
+  }
+
+  const normalizedValue = searchableValue.toLowerCase();
+  return terms.every((term) => normalizedValue.includes(term));
+}
+
 function MetricGrid({
   cards,
   className,
@@ -130,7 +189,12 @@ export function AttendancePanel({
   const [sortOption, setSortOption] = useState<AttendanceSortOption>("latest");
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<ReportTabId>("attendance");
+  const [bookingMovieFilter, setBookingMovieFilter] = useState("all");
   const [bookingSessionFilter, setBookingSessionFilter] = useState("all");
+  const [bookingOrderStatusFilter, setBookingOrderStatusFilter] = useState<BookingOrderStatusFilter>("all");
+  const [bookingTicketStateFilter, setBookingTicketStateFilter] = useState<BookingTicketStateFilter>("all");
+  const [bookingDateMode, setBookingDateMode] = useState<BookingDateMode>("session");
+  const [bookingDateFilter, setBookingDateFilter] = useState("");
   const [bookingSearchQuery, setBookingSearchQuery] = useState("");
   const [bookingSortOption, setBookingSortOption] = useState<BookingSortOption>("latest");
 
@@ -216,6 +280,7 @@ export function AttendancePanel({
   for (const session of sessions) {
     bookingSessionsMap.set(session.session_id, {
       sessionId: session.session_id,
+      movieId: null,
       movieTitle: session.movie_title,
       startTime: session.start_time,
       status: session.status,
@@ -226,12 +291,14 @@ export function AttendancePanel({
   for (const ticket of tickets) {
     const existing = bookingSessionsMap.get(ticket.session_id);
     if (existing) {
+      existing.movieId = existing.movieId ?? ticket.movie_id;
       existing.ticketCount += 1;
       continue;
     }
 
     bookingSessionsMap.set(ticket.session_id, {
       sessionId: ticket.session_id,
+      movieId: ticket.movie_id,
       movieTitle: ticket.movie_title,
       startTime: ticket.session_start_time,
       status: ticket.session_status,
@@ -239,13 +306,38 @@ export function AttendancePanel({
     });
   }
 
+  const bookingMoviesMap = new Map<string, BookingMovieOption>();
+  for (const ticket of tickets) {
+    const existing = bookingMoviesMap.get(ticket.movie_id);
+    if (existing) {
+      existing.ticketCount += 1;
+      continue;
+    }
+
+    bookingMoviesMap.set(ticket.movie_id, {
+      movieId: ticket.movie_id,
+      movieTitle: ticket.movie_title,
+      ticketCount: 1,
+    });
+  }
+  const bookingMovieOptions = [...bookingMoviesMap.values()].sort((left, right) =>
+    getLocalizedText(left.movieTitle, i18n.language).localeCompare(getLocalizedText(right.movieTitle, i18n.language)),
+  );
   const bookingSessionOptions = [...bookingSessionsMap.values()].sort(
     (left, right) => new Date(right.startTime).getTime() - new Date(left.startTime).getTime(),
   );
+  const filteredBookingSessionOptions =
+    bookingMovieFilter === "all"
+      ? bookingSessionOptions
+      : bookingSessionOptions.filter((session) => session.movieId === bookingMovieFilter);
   const selectedBookingSession =
     bookingSessionFilter === "all"
       ? null
       : bookingSessionOptions.find((session) => session.sessionId === bookingSessionFilter) ?? null;
+  const selectedBookingMovie =
+    bookingMovieFilter === "all"
+      ? null
+      : bookingMovieOptions.find((movie) => movie.movieId === bookingMovieFilter) ?? null;
   const bookingOrdersMap = new Map<string, BookingOrderGroup>();
 
   for (const ticket of tickets) {
@@ -270,6 +362,7 @@ export function AttendancePanel({
       userId: ticket.user_id,
       customerName: ticket.user_name ?? null,
       customerEmail: ticket.user_email ?? null,
+      movieId: ticket.movie_id,
       movieTitle: ticket.movie_title,
       sessionId: ticket.session_id,
       sessionStartTime: ticket.session_start_time,
@@ -300,14 +393,41 @@ export function AttendancePanel({
       tickets: sortedTickets,
     };
   });
-  const normalizedBookingSearchQuery = bookingSearchQuery.trim().toLowerCase();
+  const normalizedBookingSearchTerms = bookingSearchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const getTicketsInCurrentBookingView = (order: BookingOrderGroup): TicketListItem[] =>
+    bookingTicketStateFilter === "all"
+      ? order.tickets
+      : order.tickets.filter((ticket) => matchesBookingTicketState(ticket, bookingTicketStateFilter));
   const filteredBookingOrders = bookingOrders.filter((order) => {
+    if (bookingMovieFilter !== "all" && order.movieId !== bookingMovieFilter) {
+      return false;
+    }
+
     if (bookingSessionFilter !== "all" && order.sessionId !== bookingSessionFilter) {
       return false;
     }
 
-    if (!normalizedBookingSearchQuery) {
-      return true;
+    if (bookingOrderStatusFilter !== "all" && order.orderStatus !== bookingOrderStatusFilter) {
+      return false;
+    }
+
+    if (
+      bookingTicketStateFilter !== "all" &&
+      !order.tickets.some((ticket) => matchesBookingTicketState(ticket, bookingTicketStateFilter))
+    ) {
+      return false;
+    }
+
+    if (bookingDateFilter) {
+      const matchesDate =
+        bookingDateMode === "session"
+          ? getLocalDateInputValue(order.sessionStartTime) === bookingDateFilter
+          : order.tickets.some((ticket) => getLocalDateInputValue(ticket.purchased_at) === bookingDateFilter) ||
+            getLocalDateInputValue(order.orderCreatedAt) === bookingDateFilter;
+
+      if (!matchesDate) {
+        return false;
+      }
     }
 
     const sessionLabel = getBookingSessionLabel(order.movieTitle, order.sessionStartTime, i18n.language);
@@ -316,26 +436,54 @@ export function AttendancePanel({
         [
           ticket.id,
           `${ticket.seat_row}-${ticket.seat_number}`,
+          `${t("common.labels.row")} ${ticket.seat_row}`,
+          `${t("common.labels.seat")} ${ticket.seat_number}`,
           ticket.status,
+          formatStateLabel(ticket.status),
+          ticket.price,
+          formatCurrency(ticket.price, i18n.language),
+          ticket.purchased_at,
+          formatDateTime(ticket.purchased_at, i18n.language),
           ticket.cancelled_at ?? "",
+          ticket.cancelled_at ? formatDateTime(ticket.cancelled_at, i18n.language) : "",
           ticket.checked_in_at ?? "",
+          ticket.checked_in_at ? formatDateTime(ticket.checked_in_at, i18n.language) : "",
+          ticket.checked_in_at ? t("admin.reports.bookings.ticketCheckedIn", { defaultValue: "Checked in" }) : "",
         ].join(" "),
       )
       .join(" ");
+    const orderStatusLabel = order.orderStatus ? formatStateLabel(order.orderStatus) : "";
+    const sessionStatusLabel = formatStateLabel(order.sessionStatus);
     const searchableParts = [
       order.orderId,
       getShortOrderId(order.orderId),
+      order.validationToken ?? "",
       order.orderStatus ?? "",
+      orderStatusLabel,
       getLocalizedText(order.movieTitle, i18n.language),
       sessionLabel,
       order.sessionStartTime,
+      order.sessionEndTime,
+      formatDateTime(order.sessionStartTime, i18n.language),
+      formatDateTime(order.sessionEndTime, i18n.language),
+      order.sessionStatus,
+      sessionStatusLabel,
       order.customerName ?? "",
       order.customerEmail ?? "",
       order.userId,
+      order.orderCreatedAt,
+      formatDateTime(order.orderCreatedAt, i18n.language),
+      order.firstPurchasedAt,
+      formatDateTime(order.firstPurchasedAt, i18n.language),
+      order.latestPurchasedAt,
+      formatDateTime(order.latestPurchasedAt, i18n.language),
+      order.orderTotalPrice,
+      formatCurrency(order.orderTotalPrice, i18n.language),
+      order.orderTicketsCount,
       ticketSearchText,
     ];
 
-    return searchableParts.join(" ").toLowerCase().includes(normalizedBookingSearchQuery);
+    return matchesSearchTerms(searchableParts.join(" "), normalizedBookingSearchTerms);
   });
 
   const visibleBookingOrders = [...filteredBookingOrders].sort((left, right) => {
@@ -343,9 +491,26 @@ export function AttendancePanel({
       return new Date(left.orderCreatedAt).getTime() - new Date(right.orderCreatedAt).getTime();
     }
 
+    if (bookingSortOption === "mostTickets") {
+      return (
+        getTicketsInCurrentBookingView(right).length - getTicketsInCurrentBookingView(left).length ||
+        new Date(right.orderCreatedAt).getTime() - new Date(left.orderCreatedAt).getTime()
+      );
+    }
+
+    if (bookingSortOption === "highestValue") {
+      return (
+        right.orderTotalPrice - left.orderTotalPrice ||
+        new Date(right.orderCreatedAt).getTime() - new Date(left.orderCreatedAt).getTime()
+      );
+    }
+
     return new Date(right.orderCreatedAt).getTime() - new Date(left.orderCreatedAt).getTime();
   });
-  const visibleBookingTicketsCount = visibleBookingOrders.reduce((sum, order) => sum + order.tickets.length, 0);
+  const visibleBookingTicketsCount = visibleBookingOrders.reduce(
+    (sum, order) => sum + getTicketsInCurrentBookingView(order).length,
+    0,
+  );
   const visibleBookingSessionsCount = new Set(visibleBookingOrders.map((order) => order.sessionId)).size;
   const visibleBookingBuyersCount = new Set(visibleBookingOrders.map((order) => order.userId)).size;
 
@@ -437,6 +602,17 @@ export function AttendancePanel({
       count: users.length,
     },
   ];
+
+  function resetBookingFilters() {
+    setBookingMovieFilter("all");
+    setBookingSessionFilter("all");
+    setBookingOrderStatusFilter("all");
+    setBookingTicketStateFilter("all");
+    setBookingDateMode("session");
+    setBookingDateFilter("");
+    setBookingSearchQuery("");
+    setBookingSortOption("latest");
+  }
 
   function renderAttendanceTab() {
     if (!report && isLoading) {
@@ -709,7 +885,44 @@ export function AttendancePanel({
             i18n.language,
           ),
         })
-      : t("admin.reports.bookings.allSessionsHelper");
+      : selectedBookingMovie
+        ? t("admin.reports.bookings.selectedMovieHelper", {
+            movie: getLocalizedText(selectedBookingMovie.movieTitle, i18n.language),
+          })
+        : t("admin.reports.bookings.allSessionsHelper");
+    const activeBookingFilterLabels = [
+      bookingSearchQuery.trim()
+        ? t("admin.reports.bookings.activeFilters.search", { query: bookingSearchQuery.trim() })
+        : "",
+      selectedBookingMovie
+        ? t("admin.reports.bookings.activeFilters.movie", {
+            movie: getLocalizedText(selectedBookingMovie.movieTitle, i18n.language),
+          })
+        : "",
+      selectedBookingSession
+        ? t("admin.reports.bookings.activeFilters.session", {
+            session: getBookingSessionLabel(
+              selectedBookingSession.movieTitle,
+              selectedBookingSession.startTime,
+              i18n.language,
+            ),
+          })
+        : "",
+      bookingOrderStatusFilter !== "all"
+        ? t("admin.reports.bookings.activeFilters.orderStatus", {
+            status: formatStateLabel(bookingOrderStatusFilter),
+          })
+        : "",
+      bookingTicketStateFilter !== "all"
+        ? t(`admin.reports.bookings.filters.ticketState.${bookingTicketStateFilter}`)
+        : "",
+      bookingDateFilter
+        ? t("admin.reports.bookings.activeFilters.date", {
+            date: bookingDateFilter,
+            mode: t(`admin.reports.bookings.filters.dateMode.${bookingDateMode}`),
+          })
+        : "",
+    ].filter(Boolean);
 
     return (
       <section className="card admin-report-panel">
@@ -754,15 +967,44 @@ export function AttendancePanel({
           </div>
 
           <div className="admin-report-toolbar admin-report-toolbar--bookings">
-            <label className="field field--search">
+            <label className="field field--search admin-report-bookings-search">
               <span>{t("admin.reports.bookings.filters.searchLabel")}</span>
-              <input
-                type="search"
-                value={bookingSearchQuery}
-                placeholder={t("admin.reports.bookings.filters.searchPlaceholder")}
-                onChange={(event) => setBookingSearchQuery(event.target.value)}
-              />
+              <div className="admin-report-search-control">
+                <input
+                  type="search"
+                  value={bookingSearchQuery}
+                  placeholder={t("admin.reports.bookings.filters.searchPlaceholder")}
+                  onChange={(event) => setBookingSearchQuery(event.target.value)}
+                />
+                {bookingSearchQuery ? (
+                  <button
+                    className="admin-report-search-clear"
+                    type="button"
+                    onClick={() => setBookingSearchQuery("")}
+                  >
+                    {t("admin.reports.attendance.searchClear")}
+                  </button>
+                ) : null}
+              </div>
               <p className="field__hint">{t("admin.reports.bookings.queryHint")}</p>
+            </label>
+
+            <label className="field">
+              <span>{t("admin.reports.bookings.filters.movieLabel")}</span>
+              <select
+                value={bookingMovieFilter}
+                onChange={(event) => {
+                  setBookingMovieFilter(event.target.value);
+                  setBookingSessionFilter("all");
+                }}
+              >
+                <option value="all">{t("admin.reports.bookings.filters.allMovies")}</option>
+                {bookingMovieOptions.map((movie) => (
+                  <option key={movie.movieId} value={movie.movieId}>
+                    {getLocalizedText(movie.movieTitle, i18n.language)} ({movie.ticketCount})
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label className="field">
@@ -772,12 +1014,65 @@ export function AttendancePanel({
                 onChange={(event) => setBookingSessionFilter(event.target.value)}
               >
                 <option value="all">{t("admin.reports.bookings.filters.allSessions")}</option>
-                {bookingSessionOptions.map((session) => (
+                {filteredBookingSessionOptions.map((session) => (
                   <option key={session.sessionId} value={session.sessionId}>
-                    {getBookingSessionLabel(session.movieTitle, session.startTime, i18n.language)}
+                    {getBookingSessionLabel(session.movieTitle, session.startTime, i18n.language)} ({session.ticketCount})
                   </option>
                 ))}
               </select>
+            </label>
+
+            <label className="field">
+              <span>{t("admin.reports.bookings.filters.orderStatusLabel")}</span>
+              <select
+                value={bookingOrderStatusFilter}
+                onChange={(event) => setBookingOrderStatusFilter(event.target.value as BookingOrderStatusFilter)}
+              >
+                {bookingOrderStatusFilters.map((filter) => (
+                  <option key={filter} value={filter}>
+                    {filter === "all"
+                      ? t("admin.reports.bookings.filters.allOrderStatuses")
+                      : formatStateLabel(filter)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="admin-report-toolbar__group admin-report-toolbar__group--wide">
+              <span className="admin-report-toolbar__label">{t("admin.reports.bookings.filters.ticketStateLabel")}</span>
+              <div className="admin-report-toggle-group">
+                {bookingTicketStateFilters.map((filter) => (
+                  <button
+                    key={filter}
+                    className={`admin-report-toggle ${bookingTicketStateFilter === filter ? "is-active" : ""}`}
+                    type="button"
+                    aria-pressed={bookingTicketStateFilter === filter}
+                    onClick={() => setBookingTicketStateFilter(filter)}
+                  >
+                    {t(`admin.reports.bookings.filters.ticketState.${filter}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <label className="field">
+              <span>{t("admin.reports.bookings.filters.dateModeLabel")}</span>
+              <select
+                value={bookingDateMode}
+                onChange={(event) => setBookingDateMode(event.target.value as BookingDateMode)}
+              >
+                <option value="session">{t("admin.reports.bookings.filters.dateMode.session")}</option>
+                <option value="purchase">{t("admin.reports.bookings.filters.dateMode.purchase")}</option>
+              </select>
+            </label>
+
+            <label className="field">
+              <span>{t("admin.reports.bookings.filters.dateLabel")}</span>
+              <input
+                type="date"
+                value={bookingDateFilter}
+                onChange={(event) => setBookingDateFilter(event.target.value)}
+              />
             </label>
 
             <label className="field">
@@ -798,15 +1093,24 @@ export function AttendancePanel({
               <button
                 className="button--ghost"
                 type="button"
-                onClick={() => {
-                  setBookingSessionFilter("all");
-                  setBookingSearchQuery("");
-                  setBookingSortOption("latest");
-                }}
+                onClick={resetBookingFilters}
               >
                 {t("common.actions.resetFilters")}
               </button>
             </div>
+          </div>
+
+          <div className="admin-report-filter-context">
+            <span>{t("admin.reports.bookings.activeFilters.label")}</span>
+            {activeBookingFilterLabels.length > 0 ? (
+              <div className="admin-report-filter-context__chips">
+                {activeBookingFilterLabels.map((label) => (
+                  <span key={label} className="badge">{label}</span>
+                ))}
+              </div>
+            ) : (
+              <p className="muted">{t("admin.reports.bookings.activeFilters.none")}</p>
+            )}
           </div>
         </section>
 
@@ -819,7 +1123,10 @@ export function AttendancePanel({
           </section>
         ) : visibleBookingOrders.length > 0 ? (
           <div className="admin-booking-order-list">
-            {visibleBookingOrders.map((order) => (
+            {visibleBookingOrders.map((order) => {
+              const orderTicketsInView = getTicketsInCurrentBookingView(order);
+
+              return (
               <article key={order.orderId} className="admin-booking-order-card">
                 <div className="admin-booking-order-card__header">
                   <div className="admin-booking-order-card__identity">
@@ -843,10 +1150,17 @@ export function AttendancePanel({
                     </span>
                     <span className="badge">
                       {t("admin.reports.bookings.ticketCount", {
-                        count: order.orderTicketsCount,
+                        count: orderTicketsInView.length,
                         defaultValue: "{{count}} tickets",
                       })}
                     </span>
+                    {bookingTicketStateFilter !== "all" ? (
+                      <span className="badge">
+                        {t("admin.reports.bookings.matchingTickets", {
+                          count: orderTicketsInView.length,
+                        })}
+                      </span>
+                    ) : null}
                     {order.validationToken ? (
                       <Link
                         className="button--ghost admin-booking-order-card__details"
@@ -879,7 +1193,7 @@ export function AttendancePanel({
                     <strong>{formatCurrency(order.orderTotalPrice, i18n.language)}</strong>
                     <p>
                       {t("admin.reports.bookings.sessionTickets", {
-                        count: order.tickets.length,
+                        count: orderTicketsInView.length,
                         defaultValue: "{{count}} tickets in this view",
                       })}
                     </p>
@@ -887,7 +1201,7 @@ export function AttendancePanel({
                 </div>
 
                 <div className="admin-booking-ticket-list">
-                  {order.tickets.map((ticket) => {
+                  {orderTicketsInView.map((ticket) => {
                     const ticketStateLabel = ticket.checked_in_at
                       ? t("admin.reports.bookings.ticketCheckedIn", { defaultValue: "Checked in" })
                       : ticket.cancelled_at
@@ -939,7 +1253,8 @@ export function AttendancePanel({
                   })}
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <section className="empty-state empty-state--panel">
@@ -948,11 +1263,7 @@ export function AttendancePanel({
             <button
               className="button--ghost"
               type="button"
-              onClick={() => {
-                setBookingSessionFilter("all");
-                setBookingSearchQuery("");
-                setBookingSortOption("latest");
-              }}
+              onClick={resetBookingFilters}
             >
               {t("common.actions.resetFilters")}
             </button>

@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from app.builders.attendance_report import AttendanceReportBuilder
 from app.commands.session_cancellation import SessionCancellationCommand
 from app.core.config import get_settings
-from app.core.constants import MovieStatuses, SessionStatuses
+from app.core.constants import MovieStatuses, SessionStatuses, TicketStatuses
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
 from app.db.transactions import run_transaction_with_retry
 from app.factories.schedule_factory import SessionDetailsFactory
@@ -484,15 +484,33 @@ class AdminService:
             movie = movie_map.get(session.movie_id)
             if movie is None:
                 continue
-            tickets_sold = await self.ticket_repository.count_by_session(session.id, active_only=True)
+            ticket_documents = await self.ticket_repository.list_by_session(session.id, active_only=False)
+            active_tickets = [
+                ticket
+                for ticket in ticket_documents
+                if ticket["status"] == TicketStatuses.PURCHASED
+            ]
+            occupied_seats = {
+                (int(ticket["seat_row"]), int(ticket["seat_number"]))
+                for ticket in active_tickets
+            }
+            checked_in_tickets_count = sum(
+                1 for ticket in active_tickets if ticket.get("checked_in_at") is not None
+            )
+            tickets_sold = len(active_tickets)
             summary = AttendanceSessionSummary(
                 session_id=session.id,
                 movie_title=movie.title,
                 start_time=session.start_time,
                 status=session.status,
                 tickets_sold=tickets_sold,
+                checked_in_tickets_count=checked_in_tickets_count,
+                unchecked_active_tickets_count=max(tickets_sold - checked_in_tickets_count, 0),
+                cancelled_tickets_count=sum(
+                    1 for ticket in ticket_documents if ticket["status"] == TicketStatuses.CANCELLED
+                ),
                 total_seats=session.total_seats,
-                available_seats=session.available_seats,
+                available_seats=max(session.total_seats - len(occupied_seats), 0),
                 attendance_rate=(tickets_sold / session.total_seats) if session.total_seats else 0,
             )
             builder.add_session(summary)
@@ -515,10 +533,20 @@ class AdminService:
         session = SessionRead.model_validate(session_document)
         movie = await self._get_movie_or_not_found(session.movie_id)
 
-        ticket_documents = await self.ticket_repository.list_by_session(session_id, active_only=True)
+        ticket_documents = await self.ticket_repository.list_by_session(session_id, active_only=False)
+        active_ticket_documents = [
+            ticket
+            for ticket in ticket_documents
+            if ticket["status"] == TicketStatuses.PURCHASED
+        ]
+        cancelled_ticket_documents = [
+            ticket
+            for ticket in ticket_documents
+            if ticket["status"] == TicketStatuses.CANCELLED
+        ]
         occupied_seats = {
             (int(ticket["seat_row"]), int(ticket["seat_number"]))
-            for ticket in ticket_documents
+            for ticket in active_ticket_documents
         }
         derived_available_seats = max(session.total_seats - len(occupied_seats), 0)
         session_details = SessionDetailsFactory.build(
@@ -540,35 +568,64 @@ class AdminService:
         user_map = {str(user["id"]): user for user in user_documents}
         order_map = {str(order["id"]): order for order in order_documents}
 
-        occupied_tickets = [
-            AttendanceTicketDetailsRead(
-                **ticket,
-                user_name=str(user_map[ticket["user_id"]]["name"]) if ticket["user_id"] in user_map else None,
-                user_email=str(user_map[ticket["user_id"]]["email"]) if ticket["user_id"] in user_map else None,
-                order_status=(
-                    str(order_map[ticket["order_id"]]["status"])
-                    if ticket.get("order_id") and ticket["order_id"] in order_map
-                    else None
-                ),
-            )
-            for ticket in sorted(
-                ticket_documents,
-                key=lambda document: (
-                    int(document["seat_row"]),
-                    int(document["seat_number"]),
-                    document["purchased_at"],
-                ),
-            )
-        ]
+        occupied_tickets = self._build_attendance_ticket_details(
+            active_ticket_documents,
+            user_map=user_map,
+            order_map=order_map,
+        )
+        cancelled_tickets = self._build_attendance_ticket_details(
+            cancelled_ticket_documents,
+            user_map=user_map,
+            order_map=order_map,
+        )
+        checked_in_tickets_count = sum(
+            1 for ticket in occupied_tickets if ticket.checked_in_at is not None
+        )
 
         return AttendanceSessionDetailsRead(
             generated_at=now,
             session=session_details,
             seat_map=seat_map,
             tickets_sold=len(occupied_tickets),
+            checked_in_tickets_count=checked_in_tickets_count,
+            unchecked_active_tickets_count=max(len(occupied_tickets) - checked_in_tickets_count, 0),
+            cancelled_tickets_count=len(cancelled_tickets),
             attendance_rate=(len(occupied_tickets) / session.total_seats) if session.total_seats else 0,
             occupied_tickets=occupied_tickets,
+            cancelled_tickets=cancelled_tickets,
         )
+
+    def _build_attendance_ticket_details(
+        self,
+        ticket_documents: list[dict[str, object]],
+        *,
+        user_map: dict[str, dict[str, object]],
+        order_map: dict[str, dict[str, object]],
+    ) -> list[AttendanceTicketDetailsRead]:
+        """Build staff-facing ticket rows enriched with safe user and order context."""
+        return [
+            AttendanceTicketDetailsRead(
+                **ticket,
+                user_name=str(user["name"]) if user is not None else None,
+                user_email=str(user["email"]) if user is not None else None,
+                order_status=str(order["status"]) if order is not None else None,
+            )
+            for ticket, user, order in (
+                (
+                    ticket,
+                    user_map.get(str(ticket["user_id"])),
+                    order_map.get(str(ticket["order_id"])) if ticket.get("order_id") else None,
+                )
+                for ticket in sorted(
+                    ticket_documents,
+                    key=lambda document: (
+                        int(document["seat_row"]),
+                        int(document["seat_number"]),
+                        document["purchased_at"],
+                    ),
+                )
+            )
+        ]
 
     def _validate_start_time(self, start_time: datetime) -> None:
         settings = get_settings()

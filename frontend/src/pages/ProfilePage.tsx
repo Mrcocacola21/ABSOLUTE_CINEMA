@@ -22,6 +22,8 @@ interface ProfileFormState {
   current_password: string;
 }
 
+type OrdersTab = "active" | "history";
+
 const emptySensitiveFields = {
   password: "",
   current_password: "",
@@ -39,6 +41,14 @@ function getInitials(value: string): string {
     .join("");
 }
 
+function isTicketUsable(ticket: OrderTicket): boolean {
+  return ticket.valid_for_entry && ticket.status !== "cancelled" && !ticket.cancelled_at && !ticket.checked_in_at;
+}
+
+function getOrderUsableTickets(order: Order): OrderTicket[] {
+  return order.tickets.filter(isTicketUsable);
+}
+
 export function ProfilePage() {
   const { t, i18n } = useTranslation();
   const { currentUser, isAuthLoading, logout, refreshCurrentUser } = useAuth();
@@ -53,6 +63,7 @@ export function ProfilePage() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isDeactivatingAccount, setIsDeactivatingAccount] = useState(false);
   const [cancellingTicketId, setCancellingTicketId] = useState<string | null>(null);
+  const [activeOrdersTab, setActiveOrdersTab] = useState<OrdersTab>("active");
   const [feedback, setFeedback] = useState<{
     tone: "success" | "error" | "info";
     title?: string;
@@ -243,7 +254,13 @@ export function ProfilePage() {
   const accountRole = formatStateLabel(currentUser.role);
   const profileInitials = getInitials(currentUser.name);
   const totalTicketsCount = orders.reduce((sum, order) => sum + order.tickets_count, 0);
-  const activeTicketsCount = orders.reduce((sum, order) => sum + order.active_tickets_count, 0);
+  const usableTicketsCount = orders.reduce((sum, order) => sum + getOrderUsableTickets(order).length, 0);
+  const activeOrders = orders.filter((order) => getOrderUsableTickets(order).length > 0);
+  const visibleOrders = activeOrdersTab === "active" ? activeOrders : orders;
+  const visibleTicketsCount = visibleOrders.reduce(
+    (sum, order) => sum + (activeOrdersTab === "active" ? getOrderUsableTickets(order).length : order.tickets.length),
+    0,
+  );
 
   return (
     <div className="profile-page">
@@ -409,13 +426,42 @@ export function ProfilePage() {
               {!isOrdersLoading && orders.length > 0 ? (
                 <span className="badge">
                   {t("profile.orders.activeSummary", {
-                    active: activeTicketsCount,
+                    active: usableTicketsCount,
                     total: totalTicketsCount,
                   })}
                 </span>
               ) : null}
             </div>
           </div>
+
+          {!isOrdersLoading && !ordersErrorMessage ? (
+            <div className="profile-orders__tabs" role="tablist" aria-label={t("profile.orders.tabs.label")}>
+              <button
+                id="profile-orders-tab-active"
+                className={`profile-orders__tab${activeOrdersTab === "active" ? " is-active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={activeOrdersTab === "active"}
+                aria-controls="profile-orders-panel"
+                onClick={() => setActiveOrdersTab("active")}
+              >
+                <span>{t("profile.orders.tabs.active")}</span>
+                <strong>{usableTicketsCount}</strong>
+              </button>
+              <button
+                id="profile-orders-tab-history"
+                className={`profile-orders__tab${activeOrdersTab === "history" ? " is-active" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={activeOrdersTab === "history"}
+                aria-controls="profile-orders-panel"
+                onClick={() => setActiveOrdersTab("history")}
+              >
+                <span>{t("profile.orders.tabs.history")}</span>
+                <strong>{totalTicketsCount}</strong>
+              </button>
+            </div>
+          ) : null}
 
           {isOrdersLoading ? (
             <section className="profile-orders__state profile-orders__state--loading" aria-busy="true">
@@ -439,13 +485,32 @@ export function ProfilePage() {
             </section>
           ) : null}
 
-          {!isOrdersLoading && !ordersErrorMessage && orders.length === 0 ? (
-            <section className="profile-orders__empty">
-              <span className="badge">{t("profile.orders.title")}</span>
+          {!isOrdersLoading && !ordersErrorMessage && visibleOrders.length === 0 ? (
+            <section
+              id="profile-orders-panel"
+              className="profile-orders__empty"
+              role="tabpanel"
+              aria-labelledby={
+                activeOrdersTab === "active" ? "profile-orders-tab-active" : "profile-orders-tab-history"
+              }
+            >
+              <span className="badge">
+                {activeOrdersTab === "active"
+                  ? t("profile.orders.tabs.active")
+                  : t("profile.orders.tabs.history")}
+              </span>
 
               <div className="profile-orders__empty-copy">
-                <h3 className="section-title">{t("profile.orders.emptyTitle")}</h3>
-                <p>{t("profile.orders.emptyText")}</p>
+                <h3 className="section-title">
+                  {activeOrdersTab === "active"
+                    ? t("profile.orders.emptyActiveTitle")
+                    : t("profile.orders.emptyHistoryTitle")}
+                </h3>
+                <p>
+                  {activeOrdersTab === "active"
+                    ? t("profile.orders.emptyActiveText")
+                    : t("profile.orders.emptyHistoryText")}
+                </p>
               </div>
 
               <Link to="/schedule" className="button">
@@ -454,10 +519,37 @@ export function ProfilePage() {
             </section>
           ) : null}
 
-          {!isOrdersLoading && !ordersErrorMessage && orders.length > 0 ? (
-            <div className="profile-orders__list">
-              {orders.map((order) => {
+          {!isOrdersLoading && !ordersErrorMessage && visibleOrders.length > 0 ? (
+            <div
+              id="profile-orders-panel"
+              className="profile-orders__list"
+              role="tabpanel"
+              aria-labelledby={
+                activeOrdersTab === "active" ? "profile-orders-tab-active" : "profile-orders-tab-history"
+              }
+            >
+              <p className="profile-orders__tab-summary">
+                {activeOrdersTab === "active"
+                  ? t("profile.orders.activeTabSummary", {
+                      orders: visibleOrders.length,
+                      tickets: visibleTicketsCount,
+                    })
+                  : t("profile.orders.historyTabSummary", {
+                      orders: visibleOrders.length,
+                      tickets: visibleTicketsCount,
+                    })}
+              </p>
+
+              {visibleOrders.map((order) => {
                 const movieTitle = getLocalizedText(order.movie_title, i18n.language);
+                const ticketsToShow = activeOrdersTab === "active" ? getOrderUsableTickets(order) : order.tickets;
+                const usableTicketsInOrder = getOrderUsableTickets(order).length;
+                const entrySummary =
+                  usableTicketsInOrder > 0
+                    ? t("profile.orders.usableSummary", { count: usableTicketsInOrder })
+                    : order.checked_in_tickets_count > 0
+                      ? t("profile.orders.usedSummary", { count: order.checked_in_tickets_count })
+                      : t("profile.orders.usableSummary", { count: usableTicketsInOrder });
 
                 return (
                   <article key={order.id} className="card order-history__order profile-order-card">
@@ -485,13 +577,12 @@ export function ProfilePage() {
                         <div className="order-history__meta">
                           <span className="badge">{t("profile.orders.shortId", { id: order.id.slice(-6) })}</span>
                           <span className="badge">
-                            {t("profile.orders.ticketsCount", { count: order.tickets_count })}
+                            {t("profile.orders.ticketsCount", {
+                              count: activeOrdersTab === "active" ? ticketsToShow.length : order.tickets_count,
+                            })}
                           </span>
                           <span className="badge">
-                            {t("profile.orders.activeSummary", {
-                              active: order.active_tickets_count,
-                              total: order.tickets_count,
-                            })}
+                            {entrySummary}
                           </span>
                           {order.age_rating ? <span className="badge">{order.age_rating}</span> : null}
                         </div>
@@ -513,7 +604,7 @@ export function ProfilePage() {
                     </div>
 
                     <div className="order-history__tickets">
-                      {order.tickets.map((ticket) => (
+                      {ticketsToShow.map((ticket) => (
                         <div key={ticket.id} className="order-history__ticket profile-order-ticket">
                           <div className="order-history__ticket-copy">
                             <strong>
@@ -528,11 +619,19 @@ export function ProfilePage() {
                                     date: formatDateTime(ticket.cancelled_at, i18n.language),
                                   })}`
                                 : ""}
+                              {ticket.checked_in_at
+                                ? ` | ${t("profile.orders.checkedInAt", {
+                                    date: formatDateTime(ticket.checked_in_at, i18n.language),
+                                  })}`
+                                : ""}
                             </p>
                           </div>
 
                           <div className="profile-order-ticket__meta">
                             <span className="badge">{formatStateLabel(ticket.status)}</span>
+                            {ticket.valid_for_entry ? (
+                              <span className="badge badge--active">{t("profile.orders.validForEntry")}</span>
+                            ) : null}
                             <span className="badge">{formatCurrency(ticket.price, i18n.language)}</span>
                             {ticket.is_cancellable ? (
                               <button

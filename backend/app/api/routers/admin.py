@@ -90,8 +90,8 @@ SessionCreatePayload = Annotated[
                 "summary": "Create one future screening",
                 "value": {
                     "movie_id": "6803a522e5d4c4d94e7e1a10",
-                    "start_time": "2026-04-22T18:00:00+03:00",
-                    "end_time": "2026-04-22T21:00:00+03:00",
+                    "start_time": "2026-05-06T18:00:00+03:00",
+                    "end_time": "2026-05-06T21:00:00+03:00",
                     "price": 220,
                 },
             }
@@ -107,10 +107,10 @@ SessionBatchCreatePayload = Annotated[
                 "summary": "Create the same slot on multiple dates",
                 "value": {
                     "movie_id": "6803a522e5d4c4d94e7e1a10",
-                    "start_time": "2026-04-22T18:00:00+03:00",
-                    "end_time": "2026-04-22T21:00:00+03:00",
+                    "start_time": "2026-05-06T18:00:00+03:00",
+                    "end_time": "2026-05-06T21:00:00+03:00",
                     "price": 220,
-                    "dates": ["2026-04-22", "2026-04-23", "2026-04-24"],
+                    "dates": ["2026-05-06", "2026-05-07", "2026-05-08"],
                 },
             }
         }
@@ -124,8 +124,8 @@ SessionUpdatePayload = Annotated[
             "session_update": {
                 "summary": "Move the start time and adjust the price",
                 "value": {
-                    "start_time": "2026-04-22T19:00:00+03:00",
-                    "end_time": "2026-04-22T22:00:00+03:00",
+                    "start_time": "2026-05-06T19:00:00+03:00",
+                    "end_time": "2026-05-06T22:00:00+03:00",
                     "price": 240,
                 },
             }
@@ -138,7 +138,10 @@ SessionUpdatePayload = Annotated[
     "/movies",
     response_model=ApiResponse[list[MovieRead]],
     summary="List admin movies",
-    description="Return all movies visible in the administrator workspace, including planned and deactivated titles.",
+    description=(
+        "Return every movie visible in the protected administrator workspace, including planned, active, "
+        "and deactivated titles. Use this list for catalog maintenance and lifecycle review."
+    ),
     response_description="Wrapped list of movies for the admin board.",
 )
 async def list_movies(
@@ -173,7 +176,10 @@ async def get_movie(
     response_model=ApiResponse[MovieRead],
     status_code=status.HTTP_201_CREATED,
     summary="Create a movie",
-    description="Create a localized movie entry that can later be placed into the cinema schedule.",
+    description=(
+        "Create a localized movie entry that can later be placed into the cinema schedule. New movies may start "
+        "as `planned` or `deactivated`; `active` is assigned automatically only after a future session exists."
+    ),
     response_description="Wrapped created movie record.",
     responses=VALIDATION_ERROR_RESPONSE,
 )
@@ -191,7 +197,10 @@ async def create_movie(
     "/movies/{movie_id}",
     response_model=ApiResponse[MovieRead],
     summary="Update a movie",
-    description="Edit localized movie metadata, artwork, genres, or lifecycle status from the admin workspace.",
+    description=(
+        "Edit localized movie metadata, artwork, normalized genre codes, or lifecycle status from the admin "
+        "workspace. Movies with future scheduled sessions remain active until those sessions are moved or cancelled."
+    ),
     response_description="Wrapped updated movie record.",
     responses=merge_openapi_responses(
         NOT_FOUND_ERROR_RESPONSE,
@@ -214,7 +223,10 @@ async def update_movie(
     "/movies/{movie_id}/deactivate",
     response_model=ApiResponse[MovieRead],
     summary="Deactivate a movie",
-    description="Soft-disable a movie while preserving historical session and ticket references.",
+    description=(
+        "Soft-disable a movie while preserving historical session and ticket references. Future scheduled sessions "
+        "must be cancelled or moved first, so deactivation is the safe alternative to risky physical deletion."
+    ),
     response_description="Wrapped deactivated movie record.",
     responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )
@@ -232,7 +244,10 @@ async def deactivate_movie(
     "/movies/{movie_id}",
     response_model=ApiResponse[DeleteResultRead],
     summary="Delete a movie",
-    description="Delete a movie only when it has never been used by any session.",
+    description=(
+        "Physically delete a movie only when it has never been used by any session. Movies with session history "
+        "are protected and should be deactivated instead."
+    ),
     response_description="Wrapped delete result.",
     responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )
@@ -250,7 +265,7 @@ async def delete_movie(
     "/sessions",
     response_model=ApiResponse[list[SessionDetailsRead]],
     summary="List admin sessions",
-    description="Return all sessions shown in the admin schedule board.",
+    description="Return all sessions shown in the protected admin schedule board, ordered by start time.",
     response_description="Wrapped list of admin session records.",
 )
 async def list_sessions(
@@ -285,7 +300,10 @@ async def get_session(
     response_model=ApiResponse[SessionDetailsRead],
     status_code=status.HTTP_201_CREATED,
     summary="Create a session",
-    description="Create one future screening for a movie in the one-hall cinema schedule.",
+    description=(
+        "Create one future screening for a schedulable movie in the one-hall cinema. The backend applies the "
+        "one-hall no-overlap rule and rejects invalid time windows or conflicts with another non-cancelled session."
+    ),
     response_description="Wrapped created session details.",
     responses=merge_openapi_responses(CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )
@@ -303,7 +321,10 @@ async def create_session(
     "/sessions/batch",
     response_model=ApiResponse[SessionBatchCreateRead],
     summary="Create a batch of sessions",
-    description="Create the same screening slot on multiple calendar dates and return both created and rejected entries.",
+    description=(
+        "Create the same screening slot on multiple calendar dates. Each date is checked independently for "
+        "business validation and one-hall overlap conflicts, then returned as created or rejected."
+    ),
     response_description="Wrapped batch session planning result.",
     responses=VALIDATION_ERROR_RESPONSE,
 )
@@ -321,7 +342,10 @@ async def create_sessions_batch(
     "/sessions/{session_id}",
     response_model=ApiResponse[SessionDetailsRead],
     summary="Update a session",
-    description="Edit a future session that is still allowed to change under the current business rules.",
+    description=(
+        "Edit a future scheduled session that has no purchased tickets. Updated time windows are rechecked "
+        "against movie runtime rules and the one-hall no-overlap rule."
+    ),
     response_description="Wrapped updated session details.",
     responses=merge_openapi_responses(
         NOT_FOUND_ERROR_RESPONSE,
@@ -348,7 +372,10 @@ async def update_session(
     "/sessions/{session_id}/cancel",
     response_model=ApiResponse[SessionRead],
     summary="Cancel a session",
-    description="Cancel a scheduled session and propagate the cancellation rules to downstream ticket and order flows.",
+    description=(
+        "Cancel a future scheduled session and propagate cancellation to active tickets and grouped order aggregates. "
+        "Checked-in tickets block cancellation."
+    ),
     response_description="Wrapped cancelled session record.",
     responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )
@@ -366,7 +393,10 @@ async def cancel_session(
     "/sessions/{session_id}",
     response_model=ApiResponse[DeleteResultRead],
     summary="Delete a session",
-    description="Delete a session only when no ticket history exists for that screening.",
+    description=(
+        "Physically delete a session only when no ticket history exists for that screening. Sessions with stored "
+        "tickets are protected and should be cancelled instead."
+    ),
     response_description="Wrapped delete result.",
     responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )
@@ -384,7 +414,10 @@ async def delete_session(
     "/tickets",
     response_model=ApiResponse[list[TicketListRead]],
     summary="List admin tickets",
-    description="Return all tickets visible in the admin workspace.",
+    description=(
+        "Return all tickets visible in the protected admin workspace, newest purchase first. The payload is enriched "
+        "with movie, session, customer, grouped order, cancellation, check-in, and QR validation-token context."
+    ),
     response_description="Wrapped list of admin ticket records.",
 )
 async def list_tickets(
@@ -441,7 +474,10 @@ async def check_in_order(
     "/users",
     response_model=ApiResponse[list[UserRead]],
     summary="List users",
-    description="Return all user accounts for the administrator workspace.",
+    description=(
+        "Return all user accounts for the administrator workspace, newest account first. Password hashes and raw "
+        "passwords are never included in this response."
+    ),
     response_description="Wrapped list of user profiles.",
 )
 async def list_users(
@@ -457,7 +493,10 @@ async def list_users(
     "/attendance",
     response_model=ApiResponse[AttendanceReportRead],
     summary="Get the attendance report",
-    description="Build the attendance summary used by the admin reporting workspace.",
+    description=(
+        "Build the admin attendance summary across sessions. The report separates active sold tickets, checked-in "
+        "tickets, unchecked active tickets, cancelled tickets, and derived available seats."
+    ),
     response_description="Wrapped attendance report.",
 )
 async def get_attendance(
@@ -473,7 +512,10 @@ async def get_attendance(
     "/attendance/sessions/{session_id}",
     response_model=ApiResponse[AttendanceSessionDetailsRead],
     summary="Get attendance details for one session",
-    description="Return the seat map, occupancy, and ticket details for one session in the attendance report.",
+    description=(
+        "Return the seat map, occupancy, active ticket details, cancelled ticket audit rows, and check-in metrics "
+        "for one session in the attendance report."
+    ),
     response_description="Wrapped attendance details for a single session.",
     responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )

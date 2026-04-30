@@ -47,6 +47,10 @@ def test_openapi_marks_protected_routes_and_error_contracts() -> None:
     admin_movies = spec["paths"]["/api/v1/admin/movies"]["get"]
     public_movies = spec["paths"]["/api/v1/movies"]["get"]
     schedule = spec["paths"]["/api/v1/schedule"]["get"]
+    admin_session_create = spec["paths"]["/api/v1/admin/sessions"]["post"]
+    admin_attendance = spec["paths"]["/api/v1/admin/attendance"]["get"]
+    admin_tickets = spec["paths"]["/api/v1/admin/tickets"]["get"]
+    admin_users = spec["paths"]["/api/v1/admin/users"]["get"]
 
     assert users_me["security"] == [{"OAuth2PasswordBearer": []}]
     assert "401" in users_me["responses"]
@@ -54,6 +58,12 @@ def test_openapi_marks_protected_routes_and_error_contracts() -> None:
     assert admin_movies["security"] == [{"OAuth2PasswordBearer": []}]
     assert "401" in admin_movies["responses"]
     assert "403" in admin_movies["responses"]
+    assert admin_session_create["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "one-hall no-overlap" in admin_session_create["description"]
+    assert admin_attendance["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "checked-in" in admin_attendance["description"]
+    assert "newest purchase first" in admin_tickets["description"]
+    assert "Password hashes" in admin_users["description"]
 
     assert public_movies["summary"] == "Browse movies"
     assert "422" in public_movies["responses"]
@@ -99,3 +109,57 @@ def test_openapi_describes_demo_auth_booking_and_profile_flows() -> None:
     assert ticket_schema["properties"]["seat_row"]["description"].startswith("One-based seat row")
     assert order_schema["additionalProperties"] is False
     assert "Unique seat coordinates" in order_schema["properties"]["seats"]["description"]
+
+
+def test_openapi_documents_admin_movie_session_and_reporting_schemas() -> None:
+    app = create_application()
+    spec = app.openapi()
+
+    schemas = spec["components"]["schemas"]
+    for schema_name in [
+        "MovieCreate",
+        "MovieUpdate",
+        "MovieRead",
+        "SessionCreate",
+        "SessionUpdate",
+        "SessionDetailsRead",
+        "TicketListRead",
+        "UserRead",
+        "AttendanceReportRead",
+        "AttendanceSessionDetailsRead",
+    ]:
+        assert schema_name in schemas
+
+    movie_create = schemas["MovieCreate"]
+    movie_update = schemas["MovieUpdate"]
+    session_create = schemas["SessionCreate"]
+    attendance_report = schemas["AttendanceReportRead"]
+    attendance_details = schemas["AttendanceSessionDetailsRead"]
+
+    assert movie_create["additionalProperties"] is False
+    assert movie_create["properties"]["status"]["enum"] == ["planned", "active", "deactivated"]
+    assert movie_update["properties"]["genres"]["description"].startswith("Updated list of normalized genre codes")
+    assert session_create["additionalProperties"] is False
+    assert session_create["properties"]["price"]["maximum"] == 1000.0
+    assert "total_checked_in_tickets" in attendance_report["properties"]
+    assert "total_cancelled_tickets" in attendance_report["properties"]
+    assert "cancelled_tickets" in attendance_details["properties"]
+    assert "unchecked_active_tickets_count" in attendance_details["properties"]
+
+
+def test_openapi_session_examples_use_future_demo_dates() -> None:
+    app = create_application()
+    spec = app.openapi()
+
+    create_body = spec["paths"]["/api/v1/admin/sessions"]["post"]["requestBody"]
+    update_body = spec["paths"]["/api/v1/admin/sessions/{session_id}"]["patch"]["requestBody"]
+
+    create_example = create_body["content"]["application/json"]["examples"]["single_session"]["value"]
+    batch_example = spec["paths"]["/api/v1/admin/sessions/batch"]["post"]["requestBody"]["content"][
+        "application/json"
+    ]["examples"]["batch_session"]["value"]
+    update_example = update_body["content"]["application/json"]["examples"]["session_update"]["value"]
+
+    assert create_example["start_time"].startswith("2026-05-06")
+    assert batch_example["dates"] == ["2026-05-06", "2026-05-07", "2026-05-08"]
+    assert update_example["start_time"].startswith("2026-05-06")

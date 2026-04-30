@@ -77,6 +77,43 @@ async def test_admin_can_read_attendance_session_details(
         },
     )
     assert purchase_response.status_code == 201, purchase_response.text
+    checked_order = purchase_response.json()["data"]
+
+    unchecked_purchase_response = await client.post(
+        f"{API_PREFIX}/orders/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seats": [
+                {"seat_row": 2, "seat_number": 7},
+            ],
+        },
+    )
+    assert unchecked_purchase_response.status_code == 201, unchecked_purchase_response.text
+
+    check_in_response = await client.post(
+        f"{API_PREFIX}/admin/orders/{checked_order['id']}/check-in",
+        headers=admin_auth["headers"],
+    )
+    assert check_in_response.status_code == 200, check_in_response.text
+
+    cancelled_purchase_response = await client.post(
+        f"{API_PREFIX}/tickets/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seat_row": 2,
+            "seat_number": 8,
+        },
+    )
+    assert cancelled_purchase_response.status_code == 201, cancelled_purchase_response.text
+    cancelled_ticket = cancelled_purchase_response.json()["data"]
+
+    ticket_cancel_response = await client.patch(
+        f"{API_PREFIX}/tickets/{cancelled_ticket['id']}/cancel",
+        headers=user_auth["headers"],
+    )
+    assert ticket_cancel_response.status_code == 200, ticket_cancel_response.text
 
     response = await client.get(
         f"{API_PREFIX}/admin/attendance/sessions/{session['id']}",
@@ -87,22 +124,105 @@ async def test_admin_can_read_attendance_session_details(
     payload = response.json()["data"]
     assert payload["session"]["id"] == session["id"]
     assert payload["session"]["movie"]["id"] == movie["id"]
-    assert payload["tickets_sold"] == 2
-    assert payload["attendance_rate"] == pytest.approx(2 / payload["session"]["total_seats"])
+    assert payload["tickets_sold"] == 3
+    assert payload["checked_in_tickets_count"] == 2
+    assert payload["unchecked_active_tickets_count"] == 1
+    assert payload["cancelled_tickets_count"] == 1
+    assert payload["attendance_rate"] == pytest.approx(3 / payload["session"]["total_seats"])
     assert payload["seat_map"]["session_id"] == session["id"]
-    assert payload["seat_map"]["available_seats"] == payload["seat_map"]["total_seats"] - 2
-    assert len(payload["occupied_tickets"]) == 2
+    assert payload["seat_map"]["available_seats"] == payload["seat_map"]["total_seats"] - 3
+    assert len(payload["occupied_tickets"]) == 3
+    assert len(payload["cancelled_tickets"]) == 1
+    assert payload["cancelled_tickets"][0]["id"] == cancelled_ticket["id"]
+    assert payload["cancelled_tickets"][0]["seat_row"] == 2
+    assert payload["cancelled_tickets"][0]["seat_number"] == 8
+    assert payload["cancelled_tickets"][0]["cancelled_at"] is not None
     assert payload["occupied_tickets"][0]["seat_row"] == 2
     assert payload["occupied_tickets"][0]["seat_number"] == 5
     assert payload["occupied_tickets"][0]["user_name"] == user_auth["user"]["name"]
     assert payload["occupied_tickets"][0]["user_email"] == user_auth["user"]["email"]
     assert payload["occupied_tickets"][0]["order_status"] == "completed"
+    tickets_by_seat = {
+        (ticket["seat_row"], ticket["seat_number"]): ticket
+        for ticket in payload["occupied_tickets"]
+    }
+    assert tickets_by_seat[(2, 5)]["checked_in_at"] is not None
+    assert tickets_by_seat[(2, 6)]["checked_in_at"] is not None
+    assert tickets_by_seat[(2, 7)]["checked_in_at"] is None
     assert next(
         seat for seat in payload["seat_map"]["seats"] if seat["row"] == 2 and seat["number"] == 5
     )["is_available"] is False
     assert next(
-        seat for seat in payload["seat_map"]["seats"] if seat["row"] == 2 and seat["number"] == 7
+        seat for seat in payload["seat_map"]["seats"] if seat["row"] == 2 and seat["number"] == 8
     )["is_available"] is True
+
+
+@pytest.mark.asyncio
+async def test_admin_attendance_summary_counts_sold_used_cancelled_and_available_states(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Attendance Summary Movie", duration_minutes=115)
+    session = await create_session(movie_id=movie["id"], start_hour=18, duration_minutes=150, price=260)
+
+    order_response = await client.post(
+        f"{API_PREFIX}/orders/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seats": [
+                {"seat_row": 3, "seat_number": 1},
+                {"seat_row": 3, "seat_number": 2},
+            ],
+        },
+    )
+    assert order_response.status_code == 201, order_response.text
+    order = order_response.json()["data"]
+
+    check_in_response = await client.post(
+        f"{API_PREFIX}/admin/orders/{order['id']}/check-in",
+        headers=admin_auth["headers"],
+    )
+    assert check_in_response.status_code == 200, check_in_response.text
+
+    cancelled_purchase_response = await client.post(
+        f"{API_PREFIX}/tickets/purchase",
+        headers=user_auth["headers"],
+        json={
+            "session_id": session["id"],
+            "seat_row": 3,
+            "seat_number": 3,
+        },
+    )
+    assert cancelled_purchase_response.status_code == 201, cancelled_purchase_response.text
+    cancelled_ticket = cancelled_purchase_response.json()["data"]
+
+    cancel_response = await client.patch(
+        f"{API_PREFIX}/tickets/{cancelled_ticket['id']}/cancel",
+        headers=user_auth["headers"],
+    )
+    assert cancel_response.status_code == 200, cancel_response.text
+
+    response = await client.get(f"{API_PREFIX}/admin/attendance", headers=admin_auth["headers"])
+
+    assert response.status_code == 200, response.text
+    report = response.json()["data"]
+    assert report["total_sessions"] == 1
+    assert report["total_tickets_sold"] == 2
+    assert report["total_checked_in_tickets"] == 2
+    assert report["total_unchecked_active_tickets"] == 0
+    assert report["total_cancelled_tickets"] == 1
+    summary = report["sessions"][0]
+    assert summary["session_id"] == session["id"]
+    assert summary["tickets_sold"] == 2
+    assert summary["checked_in_tickets_count"] == 2
+    assert summary["unchecked_active_tickets_count"] == 0
+    assert summary["cancelled_tickets_count"] == 1
+    assert summary["available_seats"] == summary["total_seats"] - 2
+    assert summary["attendance_rate"] == pytest.approx(2 / summary["total_seats"])
 
 
 @pytest.mark.asyncio

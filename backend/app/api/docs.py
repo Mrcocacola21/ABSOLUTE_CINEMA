@@ -23,6 +23,15 @@ profiles, and an administrator workspace for movie, session, and attendance mana
 4. Explore the public catalog with the `movies` and `schedule` tags.
 5. Use the `admin` tag for protected management flows when signed in as an administrator.
 
+## Administrator Demo Notes
+
+- Movie lifecycle is explicit: create movies as `planned`, schedule them to become `active`, and use deactivation
+  instead of physical deletion once history exists.
+- Session planning is for one hall. Admin session create/update endpoints reject invalid time windows and overlaps with
+  any other non-cancelled session.
+- Attendance reporting separates sold, checked-in, unchecked, cancelled, and available seat states.
+- Admin ticket and user lists are newest-first and safe for demos: user password hashes are never returned.
+
 ## Localized Fields
 
 Movie titles and descriptions are localized with two keys:
@@ -74,8 +83,8 @@ API_TAGS: list[dict[str, str]] = [
     {
         "name": "admin",
         "description": (
-            "Protected administration endpoints behind the frontend `/admin` workspace, including "
-            "movies, sessions, users, tickets, and attendance reporting."
+            "Protected bearer-token administration endpoints behind the frontend `/admin` workspace, including "
+            "safe movie lifecycle management, one-hall session planning, users, tickets, and attendance reporting."
         ),
     },
 ]

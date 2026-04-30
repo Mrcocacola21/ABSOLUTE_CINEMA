@@ -1,6 +1,6 @@
 # Cinema Showcase
 
-> A full-stack one-hall cinema web application with a FastAPI backend, React frontend, MongoDB persistence, transactional seat booking, PDF order receipts, staff QR check-in, and an admin chronoboard for movie and session planning.
+> A full-stack one-hall cinema web application with a FastAPI backend, React frontend, MongoDB persistence, transactional seat booking, PDF order receipts, staff QR check-in, attendance reporting, and an admin chronoboard for movie and session planning.
 
 Cinema Showcase is a repository for a single-screen cinema system. It combines public browsing, authenticated booking, and administrator planning inside one codebase. The project is intentionally narrow in scope: there is one physical hall, one timeline of screenings, one shared seat map per session, and a small but coherent domain model built around movies, sessions, tickets, orders, and users.
 
@@ -146,7 +146,7 @@ If all conditions are satisfied, the system decrements availability and creates 
 
 ### Order-based purchase model
 
-The project does not treat every ticket purchase as an isolated event anymore. It has a first-class `Order` entity, and one order groups multiple tickets for one session. This supports a more realistic purchase history, clearer profile pages, and cancellation logic that can work at either ticket or order level.
+The project does not treat every ticket purchase as an isolated event anymore. It has a first-class `Order` entity, and one order groups multiple tickets for one session. This supports a more realistic purchase history, clearer profile pages, active-ticket and ticket-history views, and cancellation logic that can work at either ticket or order level.
 
 The repository still keeps a compatibility endpoint for single-ticket purchase at `POST /tickets/purchase`, but the modern booking flow is order-centric, and the frontend session purchase flow is already built around `POST /orders/purchase`.
 
@@ -217,6 +217,14 @@ The backend enforces the hall-wide no-overlap rule, future-only scheduling rules
 The admin UI includes a chronoboard designed specifically for the one-hall planning problem. It provides a schedule lane, planning shelf, inspector, and draft workflow so the admin can stage new sessions visually before persisting them.
 
 This is not a decorative feature. It directly supports schedule planning, repeated-date creation, and editing/cancellation workflows from the same planning context.
+
+### Admin attendance and booking reporting
+
+The admin dashboard includes reporting screens for attendance, booking activity, and user accounts. Attendance summaries distinguish active sold tickets, checked-in tickets, unchecked active tickets, cancelled tickets, derived available seats, and fill rate.
+
+Admins can open one session's attendance details to inspect the current seat map, active occupied tickets, cancelled ticket audit rows, buyer context, and order status. The frontend can export that session report as a PDF with summary metrics, a seat usage legend for available/not-used/used/cancelled seats, and a buyer/ticket table.
+
+The booking activity register is filterable by movie, session, order status, ticket state, and date mode, with multi-term search and sorting by latest purchase, oldest purchase, highest value, or largest ticket count.
 
 ### Localized movie content
 
@@ -649,7 +657,7 @@ The page layer is the clearest way to understand the frontend surface:
 - `SchedulePage.tsx` presents public schedule browsing in both board and list form.
 - `SessionDetailsPage.tsx` shows one session, its seat map, and the booking panel.
 - `LoginPage.tsx` and `RegisterPage.tsx` handle authentication.
-- `ProfilePage.tsx` shows profile info, grouped order history, and ticket-level cancellation.
+- `ProfilePage.tsx` shows profile info, active usable tickets, full ticket history, and ticket-level cancellation.
 - `AdminDashboardPage.tsx` hosts the admin interfaces.
 
 ### Widgets
@@ -675,8 +683,8 @@ The schedule management area is the most substantial admin interface. It combine
 
 The attendance panel is broader than its name alone suggests. It includes tabs for:
 
-- attendance insights,
-- booking activity,
+- attendance insights with active, checked-in, unchecked, cancelled, and available-seat metrics,
+- booking activity with movie/session/order-status/ticket-state/date filters, multi-term search, and value/count sorting,
 - account visibility.
 
 ### Chronoboard-related components
@@ -712,10 +720,10 @@ The shared frontend layer contains a large amount of the repository's UI intelli
 The authenticated user experience is split between:
 
 - `SessionDetailsPage` for making bookings,
-- `ProfilePage` for reviewing profile and grouped order history,
+- `ProfilePage` for reviewing profile data, active usable tickets, full grouped order history, and ticket-level cancellation,
 - `OrderDetailsPage` for inspecting one grouped order, downloading the PDF receipt, and seeing entry-validity state.
 
-The profile and order details pages are worth calling out because they reflect the backend's grouped order model. Orders are shown with nested tickets, ticket-level cancellation is available directly, and the order detail view exposes the PDF receipt generated for staff QR validation. However, the full-order cancellation endpoint currently remains an API feature rather than a dedicated profile-page control.
+The profile and order details pages are worth calling out because they reflect the backend's grouped order model. The profile separates currently usable tickets from the full historical list, orders are shown with nested tickets, ticket-level cancellation is available directly, and the order detail view exposes the PDF receipt generated for staff QR validation. However, the full-order cancellation endpoint currently remains an API feature rather than a dedicated profile-page control.
 
 ## 8. Core Domain Model
 
@@ -1280,7 +1288,9 @@ The profile page loads grouped current-user orders from `/users/me/orders`. This
 - nested ticket rows,
 - counts of active, cancelled, checked-in, and unchecked active tickets.
 
-From the profile page, a user can open a dedicated order detail view at `/me/orders/{orderId}`. That page shows the full grouped receipt, ticket-level entry validity, checked-in counts, session details, and a PDF download action.
+The profile UI separates the default active-ticket view from the complete ticket history. The active tab shows only tickets that are still usable for entry, while the history tab keeps cancelled, checked-in, and past-session ticket records visible for audit and receipt lookup.
+
+From the profile page, a user can open a dedicated order detail view at `/me/orders/{orderId}`. That page shows the full grouped receipt, ticket-level entry validity, usable/used ticket counts, checked-in counts, session details, and a PDF download action.
 
 ### Download order PDF
 
@@ -1389,8 +1399,10 @@ The chronoboard is the main admin planning surface. It allows the administrator 
 
 The admin dashboard includes reporting views for:
 
-- session attendance summaries,
-- grouped booking/order activity with nested ticket rows,
+- session attendance summaries with active sold, checked-in, unchecked active, cancelled, available-seat, and fill-rate metrics,
+- one-session attendance details with the derived seat map, active occupied tickets, cancelled ticket audit rows, buyer context, and order status,
+- PDF attendance exports that include summary metrics, seat usage states, and a buyer/ticket table,
+- grouped booking/order activity with nested ticket rows, multi-term search, and filters for movie, session, order status, ticket state, and date,
 - user account overview.
 
 This makes the admin area not only a planner but also a monitoring surface.
@@ -1832,8 +1844,13 @@ Important notes:
 | Admin sessions | `GET/POST/PATCH/DELETE /api/v1/admin/sessions...`, `POST /api/v1/admin/sessions/batch`, `PATCH /api/v1/admin/sessions/{session_id}/cancel` | Session planning and lifecycle management |
 | Admin tickets | `GET /api/v1/admin/tickets` | Ticket overview |
 | Admin users | `GET /api/v1/admin/users` | User overview |
-| Admin reporting | `GET /api/v1/admin/attendance` | Attendance/report summary |
+| Admin reporting | `GET /api/v1/admin/attendance`, `GET /api/v1/admin/attendance/sessions/{session_id}` | Attendance/report summary and one-session details |
 | Admin order validation | `GET /api/v1/admin/orders/validate/{token}`, `POST /api/v1/admin/orders/{order_id}/check-in` | Validate signed order QR tokens and confirm entry |
+
+Important notes:
+
+- Admin attendance responses count cancelled tickets separately from active occupancy, so cancelled seats are available again but still visible in reporting/audit detail.
+- The admin ticket and booking views expose grouped order context, buyer context, and check-in state without returning password data or raw secrets.
 
 ### Health
 
@@ -2601,7 +2618,7 @@ The backend supports full-order cancellation, but the current profile UI exposes
 
 ### No dedicated admin order-management UI
 
-Admins can inspect grouped booking activity in reporting views and validate/check in a specific order through the QR workflow, but there is no dedicated standalone admin order-management panel comparable to the movie/session management surfaces.
+Admins can inspect grouped booking activity in reporting views with rich filters and can validate/check in a specific order through the QR workflow, but there is no dedicated standalone admin order-management panel comparable to the movie/session management surfaces.
 
 ### One-hall domain only
 

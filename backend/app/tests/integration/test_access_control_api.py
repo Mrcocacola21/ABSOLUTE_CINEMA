@@ -118,14 +118,19 @@ async def test_non_admin_cannot_mutate_admin_movies_or_sessions(
 async def test_admin_can_access_admin_endpoints(
     client: httpx.AsyncClient,
     admin_auth: dict[str, object],
+    create_authenticated_user,
 ) -> None:
+    newest_user = await create_authenticated_user(email="newest-admin-list@example.com", name="Newest Admin List")
+
     response = await client.get(f"{API_PREFIX}/admin/users", headers=admin_auth["headers"])
 
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is True
-    assert body["data"][0]["email"] == "admin@example.com"
-    assert "password_hash" not in body["data"][0]
+    assert body["data"][0]["email"] == newest_user["user"]["email"]
+    assert body["data"][1]["email"] == "admin@example.com"
+    assert all("password" not in user for user in body["data"])
+    assert all("password_hash" not in user for user in body["data"])
 
 
 @pytest.mark.asyncio

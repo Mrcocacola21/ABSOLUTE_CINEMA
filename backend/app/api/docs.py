@@ -18,8 +18,10 @@ profiles, and an administrator workspace for movie, session, and attendance mana
 ## Demo Workflow
 
 1. Register a user with `POST /api/v1/auth/register`, or sign in with `POST /api/v1/auth/login`.
-2. Use the **Authorize** button in Swagger UI to obtain a JWT automatically.
-3. Restore the authenticated session with `GET /api/v1/users/me`.
+2. Use the short-lived `data.access_token` as the bearer token for protected endpoints.
+3. When the access token expires, call `POST /api/v1/auth/refresh` with `data.refresh_token`.
+4. Restore the authenticated session with `GET /api/v1/users/me`.
+5. Use the **Authorize** button in Swagger UI to obtain an access token automatically for manual API exploration.
 4. Explore the public catalog with the `movies` and `schedule` tags.
 5. Use the `admin` tag for protected management flows when signed in as an administrator.
 
@@ -50,8 +52,9 @@ API_TAGS: list[dict[str, str]] = [
     {
         "name": "auth",
         "description": (
-            "Registration and login flows. Swagger's **Authorize** button uses a dedicated OAuth2 "
-            "token exchange behind the scenes, while `POST /auth/login` remains the app-facing login endpoint."
+            "Registration, login, and refresh-token flows. Swagger's **Authorize** button uses a dedicated "
+            "OAuth2 token exchange behind the scenes, while `POST /auth/login` and `POST /auth/refresh` "
+            "remain the app-facing token lifecycle endpoints."
         ),
     },
     {

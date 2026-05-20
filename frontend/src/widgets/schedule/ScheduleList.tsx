@@ -11,7 +11,12 @@ export function ScheduleList({ items }: ScheduleListProps) {
   const { t } = useTranslation();
 
   if (items.length === 0) {
-    return <section className="empty-state">{t("schedule.list.noMatchingTitle")}</section>;
+    return (
+      <section className="empty-state empty-state--panel empty-state--compact">
+        <h2>{t("schedule.list.noMatchingTitle")}</h2>
+        <p>{t("schedule.list.noMatchingText")}</p>
+      </section>
+    );
   }
 
   return (

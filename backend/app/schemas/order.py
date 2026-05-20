@@ -123,6 +123,8 @@ class OrderListRead(OrderRead):
     movie_id: str
     movie_title: LocalizedText
     poster_url: str | None = None
+    poster_file_url: str | None = None
+    poster_display_url: str | None = None
     age_rating: str | None = None
     session_start_time: datetime
     session_end_time: datetime

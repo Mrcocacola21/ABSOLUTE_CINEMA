@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { getGenreLabels } from "@/shared/genres";
 import { getLocalizedText } from "@/shared/localization";
+import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatDateTime, formatStateLabel, formatTime } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, SessionDetails } from "@/types/domain";
@@ -83,6 +84,7 @@ export function ChronoboardInspector({
 }: ChronoboardInspectorProps) {
   const { t, i18n } = useTranslation();
   const isDuplicateDraft = inspectorView === "draft" && draftPlacement?.sourceMode === "duplicate";
+  const selectedSessionPosterSource = selectedSession ? resolvePosterSource(selectedSession.movie) : null;
   const draftSubmitCount =
     draftSelectionSummary.conflictCount > 0 ? draftSelectionSummary.readyCount : draftSelectionSummary.selectedCount;
   const draftSubmitLabel =
@@ -442,8 +444,8 @@ export function ChronoboardInspector({
         <div className="inspector-panel__details">
           <div className="inspector-panel__poster-row">
             <div className="media-tile inspector-panel__poster" aria-hidden="true">
-              {selectedSession.movie.poster_url ? (
-                <img src={selectedSession.movie.poster_url} alt="" className="media-tile__image" />
+              {selectedSessionPosterSource ? (
+                <img src={selectedSessionPosterSource} alt="" className="media-tile__image" />
               ) : (
                 <span>{getMovieMonogram(getLocalizedText(selectedSession.movie.title, i18n.language))}</span>
               )}

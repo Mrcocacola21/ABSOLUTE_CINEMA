@@ -1,15 +1,21 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import { StatePanel } from "@/shared/ui/StatePanel";
+
 export function NotFoundPage() {
   const { t } = useTranslation();
 
   return (
-    <section className="panel">
-      <h1 className="page-title">{t("common.empty.notFound")}</h1>
-      <Link to="/" className="button">
-        {t("common.navigation.home")}
-      </Link>
-    </section>
+    <StatePanel
+      tone="empty"
+      title={t("common.empty.notFound")}
+      message={t("common.empty.notFoundText")}
+      action={
+        <Link to="/" className="button">
+          {t("common.navigation.home")}
+        </Link>
+      }
+    />
   );
 }

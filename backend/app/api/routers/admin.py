@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, status
+from fastapi import APIRouter, Body, Depends, File, UploadFile, status
 
 from app.api.dependencies.auth import get_current_admin
 from app.api.docs import (
@@ -217,6 +217,46 @@ async def update_movie(
     """Update movie information managed by administrators."""
     movie = await admin_service.update_movie(movie_id=movie_id, payload=payload, updated_by=admin_user)
     return ApiResponseFactory.success(data=movie, message="Movie updated successfully.")
+
+
+@router.post(
+    "/movies/{movie_id}/poster",
+    response_model=ApiResponse[MovieRead],
+    summary="Upload a movie poster file",
+    description=(
+        "Store or replace the uploaded poster for a movie. Uploaded poster files are served from backend media "
+        "storage and take display priority over the existing poster_url fallback."
+    ),
+    response_description="Wrapped movie record with uploaded poster metadata.",
+    responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
+)
+async def upload_movie_poster(
+    movie_id: str,
+    poster: UploadFile = File(description="JPG, PNG, WebP, or SVG poster image."),
+    admin_user: UserRead = Depends(get_current_admin),
+    admin_service: AdminService = Depends(get_admin_service),
+) -> ApiResponse[MovieRead]:
+    """Upload or replace the manual poster file for a movie."""
+    movie = await admin_service.upload_movie_poster(movie_id=movie_id, poster=poster, updated_by=admin_user)
+    return ApiResponseFactory.success(data=movie, message="Movie poster uploaded successfully.")
+
+
+@router.delete(
+    "/movies/{movie_id}/poster",
+    response_model=ApiResponse[MovieRead],
+    summary="Remove a movie poster file",
+    description="Remove the uploaded poster file for a movie while preserving poster_url as the fallback artwork source.",
+    response_description="Wrapped movie record after poster removal.",
+    responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
+)
+async def remove_movie_poster(
+    movie_id: str,
+    admin_user: UserRead = Depends(get_current_admin),
+    admin_service: AdminService = Depends(get_admin_service),
+) -> ApiResponse[MovieRead]:
+    """Remove the manual poster file for a movie."""
+    movie = await admin_service.remove_movie_poster(movie_id=movie_id, updated_by=admin_user)
+    return ApiResponseFactory.success(data=movie, message="Movie poster removed successfully.")
 
 
 @router.patch(

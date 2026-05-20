@@ -28,6 +28,9 @@ dist/
 frontend/tmp/
 frontend/test-*.pdf
 
+# Runtime uploads
+backend/media/
+
 # Editor / OS
 .idea/
 .vscode/

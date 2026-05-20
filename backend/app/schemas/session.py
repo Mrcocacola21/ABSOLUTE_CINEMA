@@ -216,6 +216,8 @@ class ScheduleItemRead(BaseSchema):
     movie_id: str = Field(description="Identifier of the related movie.")
     movie_title: LocalizedText = Field(description="Localized movie title shown in schedule cards and lists.")
     poster_url: str | None = Field(default=None, description="Poster URL or asset path for the related movie.")
+    poster_file_url: str | None = Field(default=None, description="Uploaded poster media path for the related movie.")
+    poster_display_url: str | None = Field(default=None, description="Resolved poster source with uploaded files first.")
     age_rating: str | None = Field(default=None, description="Optional movie age-rating label.")
     genres: list[str] = Field(default_factory=list, description="Normalized genre codes for the related movie.")
     start_time: datetime = Field(description="Session start time.")

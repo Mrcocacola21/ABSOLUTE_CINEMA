@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.schemas.movie import MovieRead
+from app.schemas.movie import MovieRead, resolve_movie_poster_url
 from app.schemas.session import ScheduleItemRead, SessionDetailsRead, SessionRead
 
 
@@ -17,6 +17,8 @@ class ScheduleItemFactory:
             movie_id=session.movie_id,
             movie_title=movie.title,
             poster_url=str(movie.poster_url) if movie.poster_url else None,
+            poster_file_url=str(movie.poster_file_url) if movie.poster_file_url else None,
+            poster_display_url=resolve_movie_poster_url(movie),
             age_rating=movie.age_rating,
             genres=movie.genres,
             start_time=session.start_time,

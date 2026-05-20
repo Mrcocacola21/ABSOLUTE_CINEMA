@@ -33,10 +33,13 @@ def test_openapi_uses_swagger_token_exchange_for_authorize_flow() -> None:
 
     security_schemes = spec["components"]["securitySchemes"]
     scheme = security_schemes["OAuth2PasswordBearer"]
+    refresh = spec["paths"]["/api/v1/auth/refresh"]["post"]
 
     assert scheme["type"] == "oauth2"
     assert scheme["flows"]["password"]["tokenUrl"] == "/api/v1/auth/token"
     assert "/api/v1/auth/token" not in spec["paths"]
+    assert refresh["summary"] == "Refresh an expired access token"
+    assert "refresh JWT" in refresh["description"]
 
 
 def test_openapi_marks_protected_routes_and_error_contracts() -> None:
@@ -87,8 +90,9 @@ def test_openapi_describes_demo_auth_booking_and_profile_flows() -> None:
 
     assert register["summary"] == "Register a new user"
     assert "clients cannot self-register as administrators" in register["description"]
-    assert login["summary"] == "Log in and receive a JWT"
+    assert login["summary"] == "Log in and receive access and refresh tokens"
     assert "form-encoded credentials" in login["description"]
+    assert "data.refresh_token" in login["description"]
 
     assert profile_update["security"] == [{"OAuth2PasswordBearer": []}]
     assert "role and activation flags cannot be changed" in profile_update["description"]

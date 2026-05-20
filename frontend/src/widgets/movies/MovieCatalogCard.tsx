@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { getGenreLabel } from "@/shared/genres";
 import { getLocalizedText } from "@/shared/localization";
 import { getMovieStatusTranslationKey } from "@/shared/movieStatus";
+import { resolvePosterSource } from "@/shared/posters";
 import { formatDateTime } from "@/shared/presentation";
 import type { Movie, ScheduleItem } from "@/types/domain";
 
@@ -32,14 +33,15 @@ export function MovieCatalogCard({
   const { t, i18n } = useTranslation();
   const title = getLocalizedText(movie.title, i18n.language);
   const description = getLocalizedText(movie.description, i18n.language);
+  const posterSource = resolvePosterSource(movie);
   const statusClassName = `catalog-movie-card__status catalog-movie-card__status--${movie.status}`;
 
   return (
     <article className="card catalog-movie-card">
       <div className="catalog-movie-card__hero">
         <Link to={`/movies/${movie.id}`} className="media-tile catalog-movie-card__media" aria-hidden="true">
-          {movie.poster_url ? (
-            <img src={movie.poster_url} alt="" className="media-tile__image" />
+          {posterSource ? (
+            <img src={posterSource} alt="" className="media-tile__image" />
           ) : (
             <span>{getMovieMonogram(title)}</span>
           )}

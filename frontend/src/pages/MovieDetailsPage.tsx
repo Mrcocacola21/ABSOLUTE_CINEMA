@@ -7,6 +7,7 @@ import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { getGenreLabel } from "@/shared/genres";
 import { getIntlLocale, getLocalizedText } from "@/shared/localization";
 import { getMovieStatusTranslationKey } from "@/shared/movieStatus";
+import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatDateTime, formatTime } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import type { Movie, ScheduleItem } from "@/types/domain";
@@ -95,6 +96,7 @@ export function MovieDetailsPage() {
   const statusLabel = movie ? t(getMovieStatusTranslationKey(movie.status)) : "--";
   const movieTitle = movie ? getLocalizedText(movie.title, i18n.language) : "";
   const movieDescription = movie ? getLocalizedText(movie.description, i18n.language) : "";
+  const posterSource = movie ? resolvePosterSource(movie) : null;
 
   return (
     <>
@@ -189,8 +191,8 @@ export function MovieDetailsPage() {
           <article className="panel movie-detail-card movie-detail-card--poster">
             <div className="movie-detail-card__poster-shell">
               <div className="movie-detail-poster media-tile" aria-hidden="true">
-                {movie.poster_url ? (
-                  <img src={movie.poster_url} alt="" className="media-tile__image" />
+                {posterSource ? (
+                  <img src={posterSource} alt="" className="media-tile__image" />
                 ) : (
                   <span>{getMovieMonogram(movieTitle)}</span>
                 )}

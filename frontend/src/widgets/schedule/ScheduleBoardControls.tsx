@@ -88,7 +88,10 @@ export function ScheduleBoardControls({
           ))}
         </div>
       ) : (
-        <div className="empty-state">{t("schedule.board.emptyDays")}</div>
+        <section className="empty-state empty-state--panel empty-state--compact">
+          <h2>{t("schedule.board.emptyDaysTitle")}</h2>
+          <p>{t("schedule.board.emptyDays")}</p>
+        </section>
       )}
     </section>
   );

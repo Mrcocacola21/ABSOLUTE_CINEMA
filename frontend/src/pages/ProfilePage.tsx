@@ -10,6 +10,7 @@ import { deactivateCurrentUserRequest, updateCurrentUserRequest } from "@/api/us
 import { useAuth } from "@/features/auth/useAuth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { getLocalizedText } from "@/shared/localization";
+import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
@@ -542,6 +543,7 @@ export function ProfilePage() {
 
               {visibleOrders.map((order) => {
                 const movieTitle = getLocalizedText(order.movie_title, i18n.language);
+                const posterSource = resolvePosterSource(order);
                 const ticketsToShow = activeOrdersTab === "active" ? getOrderUsableTickets(order) : order.tickets;
                 const usableTicketsInOrder = getOrderUsableTickets(order).length;
                 const entrySummary =
@@ -555,8 +557,8 @@ export function ProfilePage() {
                   <article key={order.id} className="card order-history__order profile-order-card">
                     <div className="profile-order-card__hero">
                       <div className="media-tile profile-order-card__media" aria-hidden="true">
-                        {order.poster_url ? (
-                          <img src={order.poster_url} alt="" className="media-tile__image" />
+                        {posterSource ? (
+                          <img src={posterSource} alt="" className="media-tile__image" />
                         ) : (
                           getInitials(movieTitle)
                         )}

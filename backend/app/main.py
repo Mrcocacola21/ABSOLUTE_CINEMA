@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.docs import API_TAGS, OPENAPI_DESCRIPTION, PROJECT_REPOSITORY_URL, SWAGGER_UI_PARAMETERS
 from app.api.router import api_router
@@ -55,6 +57,10 @@ def create_application() -> FastAPI:
         allow_headers=["*"],
     )
     application.add_middleware(RequestLoggingMiddleware)
+
+    media_root = Path(settings.media_root)
+    media_root.mkdir(parents=True, exist_ok=True)
+    application.mount(settings.media_url, StaticFiles(directory=media_root), name="media")
 
     application.include_router(api_router)
     register_exception_handlers(application)

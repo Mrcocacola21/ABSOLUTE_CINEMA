@@ -8,6 +8,7 @@ import { downloadMyOrderPdfRequest, getMyOrderRequest } from "@/api/orders";
 import { cancelTicketRequest } from "@/api/tickets";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { getLocalizedText } from "@/shared/localization";
+import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
@@ -189,6 +190,7 @@ export function OrderDetailsPage() {
 
   const movieTitle = getLocalizedText(order.movie_title, i18n.language);
   const shortOrderId = order.id.slice(-8).toUpperCase();
+  const posterSource = resolvePosterSource(order);
   const validityClass = order.valid_for_entry ? "is-valid" : "is-invalid";
   const validTickets = order.tickets.filter((ticket) => ticket.valid_for_entry);
   const entrySummary =
@@ -202,7 +204,7 @@ export function OrderDetailsPage() {
     <div className="order-detail-page">
       <section className="panel order-detail-hero">
         <div className="order-detail-hero__poster" aria-hidden="true">
-          {order.poster_url ? <img src={order.poster_url} alt="" /> : <span>{getInitials(movieTitle)}</span>}
+          {posterSource ? <img src={posterSource} alt="" /> : <span>{getInitials(movieTitle)}</span>}
         </div>
 
         <div className="order-detail-hero__main">

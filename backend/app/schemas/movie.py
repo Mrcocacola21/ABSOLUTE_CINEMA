@@ -7,7 +7,7 @@ from datetime import datetime
 import re
 from typing import Any, cast
 
-from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, field_validator, model_validator
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, computed_field, field_validator, model_validator
 from pydantic.networks import HttpUrl
 
 from app.core.constants import MOVIE_STATUS_VALUES, MovieStatuses
@@ -29,6 +29,7 @@ MOVIE_AGE_RATING_MAX_LENGTH = 16
 POSTER_URL_ADAPTER = TypeAdapter(HttpUrl)
 POSTER_IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".svg")
 POSTER_ASSET_PATH_PATTERN = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9/_\.-]*$")
+POSTER_MEDIA_PATH_PATTERN = re.compile(r"^/[A-Za-z0-9][A-Za-z0-9/_\.-]*/posters/[A-Za-z0-9][A-Za-z0-9_\.-]*$")
 AGE_RATING_PATTERN = re.compile(r"^[A-Za-z0-9+ -]+$")
 
 
@@ -97,6 +98,25 @@ def _normalize_and_validate_poster_url(value: object) -> str | None:
         raise ValueError(
             "poster_url must be an absolute http(s) URL or a root-relative image asset path."
         ) from exc
+
+
+def _normalize_and_validate_poster_file_url(value: object) -> str | None:
+    if value is None:
+        return None
+
+    candidate = str(value).strip()
+    if not candidate:
+        return None
+    if not POSTER_MEDIA_PATH_PATTERN.fullmatch(candidate):
+        raise ValueError("poster_file_url must be a backend media poster path.")
+    if not candidate.lower().endswith(POSTER_IMAGE_SUFFIXES):
+        raise ValueError("poster_file_url must end with .jpg, .jpeg, .png, .webp, or .svg.")
+    return candidate
+
+
+def resolve_movie_poster_url(movie: "MovieRead") -> str | None:
+    """Return the display poster URL, preferring uploaded poster files over external URLs."""
+    return movie.poster_file_url or movie.poster_url
 
 
 def _normalize_age_rating(value: str | None) -> str | None:
@@ -363,8 +383,24 @@ class MovieRead(MovieBase):
     """
 
     id: str = Field(description="Movie identifier.")
+    poster_file_url: str | None = Field(
+        default=None,
+        description="Root-relative backend media path for an uploaded poster file. Takes display priority over poster_url.",
+    )
     created_at: datetime = Field(description="Movie creation timestamp in ISO 8601 format.")
     updated_at: datetime | None = Field(default=None, description="Last movie update timestamp, if any.")
+
+    @field_validator("poster_file_url", mode="before")
+    @classmethod
+    def normalize_poster_file_url(cls, value: object) -> str | None:
+        """Normalize uploaded poster media paths stored by the backend."""
+        return _normalize_and_validate_poster_file_url(value)
+
+    @computed_field
+    @property
+    def poster_display_url(self) -> str | None:
+        """Resolved poster source for display, preferring uploaded files."""
+        return resolve_movie_poster_url(self)
 
 
 def merge_movie_localized_updates(

@@ -25,6 +25,7 @@ class MovieDocument(TypedDict):
     description: dict[str, str] | str
     duration_minutes: int
     poster_url: NotRequired[str | None]
+    poster_file_url: NotRequired[str | None]
     age_rating: NotRequired[str | None]
     genres: list[str]
     status: str

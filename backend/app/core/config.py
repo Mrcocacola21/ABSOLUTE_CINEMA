@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -30,7 +31,8 @@ class Settings(BaseSettings):
     mongodb_db_name: str = "cinema_showcase"
     jwt_secret_key: str = "<CHANGE_ME>"
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_minutes: int = 60 * 24 * 7
     log_level: str = "INFO"
     cinema_timezone: str = "Europe/Kyiv"
     hall_rows_count: int = 8
@@ -38,6 +40,9 @@ class Settings(BaseSettings):
     first_session_hour: int = 9
     last_session_start_hour: int = 22
     admin_emails: list[str] = Field(default_factory=list)
+    media_root: str = str(Path(__file__).resolve().parents[2] / "media")
+    media_url: str = "/media"
+    poster_upload_max_bytes: int = 5 * 1024 * 1024
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -59,6 +64,15 @@ class Settings(BaseSettings):
         if normalized in {"0", "false", "no", "off", "release", "production", "prod"}:
             return False
         return value
+
+    @field_validator("media_url")
+    @classmethod
+    def normalize_media_url(cls, value: str) -> str:
+        """Keep media URLs root-relative and stable for frontend resolution."""
+        normalized = value.strip().rstrip("/")
+        if not normalized.startswith("/"):
+            normalized = f"/{normalized}"
+        return normalized or "/media"
 
     @property
     def total_seats(self) -> int:

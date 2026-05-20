@@ -10,9 +10,7 @@ from pydantic import ValidationError
 from app.core.constants import MovieStatuses, Roles, SessionStatuses, TicketStatuses
 from app.core.exceptions import ConflictException, ValidationException
 from app.schemas.localization import LocalizedText
-from app.schemas.movie import MovieUpdate
-from app.schemas.movie import MovieRead
-from app.schemas.movie import MovieCreate
+from app.schemas.movie import MovieCreate, MovieRead, MovieUpdate, resolve_movie_poster_url
 from app.schemas.session import SessionBatchCreate, SessionCreate, SessionUpdate
 from app.schemas.ticket import TicketRead
 from app.schemas.user import UserCreate, UserRead, UserUpdate
@@ -325,6 +323,7 @@ def build_movie(
     *,
     duration_minutes: int = 120,
     poster_url: str | None = None,
+    poster_file_url: str | None = None,
     status: str = MovieStatuses.PLANNED,
 ) -> dict[str, object]:
     now = datetime.now(tz=timezone.utc)
@@ -334,6 +333,7 @@ def build_movie(
         description={"uk": "Науково-фантастична драма", "en": "Sci-fi drama"},
         duration_minutes=duration_minutes,
         poster_url=poster_url,
+        poster_file_url=poster_file_url,
         age_rating="PG-13",
         genres=["science_fiction", "drama"],
         status=status,
@@ -450,6 +450,24 @@ def test_movie_update_schema_normalizes_genres_and_keeps_nullables() -> None:
     assert dumped["status"] == MovieStatuses.DEACTIVATED
     assert "poster_url" in dumped
     assert dumped["poster_url"] is None
+
+
+def test_movie_read_resolves_uploaded_poster_before_external_url() -> None:
+    movie = MovieRead.model_validate(
+        build_movie(
+            poster_url="https://example.com/posters/fallback.jpg",
+            poster_file_url="/media/posters/uploaded.webp",
+        )
+    )
+
+    assert resolve_movie_poster_url(movie) == "/media/posters/uploaded.webp"
+
+
+def test_movie_read_resolves_poster_url_when_no_uploaded_file_exists() -> None:
+    poster_url = "https://example.com/posters/fallback.jpg"
+    movie = MovieRead.model_validate(build_movie(poster_url=poster_url))
+
+    assert resolve_movie_poster_url(movie) == poster_url
 
 
 def test_movie_update_schema_rejects_duplicate_genres_after_normalization() -> None:
@@ -649,6 +667,39 @@ def test_order_service_build_order_read_serializes_httpurl_poster_url_to_plain_s
 
     assert built_order.poster_url == poster_url
     assert isinstance(built_order.poster_url, str)
+
+
+def test_order_service_build_order_read_exposes_uploaded_poster_priority() -> None:
+    poster_url = "https://example.com/posters/interstellar.jpg"
+    poster_file_url = "/media/posters/interstellar-upload.webp"
+    now = datetime.now(tz=timezone.utc)
+    service = OrderService(
+        session_repository=FakeSessionRepository(),
+        ticket_repository=FakeTicketRepository(),
+        movie_repository=FakeMovieRepository(),
+        order_repository=FakeOrderRepository(),
+    )
+
+    built_order = service._build_order_read(
+        order_document={
+            "id": "order-1",
+            "user_id": "user-1",
+            "session_id": "session-1",
+            "status": "completed",
+            "total_price": 200.0,
+            "tickets_count": 1,
+            "created_at": now,
+            "updated_at": None,
+        },
+        ticket_documents=[build_ticket()],
+        session_document=build_session(),
+        movie_document=build_movie(poster_url=poster_url, poster_file_url=poster_file_url),
+        now=now,
+    )
+
+    assert built_order.poster_url == poster_url
+    assert built_order.poster_file_url == poster_file_url
+    assert built_order.poster_display_url == poster_file_url
 
 
 @pytest.mark.asyncio

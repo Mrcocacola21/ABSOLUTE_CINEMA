@@ -5,6 +5,7 @@ import { getGenreLabels } from "@/shared/genres";
 import { getLocalizedText } from "@/shared/localization";
 import { getMovieStatusBadgeClassName } from "@/shared/movieStatus";
 import { usePagination } from "@/shared/pagination";
+import { resolvePosterSource } from "@/shared/posters";
 import { formatStateLabel } from "@/shared/presentation";
 import { PaginationControls } from "@/shared/ui/PaginationControls";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
@@ -85,6 +86,7 @@ export function PlanningShelf({
         {planningPagination.pageItems.map((movie) => {
           const isSelected = movie.id === pinnedMovieId || movie.id === draggedMovieId;
           const movieTitle = getLocalizedText(movie.title, i18n.language);
+          const posterSource = resolvePosterSource(movie);
 
           return (
             <article
@@ -96,8 +98,8 @@ export function PlanningShelf({
             >
               <div className="admin-source-card__header">
                 <div className="media-tile admin-source-card__media" aria-hidden="true">
-                  {movie.poster_url ? (
-                    <img src={movie.poster_url} alt="" className="media-tile__image" />
+                  {posterSource ? (
+                    <img src={posterSource} alt="" className="media-tile__image" />
                   ) : (
                     <span>{getMovieMonogram(movieTitle)}</span>
                   )}

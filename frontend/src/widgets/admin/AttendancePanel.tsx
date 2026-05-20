@@ -16,6 +16,7 @@ import type {
 
 type AttendanceStatusFilter = "all" | "scheduled" | "completed" | "cancelled";
 type AttendanceSortOption = "latest" | "highest" | "lowest";
+type AttendancePeriodPreset = "today" | "next7Days" | "next30Days" | "thisMonth" | "allTime" | "custom";
 type BookingSortOption = "latest" | "oldest" | "mostTickets" | "highestValue";
 type BookingOrderStatusFilter = "all" | "completed" | "partially_cancelled" | "cancelled";
 type BookingTicketStateFilter = "all" | "active" | "unused" | "used" | "cancelled";
@@ -43,6 +44,11 @@ interface BookingMovieOption {
   ticketCount: number;
 }
 
+interface AttendancePeriodRange {
+  startDate: Date | null;
+  endDate: Date | null;
+}
+
 interface BookingOrderGroup {
   orderId: string;
   validationToken: string | null;
@@ -66,6 +72,7 @@ interface BookingOrderGroup {
 
 const attendanceStatusFilters: AttendanceStatusFilter[] = ["all", "scheduled", "completed", "cancelled"];
 const attendanceSortOptions: AttendanceSortOption[] = ["latest", "highest", "lowest"];
+const attendancePeriodPresets: AttendancePeriodPreset[] = ["today", "next7Days", "next30Days", "thisMonth", "allTime"];
 const bookingSortOptions: BookingSortOption[] = ["latest", "oldest", "mostTickets", "highestValue"];
 const bookingOrderStatusFilters: BookingOrderStatusFilter[] = ["all", "completed", "partially_cancelled", "cancelled"];
 const bookingTicketStateFilters: BookingTicketStateFilter[] = ["all", "active", "unused", "used", "cancelled"];
@@ -110,13 +117,131 @@ function getShortOrderId(orderId: string): string {
   return orderId.slice(-8).toUpperCase();
 }
 
-function getLocalDateInputValue(value: string): string {
-  const date = new Date(value);
+function getLocalDateInputValue(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
+}
+
+function getLocalDayBoundary(date: Date, boundary: "start" | "end"): Date {
+  const nextDate = new Date(date);
+
+  if (boundary === "start") {
+    nextDate.setHours(0, 0, 0, 0);
+    return nextDate;
+  }
+
+  nextDate.setHours(23, 59, 59, 999);
+  return nextDate;
+}
+
+function addLocalDays(date: Date, days: number): Date {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+
+  return nextDate;
+}
+
+function parseLocalDateInputValue(value: string, boundary: "start" | "end"): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const [yearText, monthText, dayText] = value.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+
+  return getLocalDayBoundary(date, boundary);
+}
+
+function getAttendancePeriodRange(
+  preset: AttendancePeriodPreset,
+  customStartDate: string,
+  customEndDate: string,
+): AttendancePeriodRange {
+  const today = new Date();
+
+  if (preset === "today") {
+    return {
+      startDate: getLocalDayBoundary(today, "start"),
+      endDate: getLocalDayBoundary(today, "end"),
+    };
+  }
+
+  if (preset === "next7Days") {
+    return {
+      startDate: getLocalDayBoundary(today, "start"),
+      endDate: getLocalDayBoundary(addLocalDays(today, 6), "end"),
+    };
+  }
+
+  if (preset === "next30Days") {
+    return {
+      startDate: getLocalDayBoundary(today, "start"),
+      endDate: getLocalDayBoundary(addLocalDays(today, 29), "end"),
+    };
+  }
+
+  if (preset === "thisMonth") {
+    return {
+      startDate: getLocalDayBoundary(new Date(today.getFullYear(), today.getMonth(), 1), "start"),
+      endDate: getLocalDayBoundary(new Date(today.getFullYear(), today.getMonth() + 1, 0), "end"),
+    };
+  }
+
+  if (preset === "custom") {
+    return {
+      startDate: parseLocalDateInputValue(customStartDate, "start"),
+      endDate: parseLocalDateInputValue(customEndDate, "end"),
+    };
+  }
+
+  return {
+    startDate: null,
+    endDate: null,
+  };
+}
+
+function isSessionInAttendancePeriod(
+  session: AttendanceSessionSummary,
+  periodRange: AttendancePeriodRange,
+): boolean {
+  const sessionTime = new Date(session.start_time).getTime();
+
+  if (Number.isNaN(sessionTime)) {
+    return false;
+  }
+
+  if (periodRange.startDate && sessionTime < periodRange.startDate.getTime()) {
+    return false;
+  }
+
+  if (periodRange.endDate && sessionTime > periodRange.endDate.getTime()) {
+    return false;
+  }
+
+  return true;
+}
+
+function formatDateOnly(value: Date, language: string): string {
+  return new Intl.DateTimeFormat(getIntlLocale(language), {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(value);
 }
 
 function isTicketCancelled(ticket: TicketListItem): boolean {
@@ -187,6 +312,9 @@ export function AttendancePanel({
   const { t, i18n } = useTranslation();
   const [statusFilter, setStatusFilter] = useState<AttendanceStatusFilter>("all");
   const [sortOption, setSortOption] = useState<AttendanceSortOption>("latest");
+  const [attendancePeriodPreset, setAttendancePeriodPreset] = useState<AttendancePeriodPreset>("allTime");
+  const [attendanceCustomStartDate, setAttendanceCustomStartDate] = useState("");
+  const [attendanceCustomEndDate, setAttendanceCustomEndDate] = useState("");
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<ReportTabId>("attendance");
   const [bookingMovieFilter, setBookingMovieFilter] = useState("all");
@@ -205,19 +333,28 @@ export function AttendancePanel({
   const inactiveUsers = users.length - activeUsers;
 
   const sessions = report?.sessions ?? [];
+  const attendancePeriodRange = getAttendancePeriodRange(
+    attendancePeriodPreset,
+    attendanceCustomStartDate,
+    attendanceCustomEndDate,
+  );
+  const attendancePeriodSessions = sessions.filter((session) =>
+    isSessionInAttendancePeriod(session, attendancePeriodRange),
+  );
+  const attendancePeriodTicketsSold = attendancePeriodSessions.reduce((sum, session) => sum + session.tickets_sold, 0);
   const now = Date.now();
-  const totalSeats = sessions.reduce((sum, session) => sum + session.total_seats, 0);
-  const overallAttendanceRate = totalSeats > 0 ? (report?.total_tickets_sold ?? 0) / totalSeats : 0;
-  const upcomingSessionsCount = sessions.filter(
+  const totalSeats = attendancePeriodSessions.reduce((sum, session) => sum + session.total_seats, 0);
+  const overallAttendanceRate = totalSeats > 0 ? attendancePeriodTicketsSold / totalSeats : 0;
+  const upcomingSessionsCount = attendancePeriodSessions.filter(
     (session) => session.status === "scheduled" && new Date(session.start_time).getTime() >= now,
   ).length;
-  const completedSessionsCount = sessions.filter((session) => session.status === "completed").length;
-  const cancelledSessionsCount = sessions.filter((session) => session.status === "cancelled").length;
-  const soldOutSessionsCount = sessions.filter(
+  const completedSessionsCount = attendancePeriodSessions.filter((session) => session.status === "completed").length;
+  const cancelledSessionsCount = attendancePeriodSessions.filter((session) => session.status === "cancelled").length;
+  const soldOutSessionsCount = attendancePeriodSessions.filter(
     (session) => session.status !== "cancelled" && session.total_seats > 0 && session.available_seats === 0,
   ).length;
 
-  const comparableSessions = sessions.filter((session) => session.status !== "cancelled");
+  const comparableSessions = attendancePeriodSessions.filter((session) => session.status !== "cancelled");
   const bestSession =
     comparableSessions.length > 0
       ? [...comparableSessions].sort(
@@ -238,7 +375,7 @@ export function AttendancePanel({
       : null;
 
   const normalizedAttendanceSearchQuery = attendanceSearchQuery.trim().toLowerCase();
-  const filteredSessions = sessions.filter((session) => {
+  const filteredSessions = attendancePeriodSessions.filter((session) => {
     if (statusFilter !== "all" && session.status !== statusFilter) {
       return false;
     }
@@ -257,6 +394,65 @@ export function AttendancePanel({
 
     return searchableParts.join(" ").toLowerCase().includes(normalizedAttendanceSearchQuery);
   });
+  const attendancePeriodRangeLabel = (() => {
+    if (attendancePeriodPreset === "allTime") {
+      return t("admin.reports.attendance.period.allTimeLabel");
+    }
+
+    if (attendancePeriodRange.startDate && attendancePeriodRange.endDate) {
+      const startLabel = formatDateOnly(attendancePeriodRange.startDate, i18n.language);
+      const endLabel = formatDateOnly(attendancePeriodRange.endDate, i18n.language);
+
+      if (
+        getLocalDateInputValue(attendancePeriodRange.startDate) ===
+        getLocalDateInputValue(attendancePeriodRange.endDate)
+      ) {
+        return startLabel;
+      }
+
+      return t("admin.reports.attendance.period.rangeLabel", {
+        start: startLabel,
+        end: endLabel,
+      });
+    }
+
+    if (attendancePeriodRange.startDate) {
+      return t("admin.reports.attendance.period.fromDate", {
+        date: formatDateOnly(attendancePeriodRange.startDate, i18n.language),
+      });
+    }
+
+    if (attendancePeriodRange.endDate) {
+      return t("admin.reports.attendance.period.untilDate", {
+        date: formatDateOnly(attendancePeriodRange.endDate, i18n.language),
+      });
+    }
+
+    return t("admin.reports.attendance.period.customRange");
+  })();
+  const attendanceActiveFilterLabels = [
+    t("admin.reports.attendance.activeFilters.period", { period: attendancePeriodRangeLabel }),
+    statusFilter !== "all"
+      ? t("admin.reports.attendance.activeFilters.status", {
+          status: t(`admin.reports.attendance.filters.${statusFilter}`),
+        })
+      : "",
+    normalizedAttendanceSearchQuery
+      ? t("admin.reports.attendance.activeFilters.search", { query: attendanceSearchQuery.trim() })
+      : "",
+    sortOption !== "latest"
+      ? t("admin.reports.attendance.activeFilters.sort", {
+          sort: t(`admin.reports.attendance.sort.${sortOption}`),
+        })
+      : "",
+  ].filter(Boolean);
+  const hasActiveAttendanceControls =
+    attendancePeriodPreset !== "allTime" ||
+    Boolean(attendanceCustomStartDate) ||
+    Boolean(attendanceCustomEndDate) ||
+    statusFilter !== "all" ||
+    sortOption !== "latest" ||
+    Boolean(normalizedAttendanceSearchQuery);
   const visibleSessions = [...filteredSessions].sort((left, right) => {
     if (sortOption === "highest") {
       return (
@@ -518,19 +714,19 @@ export function AttendancePanel({
     ? [
         {
           label: t("admin.reports.summary.sessionsInReport"),
-          value: report.total_sessions,
+          value: attendancePeriodSessions.length,
           detail: t("admin.reports.summary.sessionsDetail"),
         },
         {
           label: t("admin.reports.summary.ticketsSold"),
-          value: report.total_tickets_sold,
+          value: attendancePeriodTicketsSold,
           detail: t("admin.reports.summary.ticketsDetail"),
         },
         {
           label: t("admin.reports.summary.occupancyRate"),
           value: formatPercent(overallAttendanceRate, i18n.language),
           detail: t("admin.reports.summary.occupancyDetail", {
-            sold: report.total_tickets_sold,
+            sold: attendancePeriodTicketsSold,
             total: totalSeats,
           }),
         },
@@ -589,7 +785,7 @@ export function AttendancePanel({
     {
       id: "attendance",
       label: t("admin.reports.tabs.attendance"),
-      count: report?.total_sessions ?? 0,
+      count: attendancePeriodSessions.length,
     },
     {
       id: "bookings",
@@ -602,6 +798,42 @@ export function AttendancePanel({
       count: users.length,
     },
   ];
+
+  function selectAttendancePeriodPreset(preset: AttendancePeriodPreset) {
+    setAttendancePeriodPreset(preset);
+
+    if (preset !== "custom") {
+      setAttendanceCustomStartDate("");
+      setAttendanceCustomEndDate("");
+    }
+  }
+
+  function updateAttendanceCustomStartDate(value: string) {
+    setAttendancePeriodPreset("custom");
+    setAttendanceCustomStartDate(value);
+
+    if (value && attendanceCustomEndDate && value > attendanceCustomEndDate) {
+      setAttendanceCustomEndDate(value);
+    }
+  }
+
+  function updateAttendanceCustomEndDate(value: string) {
+    setAttendancePeriodPreset("custom");
+    setAttendanceCustomEndDate(value);
+
+    if (value && attendanceCustomStartDate && value < attendanceCustomStartDate) {
+      setAttendanceCustomStartDate(value);
+    }
+  }
+
+  function resetAttendanceFilters() {
+    setAttendancePeriodPreset("allTime");
+    setAttendanceCustomStartDate("");
+    setAttendanceCustomEndDate("");
+    setStatusFilter("all");
+    setSortOption("latest");
+    setAttendanceSearchQuery("");
+  }
 
   function resetBookingFilters() {
     setBookingMovieFilter("all");
@@ -665,88 +897,169 @@ export function AttendancePanel({
             <span className="badge">
               {t("admin.reports.attendance.showingResults", {
                 visible: visibleSessions.length,
-                total: sessions.length,
+                total: attendancePeriodSessions.length,
               })}
             </span>
+            <span className="badge">{attendancePeriodRangeLabel}</span>
           </div>
         </div>
 
         <div className="admin-report-toolbar admin-report-toolbar--attendance">
-          <label className="field field--search admin-report-search-field">
-            <span>{t("admin.reports.attendance.searchLabel")}</span>
-            <div className="admin-report-search-control">
-              <input
-                type="search"
-                value={attendanceSearchQuery}
-                placeholder={t("admin.reports.attendance.searchPlaceholder")}
-                onChange={(event) => setAttendanceSearchQuery(event.target.value)}
-              />
-              {attendanceSearchQuery ? (
-                <button
-                  className="admin-report-search-clear"
-                  type="button"
-                  onClick={() => setAttendanceSearchQuery("")}
-                >
-                  {t("admin.reports.attendance.searchClear")}
-                </button>
-              ) : null}
-            </div>
-            <p className="field__hint">{t("admin.reports.attendance.searchHint")}</p>
-          </label>
-          <div className="admin-report-toolbar__group">
-            <span className="admin-report-toolbar__label">{t("common.labels.status")}</span>
-            <div className="admin-report-toggle-group">
-              {attendanceStatusFilters.map((filter) => (
-                <button
-                  key={filter}
-                  className={`admin-report-toggle ${statusFilter === filter ? "is-active" : ""}`}
-                  type="button"
-                  aria-pressed={statusFilter === filter}
-                  onClick={() => setStatusFilter(filter)}
-                >
-                  {t(`admin.reports.attendance.filters.${filter}`)}
-                </button>
-              ))}
+          <div className="admin-report-toolbar__column admin-report-toolbar__column--primary">
+            <label className="field field--search admin-report-search-field">
+              <span>{t("admin.reports.attendance.searchLabel")}</span>
+              <div className="admin-report-search-control">
+                <input
+                  type="search"
+                  value={attendanceSearchQuery}
+                  placeholder={t("admin.reports.attendance.searchPlaceholder")}
+                  onChange={(event) => setAttendanceSearchQuery(event.target.value)}
+                />
+                {attendanceSearchQuery ? (
+                  <button
+                    className="admin-report-search-clear"
+                    type="button"
+                    onClick={() => setAttendanceSearchQuery("")}
+                  >
+                    {t("admin.reports.attendance.searchClear")}
+                  </button>
+                ) : null}
+              </div>
+              <p className="field__hint">{t("admin.reports.attendance.searchHint")}</p>
+            </label>
+
+            <div className="admin-report-toolbar__group">
+              <span className="admin-report-toolbar__label">{t("common.labels.sortBy")}</span>
+              <div className="admin-report-toggle-group">
+                {attendanceSortOptions.map((option) => (
+                  <button
+                    key={option}
+                    className={`admin-report-toggle ${sortOption === option ? "is-active" : ""}`}
+                    type="button"
+                    aria-pressed={sortOption === option}
+                    onClick={() => setSortOption(option)}
+                  >
+                    {t(`admin.reports.attendance.sort.${option}`)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="admin-report-toolbar__group">
-            <span className="admin-report-toolbar__label">{t("common.labels.sortBy")}</span>
-            <div className="admin-report-toggle-group">
-              {attendanceSortOptions.map((option) => (
-                <button
-                  key={option}
-                  className={`admin-report-toggle ${sortOption === option ? "is-active" : ""}`}
-                  type="button"
-                  aria-pressed={sortOption === option}
-                  onClick={() => setSortOption(option)}
+
+          <div className="admin-report-toolbar__column admin-report-toolbar__column--secondary">
+            <div className="admin-report-toolbar__group admin-report-period-control">
+              <div className="admin-report-period-control__header">
+                <span className="admin-report-toolbar__label">{t("admin.reports.attendance.period.label")}</span>
+                <span className="badge">
+                  {t("admin.reports.attendance.period.selectedLabel", { period: attendancePeriodRangeLabel })}
+                </span>
+              </div>
+              <div className="admin-report-period-control__body">
+                <div
+                  className="admin-report-toggle-group admin-report-period-presets"
+                  aria-label={t("admin.reports.attendance.period.presetLabel")}
                 >
-                  {t(`admin.reports.attendance.sort.${option}`)}
-                </button>
-              ))}
+                  {attendancePeriodPresets.map((preset) => (
+                    <button
+                      key={preset}
+                      className={`admin-report-toggle ${attendancePeriodPreset === preset ? "is-active" : ""}`}
+                      type="button"
+                      aria-pressed={attendancePeriodPreset === preset}
+                      onClick={() => selectAttendancePeriodPreset(preset)}
+                    >
+                      {t(`admin.reports.attendance.period.presets.${preset}`)}
+                    </button>
+                  ))}
+                </div>
+                <div
+                  className={`admin-report-date-range ${attendancePeriodPreset === "custom" ? "is-active" : ""}`}
+                  aria-label={t("admin.reports.attendance.period.customRange")}
+                >
+                  <span className="admin-report-date-range__label">
+                    {t("admin.reports.attendance.period.customRange")}
+                  </span>
+                  <div className="admin-report-date-range__fields">
+                    <label className="field admin-report-date-field">
+                      <span>{t("admin.reports.attendance.period.startLabel")}</span>
+                      <input
+                        type="date"
+                        value={attendanceCustomStartDate}
+                        max={attendanceCustomEndDate || undefined}
+                        onChange={(event) => updateAttendanceCustomStartDate(event.target.value)}
+                      />
+                    </label>
+                    <label className="field admin-report-date-field">
+                      <span>{t("admin.reports.attendance.period.endLabel")}</span>
+                      <input
+                        type="date"
+                        value={attendanceCustomEndDate}
+                        min={attendanceCustomStartDate || undefined}
+                        onChange={(event) => updateAttendanceCustomEndDate(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="admin-report-toolbar__group">
+              <span className="admin-report-toolbar__label">{t("common.labels.status")}</span>
+              <div className="admin-report-toggle-group">
+                {attendanceStatusFilters.map((filter) => (
+                  <button
+                    key={filter}
+                    className={`admin-report-toggle ${statusFilter === filter ? "is-active" : ""}`}
+                    type="button"
+                    aria-pressed={statusFilter === filter}
+                    onClick={() => setStatusFilter(filter)}
+                  >
+                    {t(`admin.reports.attendance.filters.${filter}`)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
+        <div className="admin-report-filter-context admin-report-filter-context--attendance">
+          <span>{t("admin.reports.attendance.activeFilters.label")}</span>
+          <div className="admin-report-filter-context__chips">
+            {attendanceActiveFilterLabels.map((label) => (
+              <span key={label} className="badge">{label}</span>
+            ))}
+          </div>
+          {hasActiveAttendanceControls ? (
+            <button
+              className="button--ghost admin-report-filter-context__reset"
+              type="button"
+              onClick={resetAttendanceFilters}
+            >
+              {t("common.actions.resetFilters")}
+            </button>
+          ) : null}
+        </div>
+
         {sessions.length > 0 ? (
-          <>
-            <div className="admin-report-insights">
-              {bestSession ? (
-                <article className="admin-report-insight admin-report-insight--positive">
-                  <span className="admin-report-insight__label">{t("admin.reports.attendance.bestAttendance")}</span>
-                  <strong>{getLocalizedText(bestSession.movie_title, i18n.language)}</strong>
-                  <p className="muted">{formatDateTime(bestSession.start_time, i18n.language)}</p>
-                  <div className="stats-row">
-                    <span className="badge badge--active">{t("admin.reports.attendance.bestBadge")}</span>
-                    <span className="badge">{formatPercent(bestSession.attendance_rate, i18n.language)}</span>
-                    <span className="badge">
-                      {t("admin.reports.attendance.soldOfTotal", {
-                        sold: bestSession.tickets_sold,
-                        total: bestSession.total_seats,
-                      })}
-                    </span>
-                  </div>
-                </article>
-              ) : null}
+          attendancePeriodSessions.length > 0 ? (
+            <>
+              <div className="admin-report-insights">
+                {bestSession ? (
+                  <article className="admin-report-insight admin-report-insight--positive">
+                    <span className="admin-report-insight__label">{t("admin.reports.attendance.bestAttendance")}</span>
+                    <strong>{getLocalizedText(bestSession.movie_title, i18n.language)}</strong>
+                    <p className="muted">{formatDateTime(bestSession.start_time, i18n.language)}</p>
+                    <div className="stats-row">
+                      <span className="badge badge--active">{t("admin.reports.attendance.bestBadge")}</span>
+                      <span className="badge">{formatPercent(bestSession.attendance_rate, i18n.language)}</span>
+                      <span className="badge">
+                        {t("admin.reports.attendance.soldOfTotal", {
+                          sold: bestSession.tickets_sold,
+                          total: bestSession.total_seats,
+                        })}
+                      </span>
+                    </div>
+                  </article>
+                ) : null}
 
               {weakestSession ? (
                 <article className="admin-report-insight admin-report-insight--warning">
@@ -855,17 +1168,26 @@ export function AttendancePanel({
                 <button
                   className="button--ghost"
                   type="button"
-                  onClick={() => {
-                    setStatusFilter("all");
-                    setSortOption("latest");
-                    setAttendanceSearchQuery("");
-                  }}
+                  onClick={resetAttendanceFilters}
                 >
                   {t("common.actions.resetFilters")}
                 </button>
               </section>
             )}
           </>
+          ) : (
+            <section className="empty-state empty-state--panel">
+              <h2>{t("admin.reports.attendance.periodEmptyTitle")}</h2>
+              <p>{t("admin.reports.attendance.periodEmptyText", { period: attendancePeriodRangeLabel })}</p>
+              <button
+                className="button--ghost"
+                type="button"
+                onClick={resetAttendanceFilters}
+              >
+                {t("common.actions.resetFilters")}
+              </button>
+            </section>
+          )
         ) : (
           <section className="empty-state empty-state--panel">
             <h2>{t("admin.reports.attendance.emptyTitle")}</h2>

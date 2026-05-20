@@ -16,7 +16,7 @@ from app.api.docs import (
 from app.api.dependencies.services import get_auth_service
 from app.core.responses import ApiResponse
 from app.factories.response_factory import ApiResponseFactory
-from app.schemas.auth import TokenRead
+from app.schemas.auth import AccessTokenRead, TokenRead, TokenRefreshRequest
 from app.schemas.user import UserCreate, UserRead
 from app.services.auth import AuthService
 
@@ -63,12 +63,13 @@ async def register(
 @router.post(
     "/login",
     response_model=ApiResponse[TokenRead],
-    summary="Log in and receive a JWT",
+    summary="Log in and receive access and refresh tokens",
     description=(
         "Authenticate with form-encoded credentials. This app-facing endpoint returns the standard "
-        "API response envelope with a JWT access token in `data.access_token`."
+        "API response envelope with a short-lived JWT access token in `data.access_token` and a "
+        "longer-lived JWT refresh token in `data.refresh_token`."
     ),
-    response_description="Wrapped JWT token payload for the frontend and API clients.",
+    response_description="Wrapped JWT token pair for the frontend and API clients.",
     responses=merge_openapi_responses(AUTHENTICATION_ERROR_RESPONSE, REQUEST_VALIDATION_ERROR_RESPONSE),
 )
 async def login(
@@ -81,6 +82,27 @@ async def login(
         password=form_data.password,
     )
     return ApiResponseFactory.success(data=token, message="Login successful.")
+
+
+@router.post(
+    "/refresh",
+    response_model=ApiResponse[AccessTokenRead],
+    summary="Refresh an expired access token",
+    description=(
+        "Accept a refresh JWT from `data.refresh_token` returned by login and issue a new short-lived "
+        "access token. Refresh tokens are purpose-checked, expiration-checked, and validated against "
+        "the current user record, so deleted or inactive accounts cannot restore a session."
+    ),
+    response_description="Wrapped access token payload.",
+    responses=merge_openapi_responses(AUTHENTICATION_ERROR_RESPONSE, REQUEST_VALIDATION_ERROR_RESPONSE),
+)
+async def refresh_access_token(
+    payload: TokenRefreshRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> ApiResponse[AccessTokenRead]:
+    """Issue a new access token from a valid refresh token."""
+    token = await auth_service.refresh_access_token(refresh_token=payload.refresh_token)
+    return ApiResponseFactory.success(data=token, message="Access token refreshed successfully.")
 
 
 @router.post(

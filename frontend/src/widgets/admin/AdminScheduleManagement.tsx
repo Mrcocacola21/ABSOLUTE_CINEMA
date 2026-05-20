@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -31,6 +31,8 @@ interface AdminScheduleManagementProps {
   busyActionLabel?: string;
   onCreateMovie: (payload: MovieCreatePayload) => Promise<Movie | null>;
   onUpdateMovie: (movieId: string, payload: MovieUpdatePayload) => Promise<Movie | null>;
+  onUploadMoviePoster: (movieId: string, poster: File) => Promise<Movie | null>;
+  onRemoveMoviePoster: (movieId: string) => Promise<Movie | null>;
   onDeactivateMovie: (movieId: string) => Promise<Movie | null>;
   onDeleteMovie: (movieId: string) => Promise<{ id: string; deleted: boolean } | null>;
   onCreateSession: (payload: SessionCreatePayload) => Promise<SessionDetails | null>;
@@ -61,6 +63,8 @@ export function AdminScheduleManagement({
   busyActionLabel,
   onCreateMovie,
   onUpdateMovie,
+  onUploadMoviePoster,
+  onRemoveMoviePoster,
   onDeactivateMovie,
   onDeleteMovie,
   onCreateSession,
@@ -72,6 +76,9 @@ export function AdminScheduleManagement({
   const { t, i18n } = useTranslation();
   const [movieForm, setMovieForm] = useState<MovieCreatePayload>(emptyMovieForm);
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
+  const [moviePosterFile, setMoviePosterFile] = useState<File | null>(null);
+  const [moviePosterPreviewUrl, setMoviePosterPreviewUrl] = useState<string | null>(null);
+  const [shouldRemoveMoviePoster, setShouldRemoveMoviePoster] = useState(false);
   const [movieQuery, setMovieQuery] = useState("");
 
   const moviesById = useMemo(
@@ -82,6 +89,7 @@ export function AdminScheduleManagement({
       }, {}),
     [movies],
   );
+  const editingMovie = editingMovieId ? moviesById[editingMovieId] ?? null : null;
 
   const sortedMovies = useMemo(
     () => [...movies].sort((left, right) => compareLocalizedText(left.title, right.title, i18n.language)),
@@ -139,6 +147,32 @@ export function AdminScheduleManagement({
     setMovieForm((current) => ({ ...current, [field]: value }));
   }
 
+  function clearMoviePosterFile() {
+    setMoviePosterFile(null);
+    setMoviePosterPreviewUrl((currentUrl) => {
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+      }
+      return null;
+    });
+  }
+
+  function handleMoviePosterFileChange(file: File | null) {
+    setShouldRemoveMoviePoster(false);
+    setMoviePosterFile(file);
+    setMoviePosterPreviewUrl((currentUrl) => {
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+      }
+      return file ? URL.createObjectURL(file) : null;
+    });
+  }
+
+  function handleMoviePosterRemovalChange(shouldRemove: boolean) {
+    clearMoviePosterFile();
+    setShouldRemoveMoviePoster(shouldRemove);
+  }
+
   function updateLocalizedMovieFormField(
     field: "title" | "description",
     locale: "uk" | "en",
@@ -165,9 +199,13 @@ export function AdminScheduleManagement({
   function resetMovieForm() {
     setMovieForm(emptyMovieForm);
     setEditingMovieId(null);
+    clearMoviePosterFile();
+    setShouldRemoveMoviePoster(false);
   }
 
   function handleMovieCatalogEdit(movie: Movie) {
+    clearMoviePosterFile();
+    setShouldRemoveMoviePoster(false);
     setEditingMovieId(movie.id);
     setMovieForm({
       title: { ...movie.title },
@@ -201,6 +239,17 @@ export function AdminScheduleManagement({
       if (!updatedMovie) {
         return;
       }
+      if (moviePosterFile) {
+        const posterMovie = await onUploadMoviePoster(editingMovieId, moviePosterFile);
+        if (!posterMovie) {
+          return;
+        }
+      } else if (shouldRemoveMoviePoster && editingMovie?.poster_file_url) {
+        const posterMovie = await onRemoveMoviePoster(editingMovieId);
+        if (!posterMovie) {
+          return;
+        }
+      }
       resetMovieForm();
       return;
     }
@@ -209,12 +258,27 @@ export function AdminScheduleManagement({
     if (!createdMovie) {
       return;
     }
+    if (moviePosterFile) {
+      const posterMovie = await onUploadMoviePoster(createdMovie.id, moviePosterFile);
+      if (!posterMovie) {
+        setEditingMovieId(createdMovie.id);
+        return;
+      }
+    }
 
     resetMovieForm();
     if (isMovieScheduleReady(createdMovie)) {
       chronoboard.pinMovie(createdMovie.id);
     }
   }
+
+  useEffect(() => {
+    return () => {
+      if (moviePosterPreviewUrl) {
+        URL.revokeObjectURL(moviePosterPreviewUrl);
+      }
+    };
+  }, [moviePosterPreviewUrl]);
 
   async function handleDeactivateManagedMovie(movie: Movie) {
     const movieLabel = getLocalizedText(movie.title, i18n.language);
@@ -276,11 +340,17 @@ export function AdminScheduleManagement({
         isBusy={isBusy}
         busyActionLabel={busyActionLabel}
         movieForm={movieForm}
+        moviePosterFile={moviePosterFile}
+        moviePosterPreviewUrl={moviePosterPreviewUrl}
+        editingMovie={editingMovie}
+        shouldRemoveMoviePoster={shouldRemoveMoviePoster}
         editingMovieId={editingMovieId}
         movieQuery={movieQuery}
         onMovieFormChange={updateMovieFormField}
         onLocalizedMovieFormChange={updateLocalizedMovieFormField}
         onToggleGenre={toggleMovieGenre}
+        onMoviePosterFileChange={handleMoviePosterFileChange}
+        onMoviePosterRemovalChange={handleMoviePosterRemovalChange}
         onMovieQueryChange={setMovieQuery}
         onSubmit={handleMovieSubmit}
         onResetForm={resetMovieForm}

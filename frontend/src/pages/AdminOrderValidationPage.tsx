@@ -8,6 +8,7 @@ import { checkInOrderRequest, validateOrderTokenRequest } from "@/api/admin";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { getLocalizedText } from "@/shared/localization";
 import { formatDateTime, formatStateLabel } from "@/shared/presentation";
+import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
 import type { OrderValidationResult } from "@/types/domain";
 
@@ -172,6 +173,22 @@ export function AdminOrderValidationPage() {
 
       {errorMessage ? <StatusBanner tone="error" message={errorMessage} /> : null}
       {feedbackMessage ? <StatusBanner tone="success" message={feedbackMessage} /> : null}
+
+      {!result && isValidating ? (
+        <StatePanel
+          tone="loading"
+          title={t("admin.validation.loadingTitle")}
+          message={t("admin.validation.loadingMessage")}
+        />
+      ) : null}
+
+      {!result && !isValidating && !errorMessage ? (
+        <StatePanel
+          tone="empty"
+          title={t("admin.validation.idleTitle")}
+          message={t("admin.validation.idleMessage")}
+        />
+      ) : null}
 
       {result ? (
         <section className={`panel admin-validation-result ${validityClass}`}>

@@ -2,6 +2,7 @@ import type { LanguageCode, UserRole } from "@/types/domain";
 
 export const STORAGE_KEYS = {
   accessToken: "cinema_showcase_access_token",
+  refreshToken: "cinema_showcase_refresh_token",
   userRole: "cinema_showcase_user_role",
   language: "cinema_showcase_language",
 } as const;

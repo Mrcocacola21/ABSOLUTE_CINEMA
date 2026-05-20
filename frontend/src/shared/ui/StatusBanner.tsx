@@ -17,6 +17,7 @@ export function StatusBanner({
 
   return (
     <section className={`status-banner status-banner--${tone}`} role={role}>
+      <span className="status-banner__marker" aria-hidden="true" />
       <div className="status-banner__copy">
         {title ? <strong>{title}</strong> : null}
         <span>{message}</span>

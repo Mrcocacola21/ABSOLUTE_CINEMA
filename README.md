@@ -2357,6 +2357,23 @@ pytest
 ```
 
 Because the backend test configuration includes coverage options in `pyproject.toml`, this command runs with the configured pytest addopts.
+It writes terminal missing-line coverage output, `coverage.xml`, and `htmlcov/index.html` inside the `backend` directory.
+
+#### Run all backend tests with coverage in Docker
+
+```bash
+docker compose run --rm -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true" backend pytest
+```
+
+This is the most reliable full-suite path because the integration tests require MongoDB replica-set support. Coverage is configured in `backend/pyproject.toml` to measure the real backend package `app` while omitting `app/tests/*`.
+
+After the run, open the HTML report from the repository root:
+
+```powershell
+start backend\htmlcov\index.html
+```
+
+On non-Windows systems, open `backend/htmlcov/index.html` in a browser.
 
 #### Run only the backend integration suite locally
 

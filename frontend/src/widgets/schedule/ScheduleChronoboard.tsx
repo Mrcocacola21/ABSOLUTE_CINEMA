@@ -11,6 +11,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { getLocalizedText } from "@/shared/localization";
+import { getPosterBackgroundValue } from "@/shared/posters";
 import { formatCurrency, formatTime } from "@/shared/presentation";
 import {
   PUBLIC_SCHEDULE_BOARD_WIDTH,
@@ -56,10 +57,6 @@ const boardHourLines = Array.from(
     left: `${index * 60 * PUBLIC_SCHEDULE_PIXELS_PER_MINUTE}px`,
   }),
 );
-
-function getPosterBackgroundValue(posterUrl?: string | null): string {
-  return posterUrl ? `url("${posterUrl}")` : "none";
-}
 
 export function ScheduleChronoboard({ items, selectedDay, highlightedSessionId = "" }: ScheduleChronoboardProps) {
   const { t, i18n } = useTranslation();
@@ -319,7 +316,7 @@ export function ScheduleChronoboard({ items, selectedDay, highlightedSessionId =
                     className={`public-chrono-session public-chrono-session--${item.status}${activeSessionId === item.id ? " is-active" : ""}${highlightedSessionId === item.id ? " is-targeted" : ""}`}
                     style={{
                       ...getPublicScheduleCardStyle(item.start_time, item.end_time),
-                      ["--public-chrono-poster" as string]: getPosterBackgroundValue(item.poster_url),
+                      ["--public-chrono-poster" as string]: getPosterBackgroundValue(item),
                     }}
                     onClick={(event) => handleSessionClick(item.id, event)}
                     aria-pressed={activeSessionId === item.id}

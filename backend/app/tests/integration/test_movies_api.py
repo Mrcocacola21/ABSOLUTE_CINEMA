@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 import pytest
@@ -128,6 +129,85 @@ async def test_admin_can_create_and_update_movie_with_localized_fields_and_poste
     assert update_response.status_code == 200, update_response.text
     updated_movie = update_response.json()["data"]
     assert updated_movie["poster_url"] == updated_poster_url
+
+
+@pytest.mark.asyncio
+async def test_admin_can_upload_replace_and_remove_movie_poster_file(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+    create_session,
+    integration_settings: dict[str, str],
+) -> None:
+    poster_url = "https://example.com/posters/fallback.jpg"
+    movie = await create_movie(poster_url=poster_url)
+
+    upload_response = await client.post(
+        f"{API_PREFIX}/admin/movies/{movie['id']}/poster",
+        headers=admin_auth["headers"],
+        files={"poster": ("poster.png", b"uploaded poster bytes", "image/png")},
+    )
+
+    assert upload_response.status_code == 200, upload_response.text
+    uploaded_movie = upload_response.json()["data"]
+    assert uploaded_movie["poster_url"] == poster_url
+    assert uploaded_movie["poster_file_url"].startswith("/media/posters/")
+    assert uploaded_movie["poster_display_url"] == uploaded_movie["poster_file_url"]
+    uploaded_path = Path(integration_settings["media_root"]) / "posters" / Path(uploaded_movie["poster_file_url"]).name
+    assert uploaded_path.exists()
+
+    replace_response = await client.post(
+        f"{API_PREFIX}/admin/movies/{movie['id']}/poster",
+        headers=admin_auth["headers"],
+        files={"poster": ("replacement.webp", b"replacement poster bytes", "image/webp")},
+    )
+
+    assert replace_response.status_code == 200, replace_response.text
+    replaced_movie = replace_response.json()["data"]
+    assert replaced_movie["poster_file_url"].endswith(".webp")
+    assert replaced_movie["poster_file_url"] != uploaded_movie["poster_file_url"]
+    assert replaced_movie["poster_display_url"] == replaced_movie["poster_file_url"]
+    assert not uploaded_path.exists()
+
+    await create_session(movie_id=movie["id"])
+    schedule_response = await client.get(
+        f"{API_PREFIX}/schedule",
+        params={"sort_by": "start_time", "sort_order": "asc"},
+    )
+    assert schedule_response.status_code == 200, schedule_response.text
+    schedule_item = schedule_response.json()["data"][0]
+    assert schedule_item["poster_url"] == poster_url
+    assert schedule_item["poster_file_url"] == replaced_movie["poster_file_url"]
+    assert schedule_item["poster_display_url"] == replaced_movie["poster_file_url"]
+
+    remove_response = await client.delete(
+        f"{API_PREFIX}/admin/movies/{movie['id']}/poster",
+        headers=admin_auth["headers"],
+    )
+
+    assert remove_response.status_code == 200, remove_response.text
+    removed_movie = remove_response.json()["data"]
+    assert removed_movie["poster_file_url"] is None
+    assert removed_movie["poster_url"] == poster_url
+    assert removed_movie["poster_display_url"] == poster_url
+
+
+@pytest.mark.asyncio
+async def test_admin_rejects_non_image_movie_poster_upload(
+    client: httpx.AsyncClient,
+    admin_auth: dict[str, object],
+    create_movie,
+) -> None:
+    movie = await create_movie()
+
+    response = await client.post(
+        f"{API_PREFIX}/admin/movies/{movie['id']}/poster",
+        headers=admin_auth["headers"],
+        files={"poster": ("poster.txt", b"not an image", "text/plain")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["message"] == "Poster upload must be a JPG, PNG, WebP, or SVG image."
 
 
 @pytest.mark.asyncio

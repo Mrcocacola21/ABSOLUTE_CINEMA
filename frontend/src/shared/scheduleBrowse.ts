@@ -27,6 +27,8 @@ export interface RotationMovie {
   title: LocalizedText;
   description: LocalizedText;
   poster_url?: string | null;
+  poster_file_url?: string | null;
+  poster_display_url?: string | null;
   age_rating?: string | null;
   genres: GenreCode[];
   status: MovieStatus;
@@ -299,6 +301,8 @@ export function buildRotationMovies(
       title: movie.title,
       description: movie.description,
       poster_url: movie.poster_url ?? nextSession.poster_url,
+      poster_file_url: movie.poster_file_url ?? nextSession.poster_file_url,
+      poster_display_url: movie.poster_display_url ?? nextSession.poster_display_url,
       age_rating: movie.age_rating ?? nextSession.age_rating,
       genres: movie.genres.length ? movie.genres : nextSession.genres,
       status: movie.status,

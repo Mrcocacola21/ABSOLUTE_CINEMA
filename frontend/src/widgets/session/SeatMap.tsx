@@ -78,7 +78,10 @@ export function SeatMap({
       </div>
 
       {seats.length === 0 ? (
-        <div className="empty-state">{t("booking.seatMap.unavailable")}</div>
+        <section className="empty-state empty-state--panel empty-state--compact">
+          <h2>{t("booking.seatMap.unavailableTitle")}</h2>
+          <p>{t("booking.seatMap.unavailable")}</p>
+        </section>
       ) : (
         <div className="seat-map__shell">
           <div className="seat-map__screen" aria-hidden="true">

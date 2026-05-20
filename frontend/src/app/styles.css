@@ -2032,9 +2032,20 @@ img {
   box-shadow: var(--shadow);
 }
 
+.status-banner__marker {
+  align-self: stretch;
+  width: 4px;
+  min-height: 38px;
+  border-radius: 999px;
+  background: rgba(244, 166, 98, 0.7);
+  box-shadow: 0 0 18px rgba(244, 166, 98, 0.16);
+}
+
 .status-banner__copy {
   display: grid;
   gap: 4px;
+  flex: 1;
+  min-width: 0;
 }
 
 .status-banner__copy strong {
@@ -2055,9 +2066,19 @@ img {
   background: rgba(119, 194, 157, 0.12);
 }
 
+.status-banner--success .status-banner__marker {
+  background: rgba(119, 194, 157, 0.82);
+  box-shadow: 0 0 18px rgba(119, 194, 157, 0.16);
+}
+
 .status-banner--error {
   border-color: rgba(227, 123, 118, 0.26);
   background: rgba(227, 123, 118, 0.12);
+}
+
+.status-banner--error .status-banner__marker {
+  background: rgba(227, 123, 118, 0.82);
+  box-shadow: 0 0 18px rgba(227, 123, 118, 0.16);
 }
 
 .status-banner--warning {
@@ -2066,14 +2087,39 @@ img {
 }
 
 .state-panel {
+  position: relative;
   display: grid;
-  gap: 16px;
-  place-items: start;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  align-content: center;
+  overflow: hidden;
+}
+
+.state-panel::after,
+.empty-state--panel::after {
+  content: "";
+  position: absolute;
+  inset: auto 24px 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  pointer-events: none;
+}
+
+.state-panel__visual {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .state-panel__copy {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .state-panel__copy p {
@@ -2086,6 +2132,75 @@ img {
 
 .state-panel--error {
   border-color: rgba(227, 123, 118, 0.24);
+}
+
+.state-panel--empty {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.state-panel__loader {
+  display: grid;
+  gap: 6px;
+  width: 34px;
+}
+
+.state-panel__loader span,
+.state-panel__mark {
+  display: block;
+  border-radius: 999px;
+  background: rgba(244, 166, 98, 0.86);
+}
+
+.state-panel__loader span {
+  height: 5px;
+  animation: state-panel-loading 1.2s ease-in-out infinite;
+}
+
+.state-panel__loader span:nth-child(2) {
+  width: 76%;
+  animation-delay: 0.12s;
+}
+
+.state-panel__loader span:nth-child(3) {
+  width: 52%;
+  animation-delay: 0.24s;
+}
+
+.state-panel__mark {
+  width: 34px;
+  height: 8px;
+  transform: rotate(-18deg);
+}
+
+.state-panel--error .state-panel__visual {
+  border-color: rgba(227, 123, 118, 0.18);
+  background: rgba(227, 123, 118, 0.08);
+}
+
+.state-panel--error .state-panel__mark {
+  background: rgba(227, 123, 118, 0.9);
+}
+
+.state-panel--empty .state-panel__mark {
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.state-panel > .actions-row {
+  grid-column: 2;
+  margin-top: 2px;
+}
+
+@keyframes state-panel-loading {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: scaleX(0.72);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
 }
 
 .day-panel {
@@ -2751,6 +2866,48 @@ img {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
     rgba(255, 255, 255, 0.02);
+}
+
+.poster-upload-panel {
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
+    rgba(255, 255, 255, 0.02);
+}
+
+.poster-upload-panel__body {
+  display: grid;
+  grid-template-columns: minmax(112px, 142px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.poster-upload-panel__preview {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 3;
+  border-radius: 18px;
+}
+
+.poster-upload-panel__controls {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.poster-upload-panel__file-field {
+  gap: 6px;
+}
+
+.poster-upload-panel__file-field input[type="file"] {
+  padding: 11px 12px;
+}
+
+.poster-upload-panel__actions {
+  margin-top: 2px;
 }
 
 .admin-form__genre-selected-label {
@@ -3767,7 +3924,96 @@ img {
 }
 
 .admin-report-toolbar--attendance {
-  grid-template-columns: minmax(240px, 1.15fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 0.95fr) minmax(320px, 1.05fr);
+  align-items: stretch;
+  padding: 14px;
+}
+
+.admin-report-toolbar__column {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  align-content: start;
+}
+
+.admin-report-toolbar--attendance .field--search {
+  grid-column: auto;
+}
+
+.admin-report-toolbar--attendance .admin-report-search-field,
+.admin-report-toolbar--attendance .admin-report-toolbar__group {
+  min-width: 0;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.admin-report-period-control {
+  gap: 10px;
+  border-color: rgba(244, 166, 98, 0.14);
+  background:
+    linear-gradient(180deg, rgba(244, 166, 98, 0.07), rgba(255, 255, 255, 0.018));
+}
+
+.admin-report-period-control__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-report-period-control__body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  align-items: end;
+}
+
+.admin-report-period-presets {
+  align-content: end;
+}
+
+.admin-report-date-range {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.admin-report-date-range.is-active {
+  border-color: rgba(244, 166, 98, 0.26);
+  background:
+    linear-gradient(180deg, rgba(244, 166, 98, 0.1), rgba(255, 255, 255, 0.022));
+}
+
+.admin-report-date-range__label,
+.admin-report-date-field > span:first-child {
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-report-date-range__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-report-date-field {
+  gap: 6px;
+}
+
+.admin-report-date-field input {
+  min-height: 38px;
+  border-radius: 14px;
+  padding: 8px 10px;
+  font-size: 0.88rem;
 }
 
 .admin-report-toolbar--attendance .field > span:first-child,
@@ -3856,6 +4102,20 @@ img {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.admin-report-filter-context--attendance {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-report-filter-context--attendance .admin-report-filter-context__chips {
+  flex: 1 1 260px;
+}
+
+.admin-report-filter-context__reset {
+  min-height: 38px;
+  padding: 8px 14px;
 }
 
 .admin-report-toggle-group {
@@ -5076,21 +5336,42 @@ img {
 }
 
 .empty-state {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
   color: var(--text-muted);
   text-align: center;
   padding: 24px;
 }
 
 .empty-state--panel {
+  position: relative;
   display: grid;
   gap: 12px;
   place-items: center;
   padding: 36px 24px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.028));
+}
+
+.empty-state--compact {
+  padding: 24px 18px;
+  border-radius: 20px;
 }
 
 .empty-state--panel h2,
 .empty-state--panel p {
   margin: 0;
+}
+
+.empty-state--panel h2 {
+  color: #fff;
+  font-size: 1.14rem;
+}
+
+.empty-state--panel p {
+  max-width: 52ch;
 }
 
 .booking-module {
@@ -5778,6 +6059,10 @@ img {
     grid-template-columns: 1fr;
   }
 
+  .admin-report-period-control__body {
+    grid-template-columns: 1fr;
+  }
+
   .admin-report-toolbar--bookings {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -5940,6 +6225,14 @@ img {
     flex-direction: column;
   }
 
+  .poster-upload-panel__body {
+    grid-template-columns: 1fr;
+  }
+
+  .poster-upload-panel__preview {
+    width: min(160px, 100%);
+  }
+
   .admin-report-tabs {
     grid-template-columns: 1fr;
   }
@@ -5947,6 +6240,19 @@ img {
   .admin-report-tab {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .state-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .state-panel > .actions-row {
+    grid-column: auto;
+  }
+
+  .state-panel__visual {
+    width: 52px;
+    height: 52px;
   }
 
   .admin-report-summary {
@@ -5959,6 +6265,18 @@ img {
 
   .admin-report-toolbar--bookings {
     grid-template-columns: 1fr;
+  }
+
+  .admin-report-period-control {
+    padding: 12px;
+  }
+
+  .admin-report-date-range__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-report-filter-context--attendance {
+    align-items: flex-start;
   }
 
   .admin-report-bookings-search,

@@ -2,12 +2,43 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import httpx
 import pytest
 from bson import ObjectId
+from jose import jwt
 
+from app.core.config import get_settings
 from app.db.collections import DatabaseCollections
+from app.security.jwt import decode_access_token
 from app.tests.integration.conftest import API_PREFIX, DEFAULT_PASSWORD
+
+
+def build_refresh_token(
+    *,
+    subject: str,
+    email: str,
+    role: str = "user",
+    expires_at: datetime,
+    secret: str | None = None,
+) -> str:
+    """Build a refresh JWT for auth integration edge cases."""
+    settings = get_settings()
+    issued_at = datetime.now(tz=timezone.utc)
+    return jwt.encode(
+        {
+            "sub": subject,
+            "email": email,
+            "role": role,
+            "token_type": "refresh",
+            "iat": int(issued_at.timestamp()),
+            "exp": int(expires_at.timestamp()),
+            "jti": "test-refresh-token",
+        },
+        secret or settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
 
 
 @pytest.mark.asyncio
@@ -123,7 +154,7 @@ async def test_duplicate_email_registration_returns_conflict(
 
 
 @pytest.mark.asyncio
-async def test_successful_login_returns_access_token(
+async def test_successful_login_returns_access_and_refresh_tokens(
     register_user,
     login_user,
 ) -> None:
@@ -136,8 +167,10 @@ async def test_successful_login_returns_access_token(
     body = response.json()
     assert body["success"] is True
     assert body["data"]["access_token"]
+    assert body["data"]["refresh_token"]
     assert body["data"]["token_type"] == "bearer"
     assert body["data"]["expires_in"] > 0
+    assert body["data"]["refresh_expires_in"] > body["data"]["expires_in"]
 
 
 @pytest.mark.asyncio
@@ -158,10 +191,208 @@ async def test_swagger_oauth2_token_endpoint_returns_raw_token_payload(
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert set(body) == {"access_token", "token_type", "expires_in"}
+    assert set(body) == {"access_token", "refresh_token", "token_type", "expires_in", "refresh_expires_in"}
     assert body["access_token"]
+    assert body["refresh_token"]
     assert body["token_type"] == "bearer"
     assert body["expires_in"] > 0
+    assert body["refresh_expires_in"] > body["expires_in"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_endpoint_returns_new_access_token(
+    client: httpx.AsyncClient,
+    register_user,
+    login_user,
+) -> None:
+    register_response = await register_user(email="refresh@example.com", name="Refresh User")
+    assert register_response.status_code == 201
+
+    login_response = await login_user(email="refresh@example.com")
+    assert login_response.status_code == 200
+    login_payload = login_response.json()["data"]
+
+    refresh_response = await client.post(
+        f"{API_PREFIX}/auth/refresh",
+        json={"refresh_token": login_payload["refresh_token"]},
+    )
+
+    assert refresh_response.status_code == 200, refresh_response.text
+    body = refresh_response.json()
+    assert body["success"] is True
+    assert body["data"]["access_token"]
+    assert body["data"]["access_token"] != login_payload["access_token"]
+    assert body["data"]["token_type"] == "bearer"
+    assert body["data"]["expires_in"] > 0
+    assert "refresh_token" not in body["data"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_endpoint_rejects_invalid_refresh_token(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+) -> None:
+    invalid_token = build_refresh_token(
+        subject=user_auth["user"]["id"],
+        email=user_auth["user"]["email"],
+        expires_at=datetime.now(tz=timezone.utc) + timedelta(days=1),
+        secret="wrong-secret",
+    )
+
+    response = await client.post(
+        f"{API_PREFIX}/auth/refresh",
+        json={"refresh_token": invalid_token},
+    )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "authentication_error"
+    assert body["error"]["message"] == "Invalid or expired refresh token."
+
+
+@pytest.mark.asyncio
+async def test_refresh_endpoint_rejects_expired_refresh_token(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+) -> None:
+    expired_token = build_refresh_token(
+        subject=user_auth["user"]["id"],
+        email=user_auth["user"]["email"],
+        expires_at=datetime.now(tz=timezone.utc) - timedelta(minutes=5),
+    )
+
+    response = await client.post(
+        f"{API_PREFIX}/auth/refresh",
+        json={"refresh_token": expired_token},
+    )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "authentication_error"
+    assert body["error"]["message"] == "Invalid or expired refresh token."
+
+
+@pytest.mark.asyncio
+async def test_refresh_endpoint_rejects_malformed_refresh_token(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.post(
+        f"{API_PREFIX}/auth/refresh",
+        json={"refresh_token": "not-a-valid-jwt"},
+    )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "authentication_error"
+    assert body["error"]["message"] == "Invalid or expired refresh token."
+
+
+@pytest.mark.asyncio
+async def test_refresh_endpoint_rejects_wrong_token_type(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+) -> None:
+    response = await client.post(
+        f"{API_PREFIX}/auth/refresh",
+        json={"refresh_token": user_auth["token"]},
+    )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "authentication_error"
+    assert body["error"]["message"] == "Invalid or expired refresh token."
+
+
+@pytest.mark.asyncio
+async def test_refresh_endpoint_rejects_deactivated_user(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    database,
+) -> None:
+    await database[DatabaseCollections.USERS].update_one(
+        {"_id": ObjectId(user_auth["user"]["id"])},
+        {"$set": {"is_active": False}},
+    )
+
+    response = await client.post(
+        f"{API_PREFIX}/auth/refresh",
+        json={"refresh_token": user_auth["refresh_token"]},
+    )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "authentication_error"
+    assert body["error"]["message"] == "This account is inactive."
+
+
+@pytest.mark.asyncio
+async def test_refresh_endpoint_rejects_deleted_user(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    database,
+) -> None:
+    await database[DatabaseCollections.USERS].delete_one({"_id": ObjectId(user_auth["user"]["id"])})
+
+    response = await client.post(
+        f"{API_PREFIX}/auth/refresh",
+        json={"refresh_token": user_auth["refresh_token"]},
+    )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "authentication_error"
+    assert body["error"]["message"] == "Authenticated user no longer exists."
+
+
+@pytest.mark.asyncio
+async def test_users_me_works_with_refreshed_access_token(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    auth_headers,
+) -> None:
+    refresh_response = await client.post(
+        f"{API_PREFIX}/auth/refresh",
+        json={"refresh_token": user_auth["refresh_token"]},
+    )
+    assert refresh_response.status_code == 200, refresh_response.text
+    refreshed_access_token = refresh_response.json()["data"]["access_token"]
+
+    me_response = await client.get(
+        f"{API_PREFIX}/users/me",
+        headers=auth_headers(refreshed_access_token),
+    )
+
+    assert me_response.status_code == 200, me_response.text
+    body = me_response.json()
+    assert body["success"] is True
+    assert body["data"]["email"] == user_auth["user"]["email"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_endpoint_uses_current_role_claims(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    database,
+) -> None:
+    await database[DatabaseCollections.USERS].update_one(
+        {"_id": ObjectId(user_auth["user"]["id"])},
+        {"$set": {"role": "admin"}},
+    )
+
+    refresh_response = await client.post(
+        f"{API_PREFIX}/auth/refresh",
+        json={"refresh_token": user_auth["refresh_token"]},
+    )
+
+    assert refresh_response.status_code == 200, refresh_response.text
+    payload = decode_access_token(refresh_response.json()["data"]["access_token"])
+    assert payload.role == "admin"
 
 
 @pytest.mark.asyncio

@@ -191,7 +191,13 @@ async def test_admin_qr_validation_distinguishes_valid_cancelled_expired_invalid
     assert cancelled_result["cancelled_tickets_count"] == 1
     assert cancelled_result["tickets"][0]["valid_for_entry"] is False
 
-    expired_session = await create_session(movie_id=movie["id"], start_hour=16, duration_minutes=150, price=240)
+    expired_session = await create_session(
+        movie_id=movie["id"],
+        day_offset=2,
+        start_hour=16,
+        duration_minutes=150,
+        price=240,
+    )
     expired_order = await _purchase_order(
         client,
         user_auth["headers"],

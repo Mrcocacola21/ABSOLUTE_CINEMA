@@ -11,13 +11,33 @@ export function getStoredAccessToken(): string | null {
   return window.localStorage.getItem(STORAGE_KEYS.accessToken);
 }
 
+export function getStoredRefreshToken(): string | null {
+  return window.localStorage.getItem(STORAGE_KEYS.refreshToken);
+}
+
 export function storeAccessToken(token: string): void {
   window.localStorage.setItem(STORAGE_KEYS.accessToken, token);
   notifyAuthStorageChanged();
 }
 
+export function storeRefreshToken(token: string): void {
+  window.localStorage.setItem(STORAGE_KEYS.refreshToken, token);
+  notifyAuthStorageChanged();
+}
+
+export function storeAuthTokens(tokens: { accessToken: string; refreshToken: string }): void {
+  window.localStorage.setItem(STORAGE_KEYS.accessToken, tokens.accessToken);
+  window.localStorage.setItem(STORAGE_KEYS.refreshToken, tokens.refreshToken);
+  notifyAuthStorageChanged();
+}
+
 export function clearAccessToken(): void {
   window.localStorage.removeItem(STORAGE_KEYS.accessToken);
+  notifyAuthStorageChanged();
+}
+
+export function clearRefreshToken(): void {
+  window.localStorage.removeItem(STORAGE_KEYS.refreshToken);
   notifyAuthStorageChanged();
 }
 
@@ -31,6 +51,13 @@ export function storeRole(role: UserRole): void {
 }
 
 export function clearRole(): void {
+  window.localStorage.removeItem(STORAGE_KEYS.userRole);
+  notifyAuthStorageChanged();
+}
+
+export function clearAuthStorage(): void {
+  window.localStorage.removeItem(STORAGE_KEYS.accessToken);
+  window.localStorage.removeItem(STORAGE_KEYS.refreshToken);
   window.localStorage.removeItem(STORAGE_KEYS.userRole);
   notifyAuthStorageChanged();
 }

@@ -112,6 +112,10 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                         "bsonType": ["string", "null"],
                         "maxLength": 512,
                     },
+                    "poster_file_url": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 512,
+                    },
                     "age_rating": {
                         "bsonType": ["string", "null"],
                         "minLength": 1,

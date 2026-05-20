@@ -6,12 +6,12 @@ from datetime import datetime, timezone
 
 from app.core.config import get_settings
 from app.core.constants import Roles
-from app.core.exceptions import AuthenticationException, ConflictException
+from app.core.exceptions import AuthenticationException, ConflictException, ValidationException
 from app.repositories.users import UserRepository
-from app.schemas.auth import TokenRead
+from app.schemas.auth import AccessTokenRead, TokenRead
 from app.schemas.user import UserCreate, UserRead
 from app.security.hashing import password_hasher
-from app.security.jwt import create_access_token
+from app.security.jwt import create_access_token, create_refresh_token, decode_refresh_token
 
 
 class AuthService:
@@ -45,7 +45,7 @@ class AuthService:
         return UserRead.model_validate(created_user)
 
     async def login_user(self, username: str, password: str) -> TokenRead:
-        """Authenticate a user and issue a JWT access token."""
+        """Authenticate a user and issue access and refresh JWTs."""
         user = await self.user_repository.get_by_email(username)
         if not user:
             raise AuthenticationException("Incorrect email or password.")
@@ -59,7 +59,37 @@ class AuthService:
             email=user["email"],
             role=user["role"],
         )
+        refresh_token, refresh_expires_in = create_refresh_token(
+            subject=user["id"],
+            email=user["email"],
+            role=user["role"],
+        )
         return TokenRead(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=expires_in,
+            refresh_expires_in=refresh_expires_in,
+        )
+
+    async def refresh_access_token(self, refresh_token: str) -> AccessTokenRead:
+        """Validate a refresh token and issue a new access token for the current user state."""
+        payload = decode_refresh_token(refresh_token)
+        try:
+            user = await self.user_repository.get_by_id(payload.sub)
+        except ValidationException as exc:
+            raise AuthenticationException("Invalid or expired refresh token.") from exc
+
+        if user is None:
+            raise AuthenticationException("Authenticated user no longer exists.")
+        if not user["is_active"]:
+            raise AuthenticationException("This account is inactive.")
+
+        access_token, expires_in = create_access_token(
+            subject=user["id"],
+            email=user["email"],
+            role=user["role"],
+        )
+        return AccessTokenRead(
             access_token=access_token,
             expires_in=expires_in,
         )

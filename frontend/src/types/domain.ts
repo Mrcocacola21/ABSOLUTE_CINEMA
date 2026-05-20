@@ -21,10 +21,15 @@ export interface User {
   updated_at?: string | null;
 }
 
-export interface TokenPayload {
+export interface AccessTokenPayload {
   access_token: string;
   token_type: string;
   expires_in: number;
+}
+
+export interface TokenPayload extends AccessTokenPayload {
+  refresh_token: string;
+  refresh_expires_in: number;
 }
 
 export interface Movie {
@@ -33,6 +38,8 @@ export interface Movie {
   description: LocalizedText;
   duration_minutes: number;
   poster_url?: string | null;
+  poster_file_url?: string | null;
+  poster_display_url?: string | null;
   age_rating?: string | null;
   genres: GenreCode[];
   status: MovieStatus;
@@ -45,6 +52,8 @@ export interface ScheduleItem {
   movie_id: string;
   movie_title: LocalizedText;
   poster_url?: string | null;
+  poster_file_url?: string | null;
+  poster_display_url?: string | null;
   age_rating?: string | null;
   genres: GenreCode[];
   start_time: string;
@@ -145,6 +154,8 @@ export interface Order {
   movie_id: string;
   movie_title: LocalizedText;
   poster_url?: string | null;
+  poster_file_url?: string | null;
+  poster_display_url?: string | null;
   age_rating?: string | null;
   session_start_time: string;
   session_end_time: string;

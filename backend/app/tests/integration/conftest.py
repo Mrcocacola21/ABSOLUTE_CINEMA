@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -77,8 +79,6 @@ def integration_settings() -> dict[str, str]:
         "JWT_SECRET_KEY": "integration-test-secret",
         "ADMIN_EMAILS": f'["{ADMIN_EMAIL}"]',
     }
-    original_values = {key: os.environ.get(key) for key in env_updates}
-
     try:
         mongo_client = MongoClient(mongodb_uri, serverSelectionTimeoutMS=2000)
         mongo_client.admin.command("ping")
@@ -91,6 +91,10 @@ def integration_settings() -> dict[str, str]:
     except Exception as exc:  # pragma: no cover - environment dependent
         pytest.skip(f"MongoDB is required for integration tests: {exc}")
 
+    media_root = tempfile.mkdtemp(prefix="cinema-test-media-")
+    env_updates["MEDIA_ROOT"] = media_root
+    original_values = {key: os.environ.get(key) for key in env_updates}
+
     mongo_client.drop_database(db_name)
     for key, value in env_updates.items():
         os.environ[key] = value
@@ -99,10 +103,12 @@ def integration_settings() -> dict[str, str]:
     yield {
         "mongodb_uri": mongodb_uri,
         "db_name": db_name,
+        "media_root": media_root,
     }
 
     mongo_client.drop_database(db_name)
     mongo_client.close()
+    shutil.rmtree(media_root, ignore_errors=True)
     for key, original_value in original_values.items():
         if original_value is None:
             os.environ.pop(key, None)
@@ -238,9 +244,11 @@ async def create_authenticated_user(
         login_response = await login_user(email=email, password=password)
         assert login_response.status_code == 200, login_response.text
 
-        token = login_response.json()["data"]["access_token"]
+        token_payload = login_response.json()["data"]
+        token = token_payload["access_token"]
         return {
             "token": token,
+            "refresh_token": token_payload["refresh_token"],
             "headers": auth_headers(token),
             "user": register_response.json()["data"],
             "password": password,

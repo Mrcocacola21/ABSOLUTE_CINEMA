@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { getGenreLabel } from "@/shared/genres";
 import { getLocalizedText } from "@/shared/localization";
+import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatTime } from "@/shared/presentation";
 import type { ScheduleItem } from "@/types/domain";
 import { formatScheduleDayLabel, getMovieMonogram, toScheduleDayKey } from "@/shared/scheduleTimeline";
@@ -14,6 +15,7 @@ interface ScheduleCardProps {
 export function ScheduleCard({ item }: ScheduleCardProps) {
   const { t, i18n } = useTranslation();
   const title = getLocalizedText(item.movie_title, i18n.language);
+  const posterSource = resolvePosterSource(item);
   const dayLabel = formatScheduleDayLabel(toScheduleDayKey(item.start_time));
   const timeRange = `${formatTime(item.start_time)} - ${formatTime(item.end_time)}`;
 
@@ -21,8 +23,8 @@ export function ScheduleCard({ item }: ScheduleCardProps) {
     <article className="card schedule-card">
       <div className="schedule-card__header">
         <div className="media-tile schedule-card__media" aria-hidden="true">
-          {item.poster_url ? (
-            <img src={item.poster_url} alt="" className="media-tile__image" />
+          {posterSource ? (
+            <img src={posterSource} alt="" className="media-tile__image" />
           ) : (
             <span>{getMovieMonogram(title)}</span>
           )}

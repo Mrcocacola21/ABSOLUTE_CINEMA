@@ -14,11 +14,13 @@ import {
   listAdminSessionsRequest,
   listAdminTicketsRequest,
   listAdminUsersRequest,
+  removeMoviePosterRequest,
   type MovieCreatePayload,
   type MovieUpdatePayload,
   type SessionBatchCreatePayload,
   type SessionCreatePayload,
   type SessionUpdatePayload,
+  uploadMoviePosterRequest,
   updateMovieRequest,
   updateSessionRequest,
 } from "@/api/admin";
@@ -189,6 +191,32 @@ export function AdminDashboardPage() {
         successMessageKey: "admin.actions.updateMovieSuccessMessage",
         errorTitleKey: "admin.actions.updateMovieErrorTitle",
         fallbackMessageKey: "admin.actions.updateMovieFailure",
+      },
+    );
+  }
+
+  async function handleUploadMoviePoster(movieId: string, poster: File) {
+    return runAdminAction(
+      () => uploadMoviePosterRequest(movieId, poster),
+      {
+        pendingKey: "admin.actions.uploadMoviePosterLoading",
+        successTitleKey: "admin.actions.uploadMoviePosterSuccessTitle",
+        successMessageKey: "admin.actions.uploadMoviePosterSuccessMessage",
+        errorTitleKey: "admin.actions.uploadMoviePosterErrorTitle",
+        fallbackMessageKey: "admin.actions.uploadMoviePosterFailure",
+      },
+    );
+  }
+
+  async function handleRemoveMoviePoster(movieId: string) {
+    return runAdminAction(
+      () => removeMoviePosterRequest(movieId),
+      {
+        pendingKey: "admin.actions.removeMoviePosterLoading",
+        successTitleKey: "admin.actions.removeMoviePosterSuccessTitle",
+        successMessageKey: "admin.actions.removeMoviePosterSuccessMessage",
+        errorTitleKey: "admin.actions.removeMoviePosterErrorTitle",
+        fallbackMessageKey: "admin.actions.removeMoviePosterFailure",
       },
     );
   }
@@ -429,6 +457,8 @@ export function AdminDashboardPage() {
           busyActionLabel={pendingActionLabel}
             onCreateMovie={handleCreateMovie}
             onUpdateMovie={handleUpdateMovie}
+            onUploadMoviePoster={handleUploadMoviePoster}
+            onRemoveMoviePoster={handleRemoveMoviePoster}
             onDeactivateMovie={handleDeactivateMovie}
           onDeleteMovie={handleDeleteMovie}
           onCreateSession={handleCreateSession}

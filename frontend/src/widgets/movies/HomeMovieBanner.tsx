@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { getGenreLabel } from "@/shared/genres";
 import { getIntlLocale, getLocalizedText } from "@/shared/localization";
 import { getMovieStatusBadgeClassName } from "@/shared/movieStatus";
+import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatTime } from "@/shared/presentation";
 import type { Movie, ScheduleItem } from "@/types/domain";
 
@@ -44,6 +45,7 @@ export function HomeMovieBanner(props: HomeMovieBannerProps) {
   const { t, i18n } = useTranslation();
   const { movie, variant } = props;
   const title = getLocalizedText(movie.title, i18n.language);
+  const posterSource = resolvePosterSource(movie);
   const ribbonLabel =
     variant === "active" ? t("home.spotlight.activeRibbon") : t("home.spotlight.plannedRibbon");
   const visibleGenres = movie.genres.slice(0, 5);
@@ -64,8 +66,8 @@ export function HomeMovieBanner(props: HomeMovieBannerProps) {
     <article className={`home-poster-card home-poster-card--${variant}`}>
       <div className="home-poster-card__frame">
         <Link to={`/movies/${movie.id}`} className="home-poster-card__poster">
-          {movie.poster_url ? (
-            <img src={movie.poster_url} alt={title} className="home-poster-card__image" />
+          {posterSource ? (
+            <img src={posterSource} alt={title} className="home-poster-card__image" />
           ) : (
             <span className="home-poster-card__monogram">{getMovieMonogram(title)}</span>
           )}

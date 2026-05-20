@@ -90,6 +90,22 @@ export async function updateMovieRequest(movieId: string, payload: MovieUpdatePa
   return data;
 }
 
+export async function uploadMoviePosterRequest(movieId: string, poster: File) {
+  const formData = new FormData();
+  formData.append("poster", poster);
+  const { data } = await apiClient.post<ApiResponse<Movie>>(`/admin/movies/${movieId}/poster`, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return data;
+}
+
+export async function removeMoviePosterRequest(movieId: string) {
+  const { data } = await apiClient.delete<ApiResponse<Movie>>(`/admin/movies/${movieId}/poster`);
+  return data;
+}
+
 export async function deactivateMovieRequest(movieId: string) {
   const { data } = await apiClient.patch<ApiResponse<Movie>>(`/admin/movies/${movieId}/deactivate`);
   return data;

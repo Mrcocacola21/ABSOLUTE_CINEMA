@@ -15,7 +15,7 @@ from app.repositories.movies import MovieRepository
 from app.repositories.orders import OrderRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.tickets import TicketRepository
-from app.schemas.movie import MovieRead
+from app.schemas.movie import MovieRead, resolve_movie_poster_url
 from app.schemas.order import (
     OrderDetailsRead,
     OrderListRead,
@@ -303,6 +303,8 @@ class OrderService:
             movie_id=movie.id,
             movie_title=movie.title,
             poster_url=str(movie.poster_url) if movie.poster_url else None,
+            poster_file_url=str(movie.poster_file_url) if movie.poster_file_url else None,
+            poster_display_url=resolve_movie_poster_url(movie),
             age_rating=movie.age_rating,
             session_start_time=session.start_time,
             session_end_time=session.end_time,

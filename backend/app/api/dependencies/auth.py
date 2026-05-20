@@ -18,8 +18,9 @@ oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl=f"{settings.api_v1_prefix}/auth/token",
     auto_error=False,
     description=(
-        "Use Swagger's Authorize button to exchange email and password for a JWT, "
-        "or call POST /api/v1/auth/login and paste `data.access_token` manually."
+        "Use Swagger's Authorize button to exchange email and password for an access JWT, "
+        "or call POST /api/v1/auth/login and paste `data.access_token` manually. "
+        "Call POST /api/v1/auth/refresh with `data.refresh_token` when an access token expires."
     ),
 )
 

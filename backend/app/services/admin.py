@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime, time, timezone
 from zoneinfo import ZoneInfo
 
+from fastapi import UploadFile
+
 from app.builders.attendance_report import AttendanceReportBuilder
 from app.commands.session_cancellation import SessionCancellationCommand
 from app.core.config import get_settings
@@ -45,6 +47,7 @@ from app.schemas.session import (
 )
 from app.schemas.user import UserRead
 from app.services.movie_status import MovieStatusManager
+from app.services.poster_storage import PosterStorage
 
 MAX_SESSION_RUNTIME_BUFFER_MINUTES = 60
 
@@ -70,6 +73,7 @@ class AdminService:
             movie_repository=movie_repository,
             session_repository=session_repository,
         )
+        self.poster_storage = PosterStorage()
 
     async def list_movies(self, requested_by: UserRead) -> list[MovieRead]:
         """Return all movies for administration views."""
@@ -144,6 +148,62 @@ class AdminService:
             raise NotFoundException("Movie was not found.")
         if "status" in updates and movie.status == MovieStatuses.ACTIVE and updates["status"] != MovieStatuses.ACTIVE:
             await self.movie_status_manager.refresh_statuses(current_time=now)
+        return MovieRead.model_validate(updated)
+
+    async def upload_movie_poster(
+        self,
+        movie_id: str,
+        poster: UploadFile,
+        updated_by: UserRead,
+    ) -> MovieRead:
+        """Store or replace the uploaded poster file for a movie."""
+        _ = updated_by
+        now = datetime.now(tz=timezone.utc)
+        movie_document = await self.movie_repository.get_by_id(movie_id)
+        if movie_document is None:
+            raise NotFoundException("Movie was not found.")
+
+        old_poster_file_url = MovieRead.model_validate(movie_document).poster_file_url
+        new_poster_file_url = await self.poster_storage.save(poster)
+
+        updated = await self.movie_repository.update_movie(
+            movie_id=movie_id,
+            updates={"poster_file_url": new_poster_file_url},
+            updated_at=now,
+        )
+        if updated is None:
+            self.poster_storage.delete(new_poster_file_url)
+            raise NotFoundException("Movie was not found.")
+
+        if old_poster_file_url != new_poster_file_url:
+            self.poster_storage.delete(old_poster_file_url)
+        return MovieRead.model_validate(updated)
+
+    async def remove_movie_poster(
+        self,
+        movie_id: str,
+        updated_by: UserRead,
+    ) -> MovieRead:
+        """Remove the uploaded poster file and keep poster_url available as fallback."""
+        _ = updated_by
+        now = datetime.now(tz=timezone.utc)
+        movie_document = await self.movie_repository.get_by_id(movie_id)
+        if movie_document is None:
+            raise NotFoundException("Movie was not found.")
+
+        movie = MovieRead.model_validate(movie_document)
+        if movie.poster_file_url is None:
+            return movie
+
+        updated = await self.movie_repository.update_movie(
+            movie_id=movie_id,
+            updates={"poster_file_url": None},
+            updated_at=now,
+        )
+        if updated is None:
+            raise NotFoundException("Movie was not found.")
+
+        self.poster_storage.delete(movie.poster_file_url)
         return MovieRead.model_validate(updated)
 
     async def deactivate_movie(self, movie_id: str, deactivated_by: UserRead) -> MovieRead:
@@ -759,6 +819,8 @@ class AdminService:
         normalized = dict(document)
         if normalized.get("poster_url") is not None:
             normalized["poster_url"] = str(normalized["poster_url"])
+        if normalized.get("poster_file_url") is not None:
+            normalized["poster_file_url"] = str(normalized["poster_file_url"])
         return normalized
 
     async def _get_movie_or_not_found(self, movie_id: str) -> MovieRead:

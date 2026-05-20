@@ -8,6 +8,7 @@ import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { getGenreLabel } from "@/shared/genres";
 import { compareLocalizedText, getLocalizedText } from "@/shared/localization";
 import { getMovieStatusBadgeClassName } from "@/shared/movieStatus";
+import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatDateTime } from "@/shared/presentation";
 import { buildRotationMovies } from "@/shared/scheduleBrowse";
 import { StatePanel } from "@/shared/ui/StatePanel";
@@ -94,6 +95,7 @@ export function HomePage() {
   const featuredActiveMovie = activeMovies[0] ?? null;
   const featuredPlannedMovie = plannedMovies[0] ?? null;
   const spotlightMovie = featuredActiveMovie ? (moviesById[featuredActiveMovie.id] ?? null) : featuredPlannedMovie;
+  const spotlightPosterSource = spotlightMovie ? resolvePosterSource(spotlightMovie) : null;
   const spotlightVariant = featuredActiveMovie ? "active" : spotlightMovie ? "planned" : "empty";
   const spotlightDescription = spotlightMovie
     ? getLocalizedText(spotlightMovie.description, i18n.language) ||
@@ -201,11 +203,11 @@ export function HomePage() {
         </div>
 
         <div className={`home-hero__spotlight home-hero__spotlight--${spotlightVariant}`}>
-          {spotlightMovie?.poster_url ? (
+          {spotlightPosterSource ? (
             <div
               className="home-hero__spotlight-backdrop"
               aria-hidden="true"
-              style={{ backgroundImage: `url(${spotlightMovie.poster_url})` }}
+              style={{ backgroundImage: `url(${spotlightPosterSource})` }}
             />
           ) : null}
           <div className="home-hero__spotlight-scrim" aria-hidden="true" />

@@ -9,6 +9,7 @@ import {
   isMovieScheduleReady,
 } from "@/shared/movieStatus";
 import { usePagination } from "@/shared/pagination";
+import { resolvePosterSource } from "@/shared/posters";
 import { formatStateLabel } from "@/shared/presentation";
 import { PaginationControls } from "@/shared/ui/PaginationControls";
 import type { Movie } from "@/types/domain";
@@ -33,6 +34,10 @@ interface MovieCatalogPanelProps {
   isBusy: boolean;
   busyActionLabel?: string;
   movieForm: MovieCreatePayload;
+  moviePosterFile: File | null;
+  moviePosterPreviewUrl: string | null;
+  editingMovie: Movie | null;
+  shouldRemoveMoviePoster: boolean;
   editingMovieId: string | null;
   movieQuery: string;
   onMovieFormChange: <K extends keyof MovieCreatePayload>(field: K, value: MovieCreatePayload[K]) => void;
@@ -42,6 +47,8 @@ interface MovieCatalogPanelProps {
     value: string,
   ) => void;
   onToggleGenre: (genre: MovieCreatePayload["genres"][number]) => void;
+  onMoviePosterFileChange: (file: File | null) => void;
+  onMoviePosterRemovalChange: (shouldRemove: boolean) => void;
   onMovieQueryChange: (value: string) => void;
   onSubmit: () => Promise<void> | void;
   onResetForm: () => void;
@@ -60,11 +67,17 @@ export function MovieCatalogPanel({
   isBusy,
   busyActionLabel,
   movieForm,
+  moviePosterFile,
+  moviePosterPreviewUrl,
+  editingMovie,
+  shouldRemoveMoviePoster,
   editingMovieId,
   movieQuery,
   onMovieFormChange,
   onLocalizedMovieFormChange,
   onToggleGenre,
+  onMoviePosterFileChange,
+  onMoviePosterRemovalChange,
   onMovieQueryChange,
   onSubmit,
   onResetForm,
@@ -81,6 +94,19 @@ export function MovieCatalogPanel({
     resetKey: movieQuery.trim().toLowerCase(),
   });
   const selectedGenresCount = movieForm.genres.length;
+  const posterFallbackSource = shouldRemoveMoviePoster
+    ? movieForm.poster_url?.trim() || null
+    : resolvePosterSource(editingMovie ?? { poster_url: movieForm.poster_url ?? null });
+  const posterPreviewSource = moviePosterPreviewUrl ?? posterFallbackSource;
+  const hasUploadedPoster = Boolean(editingMovie?.poster_file_url);
+  const posterStatusLabel = moviePosterFile
+    ? t("admin.movies.form.posterFileNew")
+    : shouldRemoveMoviePoster
+      ? t("admin.movies.form.posterFileRemovePending")
+      : hasUploadedPoster
+        ? t("admin.movies.form.posterFileUploaded")
+        : t("admin.movies.form.posterFileFallback");
+  const posterFileInputKey = `${editingMovieId ?? "new"}-${moviePosterFile?.name ?? "empty"}-${shouldRemoveMoviePoster}`;
   const normalizedGenreQuery = genreQuery.trim().toLowerCase();
   const visibleGenreOptions = GENRE_OPTIONS.filter((option) =>
     normalizedGenreQuery ? buildGenreSearchText(option.code).includes(normalizedGenreQuery) : true,
@@ -220,6 +246,58 @@ export function MovieCatalogPanel({
                 onChange={(event) => onMovieFormChange("poster_url", event.target.value || undefined)}
               />
             </label>
+            <div className="field field--wide poster-upload-panel">
+              <div className="admin-form__field-header">
+                <span>{t("admin.movies.form.posterFileLabel")}</span>
+                <span className="badge">{posterStatusLabel}</span>
+              </div>
+              <div className="poster-upload-panel__body">
+                <div className="media-tile poster-upload-panel__preview" aria-hidden="true">
+                  {posterPreviewSource ? (
+                    <img src={posterPreviewSource} alt="" className="media-tile__image" />
+                  ) : (
+                    <span>{getMovieMonogram(movieForm.title.en || movieForm.title.uk || "Cinema")}</span>
+                  )}
+                </div>
+                <div className="poster-upload-panel__controls">
+                  <label className="field poster-upload-panel__file-field">
+                    <span>{t("admin.movies.form.posterFileInput")}</span>
+                    <input
+                      key={posterFileInputKey}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                      disabled={isBusy}
+                      onChange={(event) => onMoviePosterFileChange(event.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                  <p className="field__hint">{t("admin.movies.form.posterFileHint")}</p>
+                  <div className="actions-row poster-upload-panel__actions">
+                    {moviePosterFile ? (
+                      <button
+                        className="button--ghost"
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => onMoviePosterFileChange(null)}
+                      >
+                        {t("admin.movies.form.posterFileClearSelection")}
+                      </button>
+                    ) : null}
+                    {hasUploadedPoster ? (
+                      <button
+                        className={shouldRemoveMoviePoster ? "button" : "button--ghost"}
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => onMoviePosterRemovalChange(!shouldRemoveMoviePoster)}
+                      >
+                        {shouldRemoveMoviePoster
+                          ? t("admin.movies.form.posterFileKeepUploaded")
+                          : t("admin.movies.form.posterFileRemove")}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
             <label className="field">
               <span>{t("common.labels.status")}</span>
               <select
@@ -330,14 +408,15 @@ export function MovieCatalogPanel({
               const movieTitle = getLocalizedText(movie.title, i18n.language);
               const movieDescription = getLocalizedText(movie.description, i18n.language);
               const genreLabel = getGenreLabels(movie.genres, i18n.language).join(", ");
+              const posterSource = resolvePosterSource(movie);
 
               return (
                 <article key={movie.id} className="card admin-catalog__card">
                   <div className="admin-card__header">
                     <div className="admin-catalog__media">
                       <div className="media-tile" aria-hidden="true">
-                        {movie.poster_url ? (
-                          <img src={movie.poster_url} alt="" className="media-tile__image" />
+                        {posterSource ? (
+                          <img src={posterSource} alt="" className="media-tile__image" />
                         ) : (
                           <span>{getMovieMonogram(movieTitle)}</span>
                         )}

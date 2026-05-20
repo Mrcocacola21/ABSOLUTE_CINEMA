@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { getGenreLabel } from "@/shared/genres";
 import { getLocalizedText } from "@/shared/localization";
+import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatDateTime, formatTime } from "@/shared/presentation";
 import type { RotationMovie } from "@/shared/scheduleBrowse";
 
@@ -34,13 +35,14 @@ export function HomeShowingCard({ movie }: HomeShowingCardProps) {
   const { t, i18n } = useTranslation();
   const title = getLocalizedText(movie.title, i18n.language);
   const description = getLocalizedText(movie.description, i18n.language);
+  const posterSource = resolvePosterSource(movie);
 
   return (
     <article className="card home-showing-card">
       <div className="home-showing-card__header">
         <Link to={`/movies/${movie.id}`} className="media-tile home-showing-card__media" aria-hidden="true">
-          {movie.poster_url ? (
-            <img src={movie.poster_url} alt="" className="media-tile__image" />
+          {posterSource ? (
+            <img src={posterSource} alt="" className="media-tile__image" />
           ) : (
             <span>{getMovieMonogram(title)}</span>
           )}

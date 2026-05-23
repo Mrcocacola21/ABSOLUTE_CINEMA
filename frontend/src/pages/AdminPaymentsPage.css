@@ -1,0 +1,415 @@
+.admin-payments-header {
+  align-items: flex-start;
+}
+
+.admin-payments-filters form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(150px, 0.8fr)) auto;
+  gap: 14px;
+  align-items: end;
+}
+
+.admin-payments-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.admin-payment-analytics {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-payment-analytics__header,
+.admin-payment-report-table-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.admin-payment-report-controls {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) repeat(2, minmax(150px, 0.25fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.admin-payment-report-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-payment-report-presets button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 9px 13px;
+  color: var(--text-soft);
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.admin-payment-report-presets button:hover,
+.admin-payment-report-presets button.is-active {
+  border-color: rgba(244, 166, 98, 0.42);
+  color: #fff;
+  background: rgba(244, 166, 98, 0.16);
+}
+
+.admin-payment-report {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-payment-report-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-payment-report-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.admin-payment-report-card--feature {
+  background: linear-gradient(135deg, rgba(244, 166, 98, 0.18), rgba(119, 194, 157, 0.1));
+}
+
+.admin-payment-report-card span {
+  display: block;
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-payment-report-card strong {
+  display: block;
+  margin-top: 7px;
+  color: #fff;
+  font-size: clamp(1.2rem, 2vw, 1.8rem);
+  overflow-wrap: anywhere;
+}
+
+.admin-payment-report-card p,
+.admin-payment-report__generated {
+  margin: 6px 0 0;
+}
+
+.admin-payment-report-grids {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.admin-payment-report-table-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.admin-payment-report-table-card h3 {
+  margin: 0;
+}
+
+.admin-payment-report-table-wrap {
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.admin-payment-report-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.admin-payment-report-table th,
+.admin-payment-report-table td {
+  padding: 12px 13px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-payment-report-table th {
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.admin-payment-report-table td {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-payment-report-table td strong,
+.admin-payment-report-table td span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.admin-payment-report-table td span {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.admin-payments-list,
+.admin-payment-details {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-payments-list__header,
+.admin-payment-details__heading,
+.admin-payment-section__header,
+.admin-payment-history-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.admin-payments-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.admin-payments-table {
+  width: 100%;
+  min-width: 880px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.admin-payments-table th,
+.admin-payments-table td {
+  padding: 14px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-payments-table thead th {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.admin-payments-table tbody td {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-payments-table tbody tr {
+  transition: background 0.18s ease;
+}
+
+.admin-payments-table tbody tr:hover,
+.admin-payments-table tbody tr.is-selected {
+  background: rgba(244, 166, 98, 0.1);
+}
+
+.admin-payments-table td strong,
+.admin-payments-table td span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.admin-payments-table td span,
+.admin-payments-table__identity span {
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.admin-payments-table__identity {
+  display: grid;
+  gap: 7px;
+}
+
+.admin-payment-chip {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.admin-payment-chip--success {
+  border-color: rgba(119, 194, 157, 0.34);
+  background: rgba(119, 194, 157, 0.14);
+  color: #d8ffe9;
+}
+
+.admin-payment-chip--warning {
+  border-color: rgba(244, 166, 98, 0.36);
+  background: rgba(244, 166, 98, 0.16);
+  color: #ffe7c2;
+}
+
+.admin-payment-chip--error {
+  border-color: rgba(227, 123, 118, 0.34);
+  background: rgba(227, 123, 118, 0.14);
+  color: #ffe1df;
+}
+
+.admin-payment-chip--info {
+  border-color: rgba(118, 166, 209, 0.34);
+  background: rgba(118, 166, 209, 0.14);
+  color: #dcedff;
+}
+
+.admin-payment-details__summary,
+.admin-payment-section {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-payment-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-payment-facts--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-payment-facts > div {
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.admin-payment-facts span {
+  display: block;
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-payment-facts strong,
+.admin-payment-facts p {
+  overflow-wrap: anywhere;
+}
+
+.admin-payment-facts strong {
+  display: block;
+  margin-top: 5px;
+  color: #fff;
+}
+
+.admin-payment-facts p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.admin-refund-form {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(140px, 0.8fr) minmax(180px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.admin-payment-history-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-payment-history-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.admin-payment-history-card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-payment-history-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.admin-payment-history-card__error {
+  color: #ffe1df;
+}
+
+.admin-payments-snapshot {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(0, 0, 0, 0.22);
+  color: rgba(247, 243, 235, 0.82);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .admin-payments-filters form,
+  .admin-payments-workspace,
+  .admin-payment-report-controls,
+  .admin-payment-report-grids {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-payment-report-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .admin-payment-analytics__header,
+  .admin-payment-report-table-card__header {
+    display: grid;
+  }
+
+  .admin-payment-report-summary,
+  .admin-payment-facts,
+  .admin-payment-facts--compact,
+  .admin-refund-form {
+    grid-template-columns: 1fr;
+  }
+}

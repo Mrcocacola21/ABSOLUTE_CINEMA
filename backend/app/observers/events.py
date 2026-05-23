@@ -26,6 +26,11 @@ class TicketPurchasedEvent(DomainEvent):
 
 
 @dataclass(slots=True)
+class TicketReservedEvent(DomainEvent):
+    """Event emitted when a ticket is reserved pending payment."""
+
+
+@dataclass(slots=True)
 class SessionCancelledEvent(DomainEvent):
     """Event emitted when a session is cancelled."""
 
@@ -73,6 +78,15 @@ def new_ticket_purchased_event(payload: dict[str, object]) -> TicketPurchasedEve
     """Create a ticket purchased event instance."""
     return TicketPurchasedEvent(
         name="ticket_purchased",
+        payload=payload,
+        occurred_at=datetime.now(tz=timezone.utc),
+    )
+
+
+def new_ticket_reserved_event(payload: dict[str, object]) -> TicketReservedEvent:
+    """Create a ticket reserved event instance."""
+    return TicketReservedEvent(
+        name="ticket_reserved",
         payload=payload,
         occurred_at=datetime.now(tz=timezone.utc),
     )

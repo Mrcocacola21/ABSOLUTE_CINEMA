@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, File, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Query, UploadFile, status
 
 from app.api.dependencies.auth import get_current_admin
 from app.api.docs import (
@@ -15,12 +16,25 @@ from app.api.docs import (
     VALIDATION_ERROR_RESPONSE,
     merge_openapi_responses,
 )
-from app.api.dependencies.services import get_admin_service, get_order_service, get_ticket_service, get_user_service
+from app.api.dependencies.services import (
+    get_admin_service,
+    get_order_service,
+    get_payment_service,
+    get_ticket_service,
+    get_user_service,
+)
 from app.core.responses import ApiResponse
 from app.factories.response_factory import ApiResponseFactory
 from app.schemas.common import DeleteResultRead
 from app.schemas.movie import MovieCreate, MovieRead, MovieUpdate
 from app.schemas.order import OrderValidationRead
+from app.schemas.payment import (
+    AdminPaymentDetailsRead,
+    AdminPaymentListItemRead,
+    PaymentReportRead,
+    RefundRead,
+    RefundRequest,
+)
 from app.schemas.report import AttendanceReportRead, AttendanceSessionDetailsRead
 from app.schemas.session import (
     SessionBatchCreate,
@@ -34,6 +48,7 @@ from app.schemas.ticket import TicketListRead
 from app.schemas.user import UserRead
 from app.services.admin import AdminService
 from app.services.order import OrderService
+from app.services.payment import PaymentService
 from app.services.ticket import TicketService
 from app.services.user import UserService
 
@@ -132,6 +147,132 @@ SessionUpdatePayload = Annotated[
         }
     ),
 ]
+
+
+@router.get(
+    "/payments",
+    response_model=ApiResponse[list[AdminPaymentListItemRead]],
+    summary="List admin payments",
+    description=(
+        "Return recent provider-neutral payment aggregates for administrator operations. "
+        "Rows include order/customer references, attempt counts, refund counts, and remaining refundable amount."
+    ),
+    response_description="Wrapped list of enriched admin payment rows.",
+    responses=VALIDATION_ERROR_RESPONSE,
+)
+async def list_payments(
+    payment_status: Annotated[
+        str | None,
+        Query(alias="status", description="Optional payment lifecycle status filter."),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        Query(description="Optional normalized provider filter, for example `fake`."),
+    ] = None,
+    refund_status: Annotated[
+        str | None,
+        Query(description="Optional latest refund status filter, or `none` for payments without refunds."),
+    ] = None,
+    search: Annotated[
+        str | None,
+        Query(description="Search by payment, order, user, customer, provider reference, or status text."),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    admin_user: UserRead = Depends(get_current_admin),
+    payment_service: PaymentService = Depends(get_payment_service),
+) -> ApiResponse[list[AdminPaymentListItemRead]]:
+    """Return payments visible in the protected admin payment workspace."""
+    payments = await payment_service.list_admin_payments(
+        status=payment_status,
+        provider=provider,
+        refund_status=refund_status,
+        search=search,
+        limit=limit,
+        offset=offset,
+    )
+    return ApiResponseFactory.success(data=payments, message="Admin payments loaded.")
+
+
+@router.get(
+    "/payments/report",
+    response_model=ApiResponse[PaymentReportRead],
+    summary="Get admin payment revenue report",
+    description=(
+        "Build financially coherent payment reporting for administrators. Gross revenue is based on succeeded "
+        "payment aggregates in the selected payment.created_at period, refunded amount is based on succeeded "
+        "refunds in the selected refund.created_at period, and net revenue is gross minus refunds. Booking "
+        "attendance is intentionally not used as revenue truth."
+    ),
+    response_description="Wrapped payment summary with session and movie revenue aggregates.",
+    responses=VALIDATION_ERROR_RESPONSE,
+)
+async def get_payment_report(
+    date_from: Annotated[
+        datetime | None,
+        Query(description="Inclusive lower bound for payment.created_at and refund.created_at."),
+    ] = None,
+    date_to: Annotated[
+        datetime | None,
+        Query(description="Inclusive upper bound for payment.created_at and refund.created_at."),
+    ] = None,
+    admin_user: UserRead = Depends(get_current_admin),
+    payment_service: PaymentService = Depends(get_payment_service),
+) -> ApiResponse[PaymentReportRead]:
+    """Return payment revenue metrics for administrator reporting."""
+    _ = admin_user
+    report = await payment_service.get_admin_payment_report(date_from=date_from, date_to=date_to)
+    return ApiResponseFactory.success(data=report, message="Admin payment report generated.")
+
+
+@router.get(
+    "/payments/{payment_id}",
+    response_model=ApiResponse[AdminPaymentDetailsRead],
+    summary="Get admin payment details",
+    description=(
+        "Return one payment with admin-safe attempts, refunds, webhook history, customer reference, "
+        "and related booking context."
+    ),
+    response_description="Wrapped admin payment detail record.",
+    responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
+)
+async def get_payment(
+    payment_id: str,
+    admin_user: UserRead = Depends(get_current_admin),
+    payment_service: PaymentService = Depends(get_payment_service),
+) -> ApiResponse[AdminPaymentDetailsRead]:
+    """Return one enriched payment for administrator inspection."""
+    payment = await payment_service.get_admin_payment_details(payment_id)
+    return ApiResponseFactory.success(data=payment, message="Admin payment details loaded.")
+
+
+@router.post(
+    "/payments/{payment_id}/refunds",
+    response_model=ApiResponse[RefundRead],
+    status_code=status.HTTP_201_CREATED,
+    summary="Create admin payment refund",
+    description=(
+        "Create a full or partial financial refund for a refundable payment. "
+        "This is distinct from booking cancellation and is protected by administrator authorization."
+    ),
+    response_description="Wrapped provider-normalized refund record.",
+    responses=merge_openapi_responses(CONFLICT_ERROR_RESPONSE, NOT_FOUND_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
+)
+async def create_payment_refund(
+    payment_id: str,
+    payload: RefundRequest,
+    admin_user: UserRead = Depends(get_current_admin),
+    payment_service: PaymentService = Depends(get_payment_service),
+) -> ApiResponse[RefundRead]:
+    """Create a financial refund from the admin payment workspace."""
+    refund = await payment_service.refund_payment(
+        payment_id=payment_id,
+        amount_minor=payload.amount_minor,
+        reason=payload.reason,
+        requested_by=f"admin:{admin_user.id}",
+        metadata=payload.metadata,
+    )
+    return ApiResponseFactory.created(data=refund, message="Refund created successfully.")
 
 
 @router.get(
@@ -383,7 +524,7 @@ async def create_sessions_batch(
     response_model=ApiResponse[SessionDetailsRead],
     summary="Update a session",
     description=(
-        "Edit a future scheduled session that has no purchased tickets. Updated time windows are rechecked "
+        "Edit a future scheduled session that has no active reserved or purchased tickets. Updated time windows are rechecked "
         "against movie runtime rules and the one-hall no-overlap rule."
     ),
     response_description="Wrapped updated session details.",

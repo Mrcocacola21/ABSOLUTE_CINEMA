@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 
 import {
   cancelSessionRequest,
@@ -369,6 +370,9 @@ export function AdminDashboardPage() {
           <span className="badge">
             {users.length} {t("common.labels.users")}
           </span>
+          <Link className="button--ghost" to="/admin/payments">
+            {t("admin.payments.actions.openWorkspace")}
+          </Link>
           <button
             className="button--ghost"
             type="button"

@@ -1,4 +1,4 @@
-"""Ticket purchase endpoints."""
+"""Ticket reservation endpoints."""
 
 from __future__ import annotations
 
@@ -26,14 +26,13 @@ router = APIRouter(prefix="/tickets", tags=["tickets"], responses=AUTHENTICATION
     "/purchase",
     response_model=ApiResponse[TicketRead],
     status_code=status.HTTP_201_CREATED,
-    summary="Purchase a ticket",
+    summary="Reserve a ticket",
     description=(
-        "Purchase exactly one specific seat for a future scheduled session. The authenticated "
-        "user is taken from the bearer token; clients cannot purchase on behalf of another user. "
-        "Invalid seat coordinates, sold seats, cancelled sessions, completed sessions, and sessions "
-        "that already started are rejected."
+        "Reserve exactly one specific seat for a future scheduled session. The authenticated user is "
+        "taken from the bearer token; the reservation blocks the seat until it expires, is cancelled, "
+        "or is finalized by a future payment success flow."
     ),
-    response_description="Wrapped purchased ticket record.",
+    response_description="Wrapped reserved ticket record.",
     responses=merge_openapi_responses(CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )
 async def purchase_ticket(
@@ -41,9 +40,9 @@ async def purchase_ticket(
     current_user: UserRead = Depends(get_current_user),
     ticket_service: TicketService = Depends(get_ticket_service),
 ) -> ApiResponse[TicketRead]:
-    """Purchase a ticket for a selected session."""
+    """Reserve a ticket for a selected session."""
     ticket = await ticket_service.purchase_ticket(payload=payload, current_user=current_user)
-    return ApiResponseFactory.created(data=ticket, message="Ticket purchased successfully.")
+    return ApiResponseFactory.created(data=ticket, message="Ticket reserved pending payment.")
 
 
 @router.get(
@@ -71,7 +70,7 @@ async def list_current_user_tickets(
     response_model=ApiResponse[TicketRead],
     summary="Cancel a ticket",
     description=(
-        "Cancel a purchased ticket before the linked session starts. Normal users can cancel only "
+        "Cancel a reserved or purchased ticket before the linked session starts. Normal users can cancel only "
         "their own tickets; administrators can cancel any ticket. Repeated cancellation and tickets "
         "for already started or completed sessions are rejected."
     ),

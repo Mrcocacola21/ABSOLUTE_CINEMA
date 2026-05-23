@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import "./OrderDetailsPage.css";
 
@@ -8,6 +9,7 @@ import { downloadMyOrderPdfRequest, getMyOrderRequest } from "@/api/orders";
 import { cancelTicketRequest } from "@/api/tickets";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { getLocalizedText } from "@/shared/localization";
+import { isPaidOrder, isPendingPaymentOrder } from "@/shared/payment";
 import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
@@ -33,6 +35,37 @@ function triggerPdfDownload(blob: Blob, filename: string) {
   anchor.click();
   anchor.remove();
   window.URL.revokeObjectURL(url);
+}
+
+function getOrderTicketTimelineAt(ticket: OrderTicket, fallback: string): string {
+  return ticket.purchased_at ?? ticket.reserved_at ?? ticket.expires_at ?? fallback;
+}
+
+function formatTicketTimeline(
+  ticket: OrderTicket,
+  fallback: string,
+  t: TFunction,
+  language: string,
+): string {
+  const baseDate = getOrderTicketTimelineAt(ticket, fallback);
+  const baseText = ticket.purchased_at
+    ? t("profile.orders.purchasedAt", { date: formatDateTime(baseDate, language) })
+    : ticket.status === "expired"
+      ? t("checkout.labels.expiredAt", { date: formatDateTime(baseDate, language) })
+      : t("checkout.labels.reservedAt", { date: formatDateTime(baseDate, language) });
+  const extraParts = [
+    ticket.cancelled_at
+      ? t("profile.orders.cancelledAt", { date: formatDateTime(ticket.cancelled_at, language) })
+      : "",
+    ticket.checked_in_at
+      ? t("orderDetails.tickets.checkedInAt", {
+          defaultValue: "Checked in {{date}}",
+          date: formatDateTime(ticket.checked_in_at, language),
+        })
+      : "",
+  ].filter(Boolean);
+
+  return [baseText, ...extraParts].join(" | ");
 }
 
 export function OrderDetailsPage() {
@@ -192,6 +225,8 @@ export function OrderDetailsPage() {
   const shortOrderId = order.id.slice(-8).toUpperCase();
   const posterSource = resolvePosterSource(order);
   const validityClass = order.valid_for_entry ? "is-valid" : "is-invalid";
+  const canDownloadPdf = isPaidOrder(order);
+  const canContinueCheckout = isPendingPaymentOrder(order);
   const validTickets = order.tickets.filter((ticket) => ticket.valid_for_entry);
   const entrySummary =
     validTickets.length > 0
@@ -233,11 +268,23 @@ export function OrderDetailsPage() {
         </div>
 
         <aside className="order-detail-hero__actions">
-          <button className="button" type="button" disabled={isDownloadingPdf} onClick={() => void handleDownloadPdf()}>
-            {isDownloadingPdf
-              ? t("orderDetails.pdf.loading", { defaultValue: "Preparing PDF..." })
-              : t("common.actions.downloadPdf")}
-          </button>
+          {canContinueCheckout ? (
+            <Link to={`/checkout/${order.id}`} className="button">
+              {t("checkout.actions.continueCheckout")}
+            </Link>
+          ) : null}
+          {canDownloadPdf ? (
+            <button
+              className={canContinueCheckout ? "button--ghost" : "button"}
+              type="button"
+              disabled={isDownloadingPdf}
+              onClick={() => void handleDownloadPdf()}
+            >
+              {isDownloadingPdf
+                ? t("orderDetails.pdf.loading", { defaultValue: "Preparing PDF..." })
+                : t("common.actions.downloadPdf")}
+            </button>
+          ) : null}
           <Link to={`/schedule/${order.session_id}`} className="button--ghost">
             {t("common.actions.viewSession")}
           </Link>
@@ -248,6 +295,23 @@ export function OrderDetailsPage() {
       </section>
 
       {feedback ? <StatusBanner tone={feedback.tone} title={feedback.title} message={feedback.message} /> : null}
+
+      {canContinueCheckout ? (
+        <StatusBanner
+          tone="info"
+          title={t("checkout.status.reserved.title")}
+          message={t("checkout.status.reserved.message", {
+            expiresAt: order.expires_at
+              ? formatDateTime(order.expires_at, i18n.language)
+              : t("checkout.labels.notApplicable"),
+          })}
+          action={
+            <Link to={`/checkout/${order.id}`} className="button">
+              {t("checkout.actions.continueCheckout")}
+            </Link>
+          }
+        />
+      ) : null}
 
       <section className="order-detail-layout">
         <section className="order-detail-main">
@@ -319,11 +383,13 @@ export function OrderDetailsPage() {
             </div>
 
             <div className="order-detail-ticket-list">
-              {order.tickets.map((ticket) => (
-                <article
-                  key={ticket.id}
-                  className={`order-detail-ticket ${ticket.valid_for_entry ? "is-valid" : "is-invalid"}`}
-                >
+              {order.tickets.map((ticket) => {
+                const ticketTimeline = formatTicketTimeline(ticket, order.created_at, t, i18n.language);
+                return (
+                  <article
+                    key={ticket.id}
+                    className={`order-detail-ticket ${ticket.valid_for_entry ? "is-valid" : "is-invalid"}`}
+                  >
                   <div className="order-detail-ticket__seat">
                     <span>{t("common.labels.seat")}</span>
                     <strong>
@@ -343,20 +409,7 @@ export function OrderDetailsPage() {
                       <span className="badge">{formatStateLabel(ticket.status)}</span>
                     </div>
                     <p className="muted">
-                      {t("profile.orders.purchasedAt", {
-                        date: formatDateTime(ticket.purchased_at, i18n.language),
-                      })}
-                      {ticket.cancelled_at
-                        ? ` | ${t("profile.orders.cancelledAt", {
-                            date: formatDateTime(ticket.cancelled_at, i18n.language),
-                          })}`
-                        : ""}
-                      {ticket.checked_in_at
-                        ? ` | ${t("orderDetails.tickets.checkedInAt", {
-                            defaultValue: "Checked in {{date}}",
-                            date: formatDateTime(ticket.checked_in_at, i18n.language),
-                          })}`
-                        : ""}
+                      {ticketTimeline}
                     </p>
                   </div>
 
@@ -380,8 +433,9 @@ export function OrderDetailsPage() {
                       </button>
                     ) : null}
                   </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           </article>
         </section>

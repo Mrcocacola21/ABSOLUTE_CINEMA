@@ -35,16 +35,65 @@ class SessionStatuses:
 class TicketStatuses:
     """Lifecycle statuses for tickets."""
 
+    RESERVED = "reserved"
     PURCHASED = "purchased"
     CANCELLED = "cancelled"
+    EXPIRED = "expired"
 
 
 class OrderStatuses:
     """Lifecycle statuses for ticket purchase orders."""
 
+    PENDING_PAYMENT = "pending_payment"
     COMPLETED = "completed"
     PARTIALLY_CANCELLED = "partially_cancelled"
+    PAYMENT_FAILED = "payment_failed"
+    PAYMENT_CANCELLED = "payment_cancelled"
     CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
+class PaymentStatuses:
+    """Lifecycle statuses for payment aggregates."""
+
+    CREATED = "created"
+    PENDING = "pending"
+    REQUIRES_ACTION = "requires_action"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+    REFUNDED = "refunded"
+    PARTIALLY_REFUNDED = "partially_refunded"
+
+
+class PaymentAttemptStatuses:
+    """Lifecycle statuses for individual payment attempts."""
+
+    CREATED = "created"
+    PENDING = "pending"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class RefundStatuses:
+    """Lifecycle statuses for payment refunds."""
+
+    CREATED = "created"
+    PENDING = "pending"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class PaymentWebhookProcessingStatuses:
+    """Processing statuses for received payment webhook events."""
+
+    RECEIVED = "received"
+    PROCESSING = "processing"
+    PROCESSED = "processed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 MOVIE_STATUS_VALUES: Final[tuple[str, ...]] = (
@@ -53,9 +102,54 @@ MOVIE_STATUS_VALUES: Final[tuple[str, ...]] = (
     MovieStatuses.DEACTIVATED,
 )
 ORDER_STATUS_VALUES: Final[tuple[str, ...]] = (
+    OrderStatuses.PENDING_PAYMENT,
     OrderStatuses.COMPLETED,
     OrderStatuses.PARTIALLY_CANCELLED,
+    OrderStatuses.PAYMENT_FAILED,
+    OrderStatuses.PAYMENT_CANCELLED,
     OrderStatuses.CANCELLED,
+    OrderStatuses.EXPIRED,
+)
+TICKET_STATUS_VALUES: Final[tuple[str, ...]] = (
+    TicketStatuses.RESERVED,
+    TicketStatuses.PURCHASED,
+    TicketStatuses.CANCELLED,
+    TicketStatuses.EXPIRED,
+)
+TICKET_BLOCKING_STATUS_VALUES: Final[tuple[str, ...]] = (
+    TicketStatuses.RESERVED,
+    TicketStatuses.PURCHASED,
+)
+PAYMENT_STATUS_VALUES: Final[tuple[str, ...]] = (
+    PaymentStatuses.CREATED,
+    PaymentStatuses.PENDING,
+    PaymentStatuses.REQUIRES_ACTION,
+    PaymentStatuses.SUCCEEDED,
+    PaymentStatuses.FAILED,
+    PaymentStatuses.CANCELLED,
+    PaymentStatuses.EXPIRED,
+    PaymentStatuses.REFUNDED,
+    PaymentStatuses.PARTIALLY_REFUNDED,
+)
+PAYMENT_ATTEMPT_STATUS_VALUES: Final[tuple[str, ...]] = (
+    PaymentAttemptStatuses.CREATED,
+    PaymentAttemptStatuses.PENDING,
+    PaymentAttemptStatuses.SUCCEEDED,
+    PaymentAttemptStatuses.FAILED,
+)
+REFUND_STATUS_VALUES: Final[tuple[str, ...]] = (
+    RefundStatuses.CREATED,
+    RefundStatuses.PENDING,
+    RefundStatuses.SUCCEEDED,
+    RefundStatuses.FAILED,
+    RefundStatuses.CANCELLED,
+)
+PAYMENT_WEBHOOK_PROCESSING_STATUS_VALUES: Final[tuple[str, ...]] = (
+    PaymentWebhookProcessingStatuses.RECEIVED,
+    PaymentWebhookProcessingStatuses.PROCESSING,
+    PaymentWebhookProcessingStatuses.PROCESSED,
+    PaymentWebhookProcessingStatuses.FAILED,
+    PaymentWebhookProcessingStatuses.SKIPPED,
 )
 ALLOWED_SORT_FIELDS: Final[tuple[str, ...]] = (
     "movie_title",

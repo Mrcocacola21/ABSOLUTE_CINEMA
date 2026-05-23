@@ -24,8 +24,13 @@ async def test_demo_seed_command_is_repeatable_and_creates_login_ready_demo_data
         "users": 5,
         "movies": 30,
         "sessions": 20,
-        "orders": 9,
-        "tickets": 20,
+        "orders": 11,
+        "tickets": 24,
+        "payments": 11,
+        "payment_attempts": 11,
+        "refunds": 2,
+        "payment_webhook_events": 12,
+        "payment_audit_events": 13,
     }
 
     counts = {
@@ -34,6 +39,11 @@ async def test_demo_seed_command_is_repeatable_and_creates_login_ready_demo_data
         "sessions": await database[DatabaseCollections.SESSIONS].count_documents({}),
         "orders": await database[DatabaseCollections.ORDERS].count_documents({}),
         "tickets": await database[DatabaseCollections.TICKETS].count_documents({}),
+        "payments": await database[DatabaseCollections.PAYMENTS].count_documents({}),
+        "payment_attempts": await database[DatabaseCollections.PAYMENT_ATTEMPTS].count_documents({}),
+        "refunds": await database[DatabaseCollections.REFUNDS].count_documents({}),
+        "payment_webhook_events": await database[DatabaseCollections.PAYMENT_WEBHOOK_EVENTS].count_documents({}),
+        "payment_audit_events": await database[DatabaseCollections.PAYMENT_AUDIT_EVENTS].count_documents({}),
     }
     assert counts == first_summary.counts
 

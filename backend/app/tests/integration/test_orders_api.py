@@ -12,7 +12,7 @@ from pymongo.errors import OperationFailure
 
 from app.core.exceptions import DatabaseException
 from app.db.collections import DatabaseCollections
-from app.tests.integration.conftest import API_PREFIX
+from app.tests.integration.conftest import API_PREFIX, complete_reserved_order_payment, purchase_order_and_complete
 
 
 @pytest.mark.asyncio
@@ -26,21 +26,16 @@ async def test_user_can_purchase_multiple_tickets_in_one_order_and_update_sessio
     movie = await create_movie(title="Bulk Purchase Movie", duration_minutes=120)
     session = await create_session(movie_id=movie["id"], start_hour=12, duration_minutes=150, price=210)
 
-    response = await client.post(
-        f"{API_PREFIX}/orders/purchase",
-        headers=user_auth["headers"],
-        json={
-            "session_id": session["id"],
-            "seats": [
-                {"seat_row": 1, "seat_number": 1},
-                {"seat_row": 1, "seat_number": 2},
-                {"seat_row": 1, "seat_number": 3},
-            ],
-        },
+    order = await purchase_order_and_complete(
+        client,
+        user_auth["headers"],
+        session["id"],
+        [
+            {"seat_row": 1, "seat_number": 1},
+            {"seat_row": 1, "seat_number": 2},
+            {"seat_row": 1, "seat_number": 3},
+        ],
     )
-
-    assert response.status_code == 201, response.text
-    order = response.json()["data"]
     assert order["status"] == "completed"
     assert order["tickets_count"] == 3
     assert order["active_tickets_count"] == 3
@@ -188,7 +183,7 @@ async def test_order_purchase_rejects_occupied_seat_and_keeps_counter_unchanged(
     assert second_purchase.status_code == 409
     body = second_purchase.json()
     assert body["error"]["code"] == "conflict"
-    assert body["error"]["message"] == "One or more selected seats have already been purchased."
+    assert body["error"]["message"] == "One or more selected seats are already reserved or purchased."
 
     stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
     assert stored_session is not None
@@ -224,9 +219,9 @@ async def test_order_purchase_rejects_seat_outside_hall_bounds(
 @pytest.mark.parametrize(
     ("status_update", "start_shift", "end_shift", "expected_message"),
     [
-        ("cancelled", timedelta(days=1), timedelta(days=1, hours=2), "Cancelled sessions cannot be purchased."),
-        ("scheduled", timedelta(hours=-3), timedelta(hours=-1), "Completed sessions cannot be purchased."),
-        ("scheduled", timedelta(minutes=-20), timedelta(hours=2), "Past sessions cannot be purchased."),
+        ("cancelled", timedelta(days=1), timedelta(days=1, hours=2), "Cancelled sessions cannot be reserved."),
+        ("scheduled", timedelta(hours=-3), timedelta(hours=-1), "Completed sessions cannot be reserved."),
+        ("scheduled", timedelta(minutes=-20), timedelta(hours=2), "Past sessions cannot be reserved."),
     ],
 )
 async def test_order_purchase_rejects_invalid_or_unavailable_sessions(
@@ -474,12 +469,12 @@ async def test_concurrent_overlapping_multi_ticket_orders_leave_one_consistent_w
     responses = [first_response, second_response]
     assert sorted(response.status_code for response in responses) == [201, 409]
     conflict_response = next(response for response in responses if response.status_code == 409)
-    assert conflict_response.json()["error"]["message"] == "One or more selected seats have already been purchased."
+    assert conflict_response.json()["error"]["message"] == "One or more selected seats are already reserved or purchased."
 
     stored_session = await database[DatabaseCollections.SESSIONS].find_one({"_id": ObjectId(session["id"])})
     stored_orders = await database[DatabaseCollections.ORDERS].count_documents({"session_id": session["id"]})
     stored_tickets = await database[DatabaseCollections.TICKETS].find(
-        {"session_id": session["id"], "status": "purchased"}
+        {"session_id": session["id"], "status": "reserved"}
     ).to_list(length=10)
     assert stored_session is not None
     assert stored_session["available_seats"] == stored_session["total_seats"] - 2
@@ -544,6 +539,7 @@ async def test_cancelling_one_ticket_from_multi_ticket_order_updates_order_statu
     )
     assert purchase_response.status_code == 201
     order = purchase_response.json()["data"]
+    await complete_reserved_order_payment(client, user_auth["headers"], order["id"])
 
     cancel_response = await client.patch(
         f"{API_PREFIX}/tickets/{order['tickets'][0]['id']}/cancel",
@@ -601,6 +597,7 @@ async def test_full_cancellation_marks_order_cancelled_and_repeated_ticket_cance
     )
     assert purchase_response.status_code == 201
     order = purchase_response.json()["data"]
+    await complete_reserved_order_payment(client, user_auth["headers"], order["id"])
 
     for ticket in order["tickets"]:
         cancel_response = await client.patch(
@@ -666,6 +663,7 @@ async def test_full_order_cancellation_after_partial_ticket_cancellation_only_re
     )
     assert purchase_response.status_code == 201
     order = purchase_response.json()["data"]
+    await complete_reserved_order_payment(client, user_auth["headers"], order["id"])
 
     first_ticket_cancel = await client.patch(
         f"{API_PREFIX}/tickets/{order['tickets'][0]['id']}/cancel",
@@ -734,6 +732,7 @@ async def test_user_can_cancel_entire_order_in_one_request(
     )
     assert purchase_response.status_code == 201
     order = purchase_response.json()["data"]
+    await complete_reserved_order_payment(client, user_auth["headers"], order["id"])
 
     cancel_response = await client.patch(
         f"{API_PREFIX}/orders/{order['id']}/cancel",
@@ -798,6 +797,7 @@ async def test_full_order_cancellation_for_started_or_completed_sessions_is_reje
     )
     assert purchase_response.status_code == 201
     order = purchase_response.json()["data"]
+    await complete_reserved_order_payment(client, user_auth["headers"], order["id"])
 
     now = datetime.now(tz=timezone.utc)
     await database[DatabaseCollections.SESSIONS].update_one(
@@ -848,6 +848,7 @@ async def test_repeated_full_order_cancellation_is_rejected_cleanly(
     )
     assert purchase_response.status_code == 201
     order_id = purchase_response.json()["data"]["id"]
+    await complete_reserved_order_payment(client, user_auth["headers"], order_id)
 
     first_cancel = await client.patch(
         f"{API_PREFIX}/orders/{order_id}/cancel",
@@ -860,7 +861,7 @@ async def test_repeated_full_order_cancellation_is_rejected_cleanly(
         headers=user_auth["headers"],
     )
     assert second_cancel.status_code == 409
-    assert second_cancel.json()["error"]["message"] == "Order has already been cancelled."
+    assert second_cancel.json()["error"]["message"] == "Order has already been cancelled or released."
 
 
 @pytest.mark.asyncio
@@ -887,6 +888,7 @@ async def test_user_cannot_cancel_another_users_order_but_admin_can(
     )
     assert purchase_response.status_code == 201
     order_id = purchase_response.json()["data"]["id"]
+    await complete_reserved_order_payment(client, second_user["headers"], order_id)
 
     own_orders_response = await client.get(f"{API_PREFIX}/users/me/orders", headers=user_auth["headers"])
     assert own_orders_response.status_code == 200
@@ -970,6 +972,7 @@ async def test_full_order_cancellation_rolls_back_when_order_update_fails(
     )
     assert purchase_response.status_code == 201
     order = purchase_response.json()["data"]
+    await complete_reserved_order_payment(client, user_auth["headers"], order["id"])
 
     async def fail_update_order(
         self,

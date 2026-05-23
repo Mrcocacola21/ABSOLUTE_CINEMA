@@ -2362,10 +2362,14 @@ It writes terminal missing-line coverage output, `coverage.xml`, and `htmlcov/in
 #### Run all backend tests with coverage in Docker
 
 ```bash
-docker compose run --rm -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true" backend pytest
+docker compose up -d mongodb mongodb-init-replica backend
+docker compose exec -T \
+  -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true" \
+  -e "TEST_MONGODB_DB_NAME=cinema_showcase_test" \
+  backend pytest app/tests -q
 ```
 
-This is the most reliable full-suite path because the integration tests require MongoDB replica-set support. Coverage is configured in `backend/pyproject.toml` to measure the real backend package `app` while omitting `app/tests/*`.
+This is the most reliable full-suite path because it runs inside the already healthy backend container on the Docker network, while the integration tests talk to the replica-set MongoDB service by container name. Coverage is configured in `backend/pyproject.toml` to measure the real backend package `app` while omitting `app/tests/*`.
 
 After the run, open the HTML report from the repository root:
 
@@ -2394,14 +2398,20 @@ pytest app/tests/test_transactions.py -q
 #### Bring up only MongoDB services with Docker and run integration tests in the backend container
 
 ```bash
-docker compose up -d mongodb mongodb-init-replica
-docker compose run --rm -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true" backend pytest app/tests/integration -o addopts=
+docker compose up -d mongodb mongodb-init-replica backend
+docker compose exec -T \
+  -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true" \
+  -e "TEST_MONGODB_DB_NAME=cinema_showcase_test" \
+  backend pytest app/tests/integration -o addopts=
 ```
 
 #### Run a focused integration subset for access control, schedule, orders, tickets, and sessions in Docker
 
 ```bash
-docker compose run --rm -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true" backend pytest app/tests/integration/test_access_control_api.py app/tests/integration/test_schedule_api.py app/tests/integration/test_orders_api.py app/tests/integration/test_tickets_api.py app/tests/integration/test_sessions_api.py -o addopts=
+docker compose exec -T \
+  -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true" \
+  -e "TEST_MONGODB_DB_NAME=cinema_showcase_test" \
+  backend pytest app/tests/integration/test_access_control_api.py app/tests/integration/test_schedule_api.py app/tests/integration/test_orders_api.py app/tests/integration/test_tickets_api.py app/tests/integration/test_sessions_api.py -o addopts=
 ```
 
 ### Validation audit verification
@@ -2409,7 +2419,7 @@ docker compose run --rm -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet
 After the validation and Swagger-readiness audit, the following checks were run successfully:
 
 ```bash
-docker compose run --rm -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true" backend pytest -o addopts=
+docker compose exec -T -e "TEST_MONGODB_URI=mongodb://mongodb:27017/?replicaSet=rs0&directConnection=true" backend pytest -o addopts=
 npm run build
 docker compose run --rm backend python -c "from app.main import app; schema=app.openapi(); names=['MovieCreate','MovieUpdate','SessionCreate','SessionUpdate','SessionBatchCreate','LocalizedText','LocalizedTextUpdate']; print({name: schema['components']['schemas'][name].get('additionalProperties') for name in names})"
 git diff --check

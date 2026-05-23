@@ -25,6 +25,7 @@ from app.tests.integration.conftest import API_PREFIX, build_localized_text
         f"{API_PREFIX}/admin/users",
         f"{API_PREFIX}/admin/attendance",
         f"{API_PREFIX}/admin/attendance/sessions/{ObjectId()}",
+        f"{API_PREFIX}/admin/payments/report",
     ],
 )
 async def test_non_admin_cannot_access_admin_endpoints(
@@ -141,6 +142,7 @@ async def test_admin_can_access_admin_endpoints(
         f"{API_PREFIX}/admin/tickets",
         f"{API_PREFIX}/admin/attendance",
         f"{API_PREFIX}/admin/attendance/sessions/{ObjectId()}",
+        f"{API_PREFIX}/admin/payments/report",
     ],
 )
 async def test_unauthenticated_admin_endpoints_return_standardized_401(

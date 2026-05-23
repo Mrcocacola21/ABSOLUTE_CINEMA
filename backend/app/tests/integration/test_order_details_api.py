@@ -10,7 +10,7 @@ from bson import ObjectId
 
 from app.db.collections import DatabaseCollections
 from app.security.order_validation import create_order_validation_token
-from app.tests.integration.conftest import API_PREFIX
+from app.tests.integration.conftest import API_PREFIX, purchase_order_and_complete
 
 
 async def _purchase_order(
@@ -19,16 +19,12 @@ async def _purchase_order(
     session_id: str,
     seats: list[dict[str, int]],
 ) -> dict[str, object]:
-    response = await client.post(
-        f"{API_PREFIX}/orders/purchase",
-        headers=headers,
-        json={
-            "session_id": session_id,
-            "seats": seats,
-        },
+    return await purchase_order_and_complete(
+        client,
+        headers,
+        session_id,
+        seats,
     )
-    assert response.status_code == 201, response.text
-    return response.json()["data"]
 
 
 @pytest.mark.asyncio

@@ -6,13 +6,17 @@ from datetime import datetime, timezone
 
 from app.builders.order_pdf import build_order_pdf
 from app.commands.order_cancellation import OrderCancellationCommand
+from app.commands.order_finalization import OrderFinalizationCommand
 from app.commands.order_purchase import OrderPurchaseCommand
+from app.commands.reservation_expiry import sync_expired_reservations_for_session
 from app.core.config import get_settings
 from app.core.constants import OrderStatuses, Roles, SessionStatuses, TicketStatuses
 from app.core.exceptions import AuthorizationException, ConflictException, NotFoundException
+from app.core.logging import get_logger
 from app.observers.events import build_default_event_publisher
 from app.repositories.movies import MovieRepository
 from app.repositories.orders import OrderRepository
+from app.repositories.payments import PaymentRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.tickets import TicketRepository
 from app.schemas.movie import MovieRead, resolve_movie_poster_url
@@ -28,8 +32,12 @@ from app.schemas.order import (
 from app.schemas.session import SessionRead
 from app.schemas.user import UserRead
 from app.security.order_validation import create_order_validation_token, decode_order_validation_token
+from app.services.refund import RefundService
 from app.utils.identifiers import is_valid_object_id
+from app.utils.money import amount_to_minor_units
 from app.utils.order_aggregates import build_order_aggregate_updates
+
+logger = get_logger(__name__)
 
 VALIDATION_STATE_VALID = "valid"
 VALIDATION_STATE_CANCELLED = "cancelled"
@@ -46,20 +54,25 @@ class OrderService:
         ticket_repository: TicketRepository,
         movie_repository: MovieRepository,
         order_repository: OrderRepository,
+        payment_repository: PaymentRepository | None = None,
+        refund_service: RefundService | None = None,
     ) -> None:
         self.session_repository = session_repository
         self.ticket_repository = ticket_repository
         self.movie_repository = movie_repository
         self.order_repository = order_repository
+        self.payment_repository = payment_repository
+        self.refund_service = refund_service
         self.event_publisher = build_default_event_publisher()
 
     async def purchase_order(self, payload: OrderPurchaseRequest, current_user: UserRead) -> OrderDetailsRead:
-        """Purchase multiple seats for one session as a single order."""
+        """Reserve multiple seats for one session as a pending payment order."""
         command = OrderPurchaseCommand(
             session_repository=self.session_repository,
             ticket_repository=self.ticket_repository,
             order_repository=self.order_repository,
             event_publisher=self.event_publisher,
+            payment_repository=self.payment_repository,
         )
         result = await command.execute(payload=payload, current_user=current_user)
 
@@ -81,20 +94,78 @@ class OrderService:
         return self._build_order_details(order=built_order, now=now)
 
     async def cancel_order(self, order_id: str, current_user: UserRead) -> OrderDetailsRead:
-        """Cancel all active tickets contained in one order."""
+        """Cancel all active reserved or purchased tickets contained in one order."""
+        original_tickets = await self.ticket_repository.list_by_order(order_id)
+        refundable_tickets = [
+            ticket
+            for ticket in original_tickets
+            if ticket["status"] == TicketStatuses.PURCHASED and ticket.get("checked_in_at") is None
+        ]
         command = OrderCancellationCommand(
             order_repository=self.order_repository,
             ticket_repository=self.ticket_repository,
             session_repository=self.session_repository,
         )
         await command.execute(order_id=order_id, current_user=current_user)
+        await self._refund_cancelled_order_tickets(
+            order_id=order_id,
+            refundable_tickets=refundable_tickets,
+            requested_by=current_user,
+        )
         return await self.get_current_user_order(order_id=order_id, current_user=current_user)
+
+    async def _refund_cancelled_order_tickets(
+        self,
+        *,
+        order_id: str,
+        refundable_tickets: list[dict[str, object]],
+        requested_by: UserRead,
+    ) -> None:
+        if self.refund_service is None or not refundable_tickets:
+            return
+
+        amount_minor = sum(amount_to_minor_units(ticket["price"]) for ticket in refundable_tickets)
+        try:
+            await self.refund_service.refund_order_amount(
+                order_id=order_id,
+                amount_minor=amount_minor,
+                reason="order_cancelled",
+                requested_by=requested_by.id,
+                metadata={
+                    "source": "order_cancellation",
+                    "order_id": order_id,
+                    "ticket_ids": [str(ticket["id"]) for ticket in refundable_tickets],
+                },
+                cap_to_remaining=True,
+                fail_on_provider_error=False,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Order cancellation refund could not be completed",
+                extra={
+                    "order_id": order_id,
+                    "requested_by": requested_by.id,
+                    "ticket_count": len(refundable_tickets),
+                },
+                exc_info=exc,
+            )
+
+    async def finalize_pending_order(self, order_id: str) -> OrderRead:
+        """Internal hook for a future payment success flow."""
+        command = OrderFinalizationCommand(
+            order_repository=self.order_repository,
+            ticket_repository=self.ticket_repository,
+            session_repository=self.session_repository,
+        )
+        finalized = await command.execute(order_id=order_id)
+        return OrderRead.model_validate(finalized)
 
     async def list_current_user_orders(self, current_user: UserRead) -> list[OrderListRead]:
         """Return orders belonging to the authenticated user."""
         now = datetime.now(tz=timezone.utc)
         await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
         orders = await self.order_repository.list_by_user(current_user.id)
+        orders = await self._sync_expired_reservations_for_orders(orders, now=now)
         return await self._build_order_list(orders, now=now)
 
     async def get_current_user_order(self, order_id: str, current_user: UserRead) -> OrderDetailsRead:
@@ -106,6 +177,8 @@ class OrderService:
         if order_document is None:
             raise NotFoundException("Order was not found.")
         self._ensure_order_owner(order_document=order_document, current_user=current_user)
+        synced_orders = await self._sync_expired_reservations_for_orders([order_document], now=now)
+        order_document = synced_orders[0] if synced_orders else order_document
 
         built_orders = await self._build_order_list([order_document], now=now)
         if not built_orders:
@@ -115,6 +188,8 @@ class OrderService:
     async def build_current_user_order_pdf(self, order_id: str, current_user: UserRead) -> bytes:
         """Build a PDF receipt for one order owned by the current user."""
         order = await self.get_current_user_order(order_id=order_id, current_user=current_user)
+        if order.status not in {OrderStatuses.COMPLETED, OrderStatuses.PARTIALLY_CANCELLED}:
+            raise ConflictException("PDF receipt is available after payment is completed.")
         return build_order_pdf(order=order, generated_at=datetime.now(tz=timezone.utc))
 
     async def validate_order_token(self, token: str, requested_by: UserRead) -> OrderValidationRead:
@@ -141,6 +216,8 @@ class OrderService:
                 message="The QR token is signed, but the referenced order no longer exists.",
                 order_id=payload.sub,
             )
+        synced_orders = await self._sync_expired_reservations_for_orders([order_document], now=now)
+        order_document = synced_orders[0] if synced_orders else order_document
 
         built_orders = await self._build_order_list([order_document], now=now)
         if not built_orders:
@@ -164,6 +241,8 @@ class OrderService:
         order_document = await self.order_repository.get_by_id(order_id)
         if order_document is None:
             raise NotFoundException("Order was not found.")
+        synced_orders = await self._sync_expired_reservations_for_orders([order_document], now=now)
+        order_document = synced_orders[0] if synced_orders else order_document
 
         built_orders = await self._build_order_list([order_document], now=now)
         if not built_orders:
@@ -245,6 +324,35 @@ class OrderService:
             )
         return result
 
+    async def _sync_expired_reservations_for_orders(
+        self,
+        order_documents: list[dict[str, object]],
+        *,
+        now: datetime,
+    ) -> list[dict[str, object]]:
+        """Release elapsed reservations for the sessions touched by these orders."""
+        if not order_documents:
+            return []
+
+        session_ids = sorted({str(order["session_id"]) for order in order_documents})
+        expired_count = 0
+        for session_id in session_ids:
+            expired_count += await sync_expired_reservations_for_session(
+                session_id,
+                now=now,
+                order_repository=self.order_repository,
+                ticket_repository=self.ticket_repository,
+                session_repository=self.session_repository,
+                payment_repository=self.payment_repository,
+            )
+        if expired_count <= 0:
+            return order_documents
+
+        order_ids = [str(order["id"]) for order in order_documents]
+        refreshed_orders = await self.order_repository.list_by_ids(order_ids)
+        refreshed_map = {str(order["id"]): order for order in refreshed_orders}
+        return [refreshed_map.get(str(order["id"]), order) for order in order_documents]
+
     async def _synchronize_order_aggregate(
         self,
         *,
@@ -290,7 +398,9 @@ class OrderService:
             for document in ticket_documents
         ]
         active_tickets_count = sum(1 for ticket in tickets if ticket.status == TicketStatuses.PURCHASED)
-        cancelled_tickets_count = len(tickets) - active_tickets_count
+        reserved_tickets_count = sum(1 for ticket in tickets if ticket.status == TicketStatuses.RESERVED)
+        cancelled_tickets_count = sum(1 for ticket in tickets if ticket.status == TicketStatuses.CANCELLED)
+        expired_tickets_count = sum(1 for ticket in tickets if ticket.status == TicketStatuses.EXPIRED)
         checked_in_tickets_count = sum(
             1
             for ticket in tickets
@@ -311,7 +421,9 @@ class OrderService:
             session_price=session.price,
             session_status=session.status,
             active_tickets_count=active_tickets_count,
+            reserved_tickets_count=reserved_tickets_count,
             cancelled_tickets_count=cancelled_tickets_count,
+            expired_tickets_count=expired_tickets_count,
             checked_in_tickets_count=checked_in_tickets_count,
             unchecked_active_tickets_count=unchecked_active_tickets_count,
             tickets=tickets,
@@ -338,6 +450,14 @@ class OrderService:
 
     def _get_order_validity(self, *, order: OrderListRead, now: datetime) -> tuple[bool, str, str]:
         """Return the admission-state decision for an order QR code."""
+        if order.status == OrderStatuses.PENDING_PAYMENT:
+            return False, VALIDATION_STATE_EXPIRED, "The order is waiting for payment and is not valid for entry."
+        if order.status == OrderStatuses.PAYMENT_FAILED:
+            return False, "payment_failed", "Payment failed and the seat reservation was released."
+        if order.status == OrderStatuses.PAYMENT_CANCELLED:
+            return False, "payment_cancelled", "Payment was cancelled and the seat reservation was released."
+        if order.status == OrderStatuses.EXPIRED:
+            return False, VALIDATION_STATE_EXPIRED, "The pending order reservation has expired."
         if order.status == OrderStatuses.CANCELLED:
             return False, VALIDATION_STATE_CANCELLED, "The order is fully cancelled."
         if order.active_tickets_count <= 0:
@@ -375,7 +495,9 @@ class OrderService:
             session_end_time=order.session_end_time,
             session_status=order.session_status,
             active_tickets_count=order.active_tickets_count,
+            reserved_tickets_count=order.reserved_tickets_count,
             cancelled_tickets_count=order.cancelled_tickets_count,
+            expired_tickets_count=order.expired_tickets_count,
             checked_in_tickets_count=order.checked_in_tickets_count,
             unchecked_active_tickets_count=order.unchecked_active_tickets_count,
             tickets=[
@@ -384,6 +506,8 @@ class OrderService:
                     seat_row=ticket.seat_row,
                     seat_number=ticket.seat_number,
                     status=ticket.status,
+                    reserved_at=ticket.reserved_at,
+                    expires_at=ticket.expires_at,
                     purchased_at=ticket.purchased_at,
                     cancelled_at=ticket.cancelled_at,
                     checked_in_at=ticket.checked_in_at,
@@ -428,7 +552,9 @@ class OrderService:
             seat_number=int(ticket_document["seat_number"]),
             price=float(ticket_document["price"]),
             status=str(ticket_document["status"]),
-            purchased_at=ticket_document["purchased_at"],
+            reserved_at=ticket_document.get("reserved_at"),
+            expires_at=ticket_document.get("expires_at"),
+            purchased_at=ticket_document.get("purchased_at"),
             updated_at=ticket_document.get("updated_at"),
             cancelled_at=ticket_document.get("cancelled_at"),
             checked_in_at=ticket_document.get("checked_in_at"),
@@ -453,8 +579,12 @@ class OrderService:
         now: datetime,
     ) -> bool:
         """Return whether an order ticket can still be cancelled."""
+        ticket_status = ticket_document["status"]
+        expires_at = ticket_document.get("expires_at")
+        if ticket_status == TicketStatuses.RESERVED and expires_at is not None and expires_at <= now:
+            return False
         return (
-            ticket_document["status"] == TicketStatuses.PURCHASED
+            ticket_status in {TicketStatuses.RESERVED, TicketStatuses.PURCHASED}
             and session_document.status in {SessionStatuses.SCHEDULED, SessionStatuses.CANCELLED}
             and session_document.start_time > now
             and ticket_document.get("checked_in_at") is None
@@ -471,7 +601,7 @@ class OrderService:
         """Return whether one ticket can currently be accepted at entry."""
         return (
             ticket_document["status"] == TicketStatuses.PURCHASED
-            and order_status != OrderStatuses.CANCELLED
+            and order_status in {OrderStatuses.COMPLETED, OrderStatuses.PARTIALLY_CANCELLED}
             and session_document.status == SessionStatuses.SCHEDULED
             and session_document.start_time > now
             and ticket_document.get("checked_in_at") is None
@@ -485,6 +615,10 @@ class OrderService:
             return "Cancelled orders or tickets cannot be checked in."
         if validation_state == VALIDATION_STATE_EXPIRED:
             return "Expired orders cannot be checked in."
+        if validation_state == "payment_failed":
+            return "Orders with failed payments cannot be checked in."
+        if validation_state == "payment_cancelled":
+            return "Orders with cancelled payments cannot be checked in."
         return "Order cannot be checked in."
 
     def _ensure_order_owner(self, *, order_document: dict[str, object], current_user: UserRead) -> None:

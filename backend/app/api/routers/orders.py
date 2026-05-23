@@ -1,4 +1,4 @@
-"""Order purchase endpoints."""
+"""Order reservation endpoints."""
 
 from __future__ import annotations
 
@@ -26,13 +26,13 @@ router = APIRouter(prefix="/orders", tags=["orders"], responses=AUTHENTICATION_E
     "/purchase",
     response_model=ApiResponse[OrderDetailsRead],
     status_code=status.HTTP_201_CREATED,
-    summary="Purchase an order",
+    summary="Reserve seats as a pending order",
     description=(
-        "Purchase one or more specific seats for the same future scheduled session as a grouped order. "
-        "The authenticated user is taken from the bearer token; duplicate seats, sold seats, invalid "
-        "coordinates, cancelled sessions, completed sessions, and sessions that already started are rejected."
+        "Reserve one or more specific seats for the same future scheduled session as a grouped pending-payment "
+        "order. Reserved seats are unavailable to other users until the reservation expires, is cancelled, "
+        "or is finalized by a future payment success flow."
     ),
-    response_description="Wrapped purchased order details.",
+    response_description="Wrapped pending order details.",
     responses=merge_openapi_responses(CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )
 async def purchase_order(
@@ -40,9 +40,9 @@ async def purchase_order(
     current_user: UserRead = Depends(get_current_user),
     order_service: OrderService = Depends(get_order_service),
 ) -> ApiResponse[OrderDetailsRead]:
-    """Purchase one or more seats for the same session as one order."""
+    """Reserve one or more seats for the same session as one pending order."""
     order = await order_service.purchase_order(payload=payload, current_user=current_user)
-    return ApiResponseFactory.created(data=order, message="Order purchased successfully.")
+    return ApiResponseFactory.created(data=order, message="Seats reserved pending payment.")
 
 
 @router.patch(
@@ -50,7 +50,7 @@ async def purchase_order(
     response_model=ApiResponse[OrderDetailsRead],
     summary="Cancel an order",
     description=(
-        "Cancel all still-active tickets inside one grouped order before the linked session starts. "
+        "Cancel all still-active reserved or purchased tickets inside one grouped order before the linked session starts. "
         "Normal users can cancel only their own orders; administrators can cancel any order."
     ),
     response_description="Wrapped cancelled order details.",

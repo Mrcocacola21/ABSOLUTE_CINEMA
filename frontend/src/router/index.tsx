@@ -5,12 +5,15 @@ import { ProtectedRoute } from "@/router/ProtectedRoute";
 import { AdminAttendanceDetailsPage } from "@/pages/AdminAttendanceDetailsPage";
 import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
 import { AdminOrderValidationPage } from "@/pages/AdminOrderValidationPage";
+import { AdminPaymentsPage } from "@/pages/AdminPaymentsPage";
+import { CheckoutPage } from "@/pages/CheckoutPage";
 import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
 import { MovieDetailsPage } from "@/pages/MovieDetailsPage";
 import { MoviesPage } from "@/pages/MoviesPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 import { OrderDetailsPage } from "@/pages/OrderDetailsPage";
+import { PaymentReturnPage } from "@/pages/PaymentReturnPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { RegisterPage } from "@/pages/RegisterPage";
 import { SchedulePage } from "@/pages/SchedulePage";
@@ -29,11 +32,15 @@ export function AppRouter() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route element={<ProtectedRoute />}>
+            <Route path="/checkout/:orderId" element={<CheckoutPage />} />
+            <Route path="/payment/return" element={<PaymentReturnPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/me/orders/:orderId" element={<OrderDetailsPage />} />
           </Route>
           <Route element={<ProtectedRoute requiredRole="admin" />}>
             <Route path="/admin" element={<AdminDashboardPage />} />
+            <Route path="/admin/payments" element={<AdminPaymentsPage />} />
+            <Route path="/admin/payments/:paymentId" element={<AdminPaymentsPage />} />
             <Route path="/admin/attendance/:sessionId" element={<AdminAttendanceDetailsPage />} />
             <Route path="/admin/order-validation" element={<AdminOrderValidationPage />} />
             <Route path="/admin/order-validation/:token" element={<AdminOrderValidationPage />} />

@@ -147,6 +147,29 @@ async def test_refresh_order_aggregate_persists_ticket_derived_status(
 
 
 @pytest.mark.asyncio
+async def test_refresh_order_aggregate_preserves_payment_release_statuses() -> None:
+    updated_at = datetime.now(tz=timezone.utc)
+    order_repository = FakeOrderRepository(build_order(status=OrderStatuses.PAYMENT_FAILED))
+    ticket_repository = FakeTicketRepository(
+        [
+            build_ticket("ticket-1", status=TicketStatuses.EXPIRED),
+            build_ticket("ticket-2", status=TicketStatuses.EXPIRED),
+        ]
+    )
+
+    refreshed = await refresh_order_aggregate(
+        "order-1",
+        order_repository=order_repository,
+        ticket_repository=ticket_repository,
+        updated_at=updated_at,
+        db_session=object(),
+    )
+
+    assert refreshed["status"] == OrderStatuses.PAYMENT_FAILED
+    assert order_repository.update_calls == []
+
+
+@pytest.mark.asyncio
 async def test_refresh_order_aggregate_updates_count_and_total_from_tickets() -> None:
     order_repository = FakeOrderRepository(build_order(tickets_count=1, total_price=200.0))
     ticket_repository = FakeTicketRepository(

@@ -6,15 +6,12 @@ from datetime import datetime
 
 from pydantic import ConfigDict, EmailStr, Field, model_validator
 
-from app.core.constants import TicketStatuses
+from app.core.constants import TICKET_STATUS_VALUES, TicketStatuses
 from app.schemas.common import BaseSchema
 from app.schemas.localization import LocalizedText
 
-TICKET_STATUS_VALUES = (TicketStatuses.PURCHASED, TicketStatuses.CANCELLED)
-
-
 class TicketPurchaseRequest(BaseSchema):
-    """Payload for purchasing a ticket."""
+    """Payload for reserving one ticket pending payment."""
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -30,7 +27,7 @@ class TicketPurchaseRequest(BaseSchema):
         },
     )
 
-    session_id: str = Field(description="Identifier of the scheduled session being purchased.")
+    session_id: str = Field(description="Identifier of the scheduled session being reserved.")
     seat_row: int = Field(
         ge=1,
         description="One-based seat row inside the configured one-hall layout.",
@@ -52,7 +49,9 @@ class TicketRead(BaseSchema):
     seat_number: int = Field(ge=1)
     price: float = Field(gt=0)
     status: str
-    purchased_at: datetime
+    reserved_at: datetime | None = None
+    expires_at: datetime | None = None
+    purchased_at: datetime | None = None
     updated_at: datetime | None = None
     cancelled_at: datetime | None = None
     checked_in_at: datetime | None = None
@@ -62,12 +61,20 @@ class TicketRead(BaseSchema):
         """Keep ticket lifecycle values internally consistent."""
         if self.status not in TICKET_STATUS_VALUES:
             raise ValueError("Unsupported ticket status.")
+        if self.status == TicketStatuses.RESERVED and self.expires_at is None:
+            raise ValueError("Reserved tickets must include expires_at.")
+        if self.status == TicketStatuses.RESERVED and self.purchased_at is not None:
+            raise ValueError("Reserved tickets cannot include purchased_at.")
+        if self.status == TicketStatuses.PURCHASED and self.purchased_at is None:
+            raise ValueError("Purchased tickets must include purchased_at.")
         if self.status == TicketStatuses.CANCELLED and self.cancelled_at is None:
             raise ValueError("Cancelled tickets must include cancelled_at.")
         if self.status == TicketStatuses.PURCHASED and self.cancelled_at is not None:
             raise ValueError("Purchased tickets cannot include cancelled_at.")
-        if self.status == TicketStatuses.CANCELLED and self.checked_in_at is not None:
-            raise ValueError("Cancelled tickets cannot be checked in.")
+        if self.status in {TicketStatuses.CANCELLED, TicketStatuses.EXPIRED} and self.checked_in_at is not None:
+            raise ValueError("Inactive tickets cannot be checked in.")
+        if self.status == TicketStatuses.EXPIRED and self.cancelled_at is not None:
+            raise ValueError("Expired tickets cannot include cancelled_at.")
         return self
 
 

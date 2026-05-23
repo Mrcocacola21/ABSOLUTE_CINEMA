@@ -25,6 +25,15 @@ SENSITIVE_KEY_MARKERS = (
     "secret_key",
     "jwt",
     "cookie",
+    "signature",
+    "webhook_signature",
+    "x_fake_payment_signature",
+    "provider_secret",
+    "client_secret",
+    "card",
+    "pan",
+    "cvv",
+    "cvc",
 )
 SENSITIVE_STRING_KEY_PATTERN = (
     r"password",
@@ -36,6 +45,14 @@ SENSITIVE_STRING_KEY_PATTERN = (
     r"api[_-]?key",
     r"access[_-]?key",
     r"cookie",
+    r"(?:webhook[_-]?)?signature",
+    r"x[_-]?fake[_-]?payment[_-]?signature",
+    r"provider[_-]?secret",
+    r"client[_-]?secret",
+    r"card(?:[_-]?number)?",
+    r"pan",
+    r"cvv",
+    r"cvc",
 )
 AUTHORIZATION_HEADER_PATTERN = re.compile(
     r"(?P<prefix>[\"']?authorization[\"']?\s*[:=]\s*)(?P<quote>[\"']?)"

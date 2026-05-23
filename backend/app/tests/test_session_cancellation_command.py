@@ -125,7 +125,7 @@ class FakeTicketRepository:
             for index, ticket in enumerate(self.tickets)
             if ticket["session_id"] == session_id and ticket["status"] == current_status
         ]
-        if self.updated_count is not None:
+        if self.updated_count is not None and matching_indexes:
             return self.updated_count
         for index in matching_indexes:
             self.tickets[index] = {

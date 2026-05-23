@@ -5,7 +5,15 @@ from __future__ import annotations
 import pytest
 
 from app.core.config import get_settings
-from app.core.constants import MOVIE_STATUS_VALUES, ORDER_STATUS_VALUES
+from app.core.constants import (
+    MOVIE_STATUS_VALUES,
+    ORDER_STATUS_VALUES,
+    PAYMENT_ATTEMPT_STATUS_VALUES,
+    PAYMENT_STATUS_VALUES,
+    PAYMENT_WEBHOOK_PROCESSING_STATUS_VALUES,
+    REFUND_STATUS_VALUES,
+    TICKET_STATUS_VALUES,
+)
 from app.core.genres import SUPPORTED_GENRE_CODES
 from app.db.collections import DatabaseCollections
 from app.db.validators import COLLECTION_VALIDATORS, ensure_collection_validators
@@ -42,6 +50,11 @@ async def test_ensure_collection_validators_creates_missing_collections() -> Non
         DatabaseCollections.SESSIONS,
         DatabaseCollections.ORDERS,
         DatabaseCollections.TICKETS,
+        DatabaseCollections.PAYMENTS,
+        DatabaseCollections.PAYMENT_ATTEMPTS,
+        DatabaseCollections.PAYMENT_WEBHOOK_EVENTS,
+        DatabaseCollections.PAYMENT_AUDIT_EVENTS,
+        DatabaseCollections.REFUNDS,
     ]
     assert database.commands == [
         {
@@ -61,13 +74,18 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
             DatabaseCollections.SESSIONS,
             DatabaseCollections.ORDERS,
             DatabaseCollections.TICKETS,
+            DatabaseCollections.PAYMENTS,
+            DatabaseCollections.PAYMENT_ATTEMPTS,
+            DatabaseCollections.PAYMENT_WEBHOOK_EVENTS,
+            DatabaseCollections.PAYMENT_AUDIT_EVENTS,
+            DatabaseCollections.REFUNDS,
         ]
     )
 
     await ensure_collection_validators(database)
 
     assert database.created_collections == []
-    assert len(database.commands) == 5
+    assert len(database.commands) == 10
 
     sessions_command = next(
         command for command in database.commands if command["collMod"] == DatabaseCollections.SESSIONS
@@ -81,6 +99,21 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
     tickets_command = next(
         command for command in database.commands if command["collMod"] == DatabaseCollections.TICKETS
     )
+    payments_command = next(
+        command for command in database.commands if command["collMod"] == DatabaseCollections.PAYMENTS
+    )
+    attempts_command = next(
+        command for command in database.commands if command["collMod"] == DatabaseCollections.PAYMENT_ATTEMPTS
+    )
+    webhook_events_command = next(
+        command for command in database.commands if command["collMod"] == DatabaseCollections.PAYMENT_WEBHOOK_EVENTS
+    )
+    audit_events_command = next(
+        command for command in database.commands if command["collMod"] == DatabaseCollections.PAYMENT_AUDIT_EVENTS
+    )
+    refunds_command = next(
+        command for command in database.commands if command["collMod"] == DatabaseCollections.REFUNDS
+    )
 
     movie_properties = movies_command["validator"]["$jsonSchema"]["properties"]
     order_properties = orders_command["validator"]["$jsonSchema"]["properties"]
@@ -90,6 +123,11 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
     session_expr = session_validator_clauses[1]["$expr"]["$and"]
     ticket_properties = ticket_validator_clauses[0]["$jsonSchema"]["properties"]
     ticket_expr = ticket_validator_clauses[1]["$expr"]["$or"]
+    payment_properties = payments_command["validator"]["$jsonSchema"]["properties"]
+    attempt_properties = attempts_command["validator"]["$jsonSchema"]["properties"]
+    webhook_event_properties = webhook_events_command["validator"]["$jsonSchema"]["properties"]
+    audit_event_properties = audit_events_command["validator"]["$jsonSchema"]["properties"]
+    refund_properties = refunds_command["validator"]["$jsonSchema"]["properties"]
 
     assert movie_properties["status"]["enum"] == list(MOVIE_STATUS_VALUES)
     assert movie_properties["title"]["required"] == ["uk", "en"]
@@ -111,10 +149,44 @@ async def test_ensure_collection_validators_updates_existing_collections() -> No
     assert {"$lte": ["$available_seats", "$total_seats"]} in session_expr
     assert order_properties["tickets_count"]["minimum"] == 1
     assert order_properties["tickets_count"]["maximum"] == settings.total_seats
+    assert order_properties["expires_at"]["bsonType"] == ["date", "null"]
     assert ticket_properties["user_id"]["bsonType"] == "string"
     assert ticket_properties["order_id"]["bsonType"] == ["string", "null"]
     assert ticket_properties["session_id"]["bsonType"] == "string"
     assert ticket_properties["seat_row"]["maximum"] == settings.hall_rows_count
     assert ticket_properties["seat_number"]["maximum"] == settings.hall_seats_per_row
+    assert ticket_properties["status"]["enum"] == list(TICKET_STATUS_VALUES)
+    assert ticket_properties["reserved_at"]["bsonType"] == ["date", "null"]
+    assert ticket_properties["expires_at"]["bsonType"] == ["date", "null"]
+    assert ticket_properties["purchased_at"]["bsonType"] == ["date", "null"]
+    assert any({"$eq": ["$status", "reserved"]} in clause["$and"] for clause in ticket_expr)
     assert any({"$eq": ["$status", "purchased"]} in clause["$and"] for clause in ticket_expr)
     assert any({"$eq": ["$status", "cancelled"]} in clause["$and"] for clause in ticket_expr)
+    assert any({"$eq": ["$status", "expired"]} in clause["$and"] for clause in ticket_expr)
+    assert payment_properties["status"]["enum"] == list(PAYMENT_STATUS_VALUES)
+    assert payment_properties["amount_minor"]["minimum"] == 1
+    assert payment_properties["currency"]["pattern"] == "^[A-Z]{3}$"
+    assert payment_properties["provider"]["maxLength"] == 64
+    assert payment_properties["idempotency_key"]["minLength"] == 8
+    assert payment_properties["metadata"]["bsonType"] == ["object", "null"]
+    assert attempt_properties["status"]["enum"] == list(PAYMENT_ATTEMPT_STATUS_VALUES)
+    assert attempt_properties["payment_id"]["bsonType"] == "string"
+    assert attempt_properties["request_payload_snapshot"]["bsonType"] == ["object", "null"]
+    assert webhook_event_properties["processing_status"]["enum"] == list(PAYMENT_WEBHOOK_PROCESSING_STATUS_VALUES)
+    assert webhook_event_properties["provider_event_id"]["bsonType"] == ["string", "null"]
+    assert webhook_event_properties["signature_verified"]["bsonType"] == "bool"
+    assert webhook_event_properties["payload_snapshot"]["bsonType"] == ["object", "null"]
+    assert webhook_event_properties["payment_id"]["bsonType"] == ["string", "null"]
+    assert webhook_event_properties["order_id"]["bsonType"] == ["string", "null"]
+    assert webhook_event_properties["refund_id"]["bsonType"] == ["string", "null"]
+    assert audit_event_properties["action"]["maxLength"] == 128
+    assert audit_event_properties["actor_type"]["maxLength"] == 32
+    assert audit_event_properties["safe_context"]["bsonType"] == ["object", "null"]
+    assert audit_event_properties["webhook_event_id"]["bsonType"] == ["string", "null"]
+    assert refund_properties["status"]["enum"] == list(REFUND_STATUS_VALUES)
+    assert refund_properties["amount_minor"]["minimum"] == 1
+    assert refund_properties["user_id"]["bsonType"] == "string"
+    assert refund_properties["requested_by"]["bsonType"] == "string"
+    assert refund_properties["provider_refund_id"]["bsonType"] == ["string", "null"]
+    assert refund_properties["request_payload_snapshot"]["bsonType"] == ["object", "null"]
+    assert refund_properties["response_payload_snapshot"]["bsonType"] == ["object", "null"]

@@ -93,14 +93,16 @@ class SessionCancellationCommand:
         )
         if updated_session is not None:
             if active_tickets:
-                cancelled_count = await self.ticket_repository.update_many_status_by_session(
-                    session_id,
-                    status=TicketStatuses.CANCELLED,
-                    updated_at=now,
-                    cancelled_at=now,
-                    current_status=TicketStatuses.PURCHASED,
-                    db_session=db_session,
-                )
+                cancelled_count = 0
+                for current_status in (TicketStatuses.RESERVED, TicketStatuses.PURCHASED):
+                    cancelled_count += await self.ticket_repository.update_many_status_by_session(
+                        session_id,
+                        status=TicketStatuses.CANCELLED,
+                        updated_at=now,
+                        cancelled_at=now,
+                        current_status=current_status,
+                        db_session=db_session,
+                    )
                 if cancelled_count != len(active_tickets):
                     raise ConflictException("Session ticket cascade could not be applied consistently.")
 

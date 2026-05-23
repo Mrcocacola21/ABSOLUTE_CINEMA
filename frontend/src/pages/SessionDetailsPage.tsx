@@ -1,7 +1,7 @@
 import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { purchaseOrderRequest } from "@/api/orders";
 import {
@@ -27,6 +27,7 @@ function formatSessionRange(startTime: string, endTime: string): string {
 export function SessionDetailsPage() {
   const { t, i18n } = useTranslation();
   const { sessionId = "" } = useParams();
+  const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const [details, setDetails] = useState<SessionDetails | null>(null);
   const [seats, setSeats] = useState<SessionSeats | null>(null);
@@ -128,7 +129,7 @@ export function SessionDetailsPage() {
     setFeedback(null);
     const seatsToPurchase = [...selectedSeats];
     try {
-      await purchaseOrderRequest({
+      const orderResponse = await purchaseOrderRequest({
         session_id: sessionId,
         seats: seatsToPurchase.map((seat) => ({
           seat_row: seat.row,
@@ -136,19 +137,8 @@ export function SessionDetailsPage() {
         })),
       });
       await loadSessionData({ background: true });
-      const selectedSeatLabels = seatsToPurchase.map((seat) => `${seat.row}-${seat.number}`).join(", ");
-      setFeedback({
-        tone: "success",
-        title:
-          seatsToPurchase.length > 1
-            ? t("session.purchase.successMultipleTitle")
-            : t("session.purchase.successSingleTitle"),
-        message:
-          seatsToPurchase.length > 1
-            ? t("session.purchase.successMultipleMessage", { seats: selectedSeatLabels })
-            : t("session.purchase.successSingleMessage", { seats: selectedSeatLabels }),
-      });
       setSelectedSeats([]);
+      navigate(`/checkout/${orderResponse.data.id}`);
     } catch (error) {
       const isConflictError = axios.isAxiosError(error) && error.response?.status === 409;
       if (isConflictError) {

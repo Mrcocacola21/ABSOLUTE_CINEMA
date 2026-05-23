@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.core.constants import MovieStatuses, SessionStatuses
+from app.core.constants import MovieStatuses, OrderStatuses, PaymentStatuses, SessionStatuses, TicketStatuses
 from app.seeds.demo_dataset import (
     DEMO_ADMIN_EMAIL,
     DEMO_SHARED_PASSWORD,
@@ -26,8 +26,13 @@ def test_build_demo_seed_data_returns_valid_presentation_ready_dataset() -> None
         "users": 5,
         "movies": 30,
         "sessions": 20,
-        "orders": 9,
-        "tickets": 20,
+        "orders": 11,
+        "tickets": 24,
+        "payments": 11,
+        "payment_attempts": 11,
+        "refunds": 2,
+        "payment_webhook_events": 12,
+        "payment_audit_events": 13,
     }
     assert {movie["status"] for movie in dataset.movies} == {
         MovieStatuses.ACTIVE,
@@ -38,6 +43,30 @@ def test_build_demo_seed_data_returns_valid_presentation_ready_dataset() -> None
         SessionStatuses.SCHEDULED,
         SessionStatuses.COMPLETED,
         SessionStatuses.CANCELLED,
+    }
+    assert {order["status"] for order in dataset.orders} == {
+        OrderStatuses.CANCELLED,
+        OrderStatuses.COMPLETED,
+        OrderStatuses.EXPIRED,
+        OrderStatuses.PARTIALLY_CANCELLED,
+        OrderStatuses.PAYMENT_CANCELLED,
+        OrderStatuses.PAYMENT_FAILED,
+        OrderStatuses.PENDING_PAYMENT,
+    }
+    assert {ticket["status"] for ticket in dataset.tickets} == {
+        TicketStatuses.CANCELLED,
+        TicketStatuses.EXPIRED,
+        TicketStatuses.PURCHASED,
+        TicketStatuses.RESERVED,
+    }
+    assert {payment["status"] for payment in dataset.payments} == {
+        PaymentStatuses.CANCELLED,
+        PaymentStatuses.EXPIRED,
+        PaymentStatuses.FAILED,
+        PaymentStatuses.PARTIALLY_REFUNDED,
+        PaymentStatuses.PENDING,
+        PaymentStatuses.REFUNDED,
+        PaymentStatuses.SUCCEEDED,
     }
     assert all(str(movie["poster_url"]).startswith("https://upload.wikimedia.org/") for movie in dataset.movies)
 
@@ -65,8 +94,13 @@ def test_demo_seed_summary_logging_uses_logger_without_exposing_passwords(
                 "users": 5,
                 "movies": 30,
                 "sessions": 20,
-                "orders": 9,
-                "tickets": 20,
+                "orders": 11,
+                "tickets": 24,
+                "payments": 11,
+                "payment_attempts": 11,
+                "refunds": 2,
+                "payment_webhook_events": 12,
+                "payment_audit_events": 13,
             },
             movie_status_counts={"active": 6, "planned": 18, "deactivated": 6},
             session_status_counts={"scheduled": 8},

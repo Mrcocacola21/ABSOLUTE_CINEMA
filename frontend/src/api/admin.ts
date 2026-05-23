@@ -2,12 +2,15 @@ import { apiClient } from "@/api/client";
 import type { GenreCode } from "@/shared/genres";
 import type { ApiResponse } from "@/types/api";
 import type {
+  AdminPaymentDetails,
+  AdminPaymentListItem,
   AttendanceReport,
   AttendanceSessionDetails,
   LocalizedText,
   Movie,
   MovieStatus,
   OrderValidationResult,
+  PaymentReport,
   Session,
   SessionDetails,
   TicketListItem,
@@ -68,6 +71,26 @@ export interface SessionUpdatePayload {
   start_time?: string;
   end_time?: string;
   price?: number;
+}
+
+export interface AdminPaymentFilters {
+  status?: string;
+  provider?: string;
+  refund_status?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AdminPaymentReportFilters {
+  date_from?: string;
+  date_to?: string;
+}
+
+export interface AdminRefundPayload {
+  amount_minor?: number;
+  reason: string;
+  metadata?: Record<string, unknown>;
 }
 
 export async function listAdminMoviesRequest() {
@@ -183,6 +206,35 @@ export async function validateOrderTokenRequest(token: string) {
 export async function checkInOrderRequest(orderId: string) {
   const { data } = await apiClient.post<ApiResponse<OrderValidationResult>>(
     `/admin/orders/${encodeURIComponent(orderId)}/check-in`,
+  );
+  return data;
+}
+
+export async function listAdminPaymentsRequest(filters: AdminPaymentFilters = {}) {
+  const { data } = await apiClient.get<ApiResponse<AdminPaymentListItem[]>>("/admin/payments", {
+    params: filters,
+  });
+  return data;
+}
+
+export async function getAdminPaymentReportRequest(filters: AdminPaymentReportFilters = {}) {
+  const { data } = await apiClient.get<ApiResponse<PaymentReport>>("/admin/payments/report", {
+    params: filters,
+  });
+  return data;
+}
+
+export async function getAdminPaymentDetailsRequest(paymentId: string) {
+  const { data } = await apiClient.get<ApiResponse<AdminPaymentDetails>>(
+    `/admin/payments/${encodeURIComponent(paymentId)}`,
+  );
+  return data;
+}
+
+export async function createAdminPaymentRefundRequest(paymentId: string, payload: AdminRefundPayload) {
+  const { data } = await apiClient.post<ApiResponse<AdminPaymentDetails["refunds"][number]>>(
+    `/admin/payments/${encodeURIComponent(paymentId)}/refunds`,
+    payload,
   );
   return data;
 }

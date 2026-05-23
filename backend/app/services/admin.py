@@ -9,14 +9,17 @@ from fastapi import UploadFile
 
 from app.builders.attendance_report import AttendanceReportBuilder
 from app.commands.session_cancellation import SessionCancellationCommand
+from app.commands.reservation_expiry import sync_expired_reservations_for_session
 from app.core.config import get_settings
 from app.core.constants import MovieStatuses, SessionStatuses, TicketStatuses
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
+from app.core.logging import get_logger
 from app.db.transactions import run_transaction_with_retry
 from app.factories.schedule_factory import SessionDetailsFactory
 from app.observers.events import build_default_event_publisher
 from app.repositories.movies import MovieRepository
 from app.repositories.orders import OrderRepository
+from app.repositories.payments import PaymentRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.tickets import TicketRepository
 from app.repositories.users import UserRepository
@@ -48,8 +51,11 @@ from app.schemas.session import (
 from app.schemas.user import UserRead
 from app.services.movie_status import MovieStatusManager
 from app.services.poster_storage import PosterStorage
+from app.services.refund import RefundService
+from app.utils.money import amount_to_minor_units
 
 MAX_SESSION_RUNTIME_BUFFER_MINUTES = 60
+logger = get_logger(__name__)
 
 
 class AdminService:
@@ -62,12 +68,16 @@ class AdminService:
         ticket_repository: TicketRepository,
         order_repository: OrderRepository,
         user_repository: UserRepository | None = None,
+        payment_repository: PaymentRepository | None = None,
+        refund_service: RefundService | None = None,
     ) -> None:
         self.movie_repository = movie_repository
         self.session_repository = session_repository
         self.ticket_repository = ticket_repository
         self.order_repository = order_repository
         self.user_repository = user_repository or UserRepository()
+        self.payment_repository = payment_repository
+        self.refund_service = refund_service
         self.event_publisher = build_default_event_publisher()
         self.movie_status_manager = MovieStatusManager(
             movie_repository=movie_repository,
@@ -410,6 +420,11 @@ class AdminService:
 
     async def cancel_session(self, session_id: str, cancelled_by: UserRead) -> SessionRead:
         """Cancel an existing session via a command object."""
+        refundable_tickets = [
+            ticket
+            for ticket in await self.ticket_repository.list_by_session(session_id, active_only=True)
+            if ticket["status"] == TicketStatuses.PURCHASED and ticket.get("checked_in_at") is None
+        ]
         command = SessionCancellationCommand(
             session_repository=self.session_repository,
             ticket_repository=self.ticket_repository,
@@ -418,7 +433,58 @@ class AdminService:
         )
         cancelled_session = await command.execute(session_id=session_id, cancelled_by=cancelled_by)
         await self.movie_status_manager.refresh_statuses(current_time=datetime.now(tz=timezone.utc))
+        await self._refund_cancelled_session_tickets(
+            session_id=session_id,
+            refundable_tickets=refundable_tickets,
+            requested_by=cancelled_by,
+        )
         return cancelled_session
+
+    async def _refund_cancelled_session_tickets(
+        self,
+        *,
+        session_id: str,
+        refundable_tickets: list[dict[str, object]],
+        requested_by: UserRead,
+    ) -> None:
+        if self.refund_service is None or not refundable_tickets:
+            return
+
+        tickets_by_order: dict[str, list[dict[str, object]]] = {}
+        for ticket in refundable_tickets:
+            order_id = ticket.get("order_id")
+            if order_id:
+                tickets_by_order.setdefault(str(order_id), []).append(ticket)
+
+        for order_id in sorted(tickets_by_order):
+            order_tickets = sorted(tickets_by_order[order_id], key=lambda ticket: str(ticket["id"]))
+            amount_minor = sum(amount_to_minor_units(ticket["price"]) for ticket in order_tickets)
+            try:
+                await self.refund_service.refund_order_amount(
+                    order_id=order_id,
+                    amount_minor=amount_minor,
+                    reason="session_cancelled",
+                    requested_by=requested_by.id,
+                    metadata={
+                        "source": "session_cancellation",
+                        "session_id": session_id,
+                        "order_id": order_id,
+                        "ticket_ids": [str(ticket["id"]) for ticket in order_tickets],
+                    },
+                    cap_to_remaining=True,
+                    fail_on_provider_error=False,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Session cancellation refund could not be completed",
+                    extra={
+                        "session_id": session_id,
+                        "order_id": order_id,
+                        "requested_by": requested_by.id,
+                        "ticket_count": len(order_tickets),
+                    },
+                    exc_info=exc,
+                )
 
     async def update_session(
         self,
@@ -426,7 +492,7 @@ class AdminService:
         payload: SessionUpdate,
         updated_by: UserRead,
     ) -> SessionDetailsRead:
-        """Update a scheduled session that does not already have purchased tickets."""
+        """Update a scheduled session that does not already have reserved or purchased tickets."""
         _ = updated_by
         updates = payload.model_dump(mode="python", exclude_none=True)
         if not updates:
@@ -438,6 +504,17 @@ class AdminService:
         existing_session = await self.session_repository.get_by_id(session_id)
         if existing_session is None:
             raise NotFoundException("Session was not found.")
+        await sync_expired_reservations_for_session(
+            session_id,
+            now=now,
+            order_repository=self.order_repository,
+            ticket_repository=self.ticket_repository,
+            session_repository=self.session_repository,
+            payment_repository=self.payment_repository,
+        )
+        existing_session = await self.session_repository.get_by_id(session_id)
+        if existing_session is None:
+            raise NotFoundException("Session was not found.")
         update_blocker = self._get_session_update_blocker(existing_session, now=now)
         if update_blocker is not None:
             raise ConflictException(update_blocker)
@@ -445,7 +522,7 @@ class AdminService:
         purchased_tickets = await self.ticket_repository.count_by_session(session_id, active_only=True)
         if purchased_tickets > 0:
             raise ConflictException(
-                "Sessions with purchased tickets cannot be edited. Cancel the session instead."
+                "Sessions with reserved or purchased tickets cannot be edited. Cancel the session instead."
             )
 
         movie_id = str(updates.get("movie_id", existing_session["movie_id"]))
@@ -490,7 +567,7 @@ class AdminService:
                 raise ConflictException(latest_update_blocker)
             if latest_session["available_seats"] < latest_session["total_seats"]:
                 raise ConflictException(
-                    "Sessions with purchased tickets cannot be edited. Cancel the session instead."
+                    "Sessions with reserved or purchased tickets cannot be edited. Cancel the session instead."
                 )
             raise ConflictException("Session can no longer be edited.")
 
@@ -589,6 +666,17 @@ class AdminService:
         session_document = await self.session_repository.get_by_id(session_id)
         if session_document is None:
             raise NotFoundException("Session was not found.")
+        await sync_expired_reservations_for_session(
+            session_id,
+            now=now,
+            order_repository=self.order_repository,
+            ticket_repository=self.ticket_repository,
+            session_repository=self.session_repository,
+            payment_repository=self.payment_repository,
+        )
+        session_document = await self.session_repository.get_by_id(session_id)
+        if session_document is None:
+            raise NotFoundException("Session was not found.")
 
         session = SessionRead.model_validate(session_document)
         movie = await self._get_movie_or_not_found(session.movie_id)
@@ -604,16 +692,22 @@ class AdminService:
             for ticket in ticket_documents
             if ticket["status"] == TicketStatuses.CANCELLED
         ]
-        occupied_seats = {
-            (int(ticket["seat_row"]), int(ticket["seat_number"]))
-            for ticket in active_ticket_documents
+        seat_statuses = {
+            (int(ticket["seat_row"]), int(ticket["seat_number"])): str(ticket["status"])
+            for ticket in ticket_documents
+            if ticket["status"] in {TicketStatuses.RESERVED, TicketStatuses.PURCHASED}
         }
-        derived_available_seats = max(session.total_seats - len(occupied_seats), 0)
+        occupied_seats = {
+            coordinate
+            for coordinate, status in seat_statuses.items()
+            if status == TicketStatuses.PURCHASED
+        }
+        derived_available_seats = max(session.total_seats - len(seat_statuses), 0)
         session_details = SessionDetailsFactory.build(
             session=session,
             movie=movie,
         ).model_copy(update={"available_seats": derived_available_seats})
-        seat_map = self._build_session_seat_map(session=session, occupied_seats=occupied_seats)
+        seat_map = self._build_session_seat_map(session=session, seat_statuses=seat_statuses)
 
         user_documents = await self.user_repository.list_by_ids(
             [str(ticket["user_id"]) for ticket in ticket_documents]
@@ -710,14 +804,15 @@ class AdminService:
         self,
         *,
         session: SessionRead,
-        occupied_seats: set[tuple[int, int]],
+        seat_statuses: dict[tuple[int, int], str],
     ) -> SessionSeatsRead:
         settings = get_settings()
         seats = [
             SeatAvailabilityRead(
                 row=row_index,
                 number=seat_index,
-                is_available=(row_index, seat_index) not in occupied_seats,
+                is_available=(row_index, seat_index) not in seat_statuses,
+                status=seat_statuses.get((row_index, seat_index), "available"),
             )
             for row_index in range(1, settings.hall_rows_count + 1)
             for seat_index in range(1, settings.hall_seats_per_row + 1)
@@ -727,7 +822,7 @@ class AdminService:
             rows_count=settings.hall_rows_count,
             seats_per_row=settings.hall_seats_per_row,
             total_seats=session.total_seats,
-            available_seats=max(session.total_seats - len(occupied_seats), 0),
+            available_seats=max(session.total_seats - len(seat_statuses), 0),
             seats=seats,
         )
 
@@ -859,5 +954,5 @@ class AdminService:
         if session_document["start_time"] <= now:
             return "Only future scheduled sessions can be edited."
         if session_document["available_seats"] < session_document["total_seats"]:
-            return "Sessions with purchased tickets cannot be edited. Cancel the session instead."
+            return "Sessions with reserved or purchased tickets cannot be edited. Cancel the session instead."
         return None

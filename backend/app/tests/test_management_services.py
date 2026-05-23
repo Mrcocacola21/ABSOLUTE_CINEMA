@@ -223,7 +223,7 @@ class FakeTicketRepository:
             tickets = [
                 ticket
                 for ticket in tickets
-                if ticket["status"] == TicketStatuses.PURCHASED
+                if ticket["status"] in {TicketStatuses.RESERVED, TicketStatuses.PURCHASED}
             ]
         return len(tickets)
 
@@ -244,9 +244,13 @@ class FakeTicketRepository:
             tickets = [
                 ticket
                 for ticket in tickets
-                if ticket["status"] == TicketStatuses.PURCHASED
+                if ticket["status"] in {TicketStatuses.RESERVED, TicketStatuses.PURCHASED}
             ]
-        return sorted(tickets, key=lambda ticket: ticket["purchased_at"], reverse=True)
+        return sorted(tickets, key=lambda ticket: ticket.get("reserved_at") or ticket.get("purchased_at"), reverse=True)
+
+    async def list_by_order(self, order_id: str, *, db_session=None) -> list[dict[str, object]]:
+        _ = db_session
+        return [ticket for ticket in self.tickets if ticket.get("order_id") == order_id]
 
     async def get_by_id(self, ticket_id: str, *, db_session=None) -> dict[str, object] | None:
         _ = db_session
@@ -285,6 +289,14 @@ class FakeUserRepository:
     async def list_by_ids(self, user_ids: list[str]) -> list[dict[str, object]]:
         requested_ids = set(user_ids)
         return [user for user in self.users if str(user["id"]) in requested_ids]
+
+
+class RecordingRefundService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def refund_order_amount(self, **kwargs: object) -> None:
+        self.calls.append(kwargs)
 
 
 async def fake_run_transaction_with_retry(callback, *, operation_name: str, **_: object):
@@ -948,3 +960,136 @@ async def test_ticket_service_cancellation_restores_seat_counter(
     assert cancelled.status == TicketStatuses.CANCELLED
     assert cancelled.cancelled_at is not None
     assert session_repository.available_seats == 96
+
+
+@pytest.mark.asyncio
+async def test_ticket_cancellation_triggers_refund_for_paid_order_ticket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.commands.ticket_cancellation.run_transaction_with_retry",
+        fake_run_transaction_with_retry,
+    )
+
+    async def fake_refresh_order_aggregate(order_id: str, **_: object) -> dict[str, object]:
+        return {"id": order_id}
+
+    monkeypatch.setattr(
+        "app.commands.ticket_cancellation.refresh_order_aggregate",
+        fake_refresh_order_aggregate,
+    )
+    refund_service = RecordingRefundService()
+    service = TicketService(
+        session_repository=FakeSessionRepository(session=build_session()),
+        ticket_repository=FakeTicketRepository(ticket=build_ticket(order_id="order-1")),
+        order_repository=FakeOrderRepository(),
+        movie_repository=FakeMovieRepository(movie=build_movie()),
+        user_repository=FakeUserRepository(),
+        refund_service=refund_service,
+    )
+
+    cancelled = await service.cancel_ticket("ticket-1", current_user=build_regular_user())
+
+    assert cancelled.status == TicketStatuses.CANCELLED
+    assert refund_service.calls == [
+        {
+            "order_id": "order-1",
+            "amount_minor": 20000,
+            "reason": "ticket_cancelled",
+            "requested_by": "user-1",
+            "metadata": {
+                "source": "ticket_cancellation",
+                "ticket_id": "ticket-1",
+                "order_id": "order-1",
+            },
+            "cap_to_remaining": True,
+            "fail_on_provider_error": False,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_order_cancellation_triggers_refund_for_paid_tickets(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_execute(self, *, order_id: str, current_user: UserRead) -> dict[str, object]:
+        _ = (self, order_id, current_user)
+        return {"order": {}, "tickets": []}
+
+    async def fake_get_current_user_order(self, *, order_id: str, current_user: UserRead) -> object:
+        _ = (self, order_id, current_user)
+        return object()
+
+    monkeypatch.setattr("app.services.order.OrderCancellationCommand.execute", fake_execute)
+    monkeypatch.setattr("app.services.order.OrderService.get_current_user_order", fake_get_current_user_order)
+    refund_service = RecordingRefundService()
+    service = OrderService(
+        session_repository=FakeSessionRepository(session=build_session()),
+        ticket_repository=FakeTicketRepository(
+            tickets=[
+                build_ticket("ticket-1", order_id="order-1", seat_number=1),
+                build_ticket("ticket-2", order_id="order-1", seat_number=2),
+                build_ticket("ticket-3", order_id="order-1", seat_number=3, status=TicketStatuses.CANCELLED),
+            ]
+        ),
+        movie_repository=FakeMovieRepository(movie=build_movie()),
+        order_repository=FakeOrderRepository(),
+        refund_service=refund_service,
+    )
+
+    await service.cancel_order("order-1", current_user=build_regular_user())
+
+    assert len(refund_service.calls) == 1
+    assert refund_service.calls[0]["order_id"] == "order-1"
+    assert refund_service.calls[0]["amount_minor"] == 40000
+    assert refund_service.calls[0]["reason"] == "order_cancelled"
+    assert refund_service.calls[0]["metadata"] == {
+        "source": "order_cancellation",
+        "order_id": "order-1",
+        "ticket_ids": ["ticket-1", "ticket-2"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_session_cancellation_groups_refunds_by_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_execute(self, *, session_id: str, cancelled_by: UserRead) -> dict[str, object]:
+        _ = (self, cancelled_by)
+        return {**build_session(session_id), "status": SessionStatuses.CANCELLED}
+
+    async def fake_refresh_statuses(*, current_time: datetime) -> None:
+        _ = current_time
+
+    monkeypatch.setattr("app.services.admin.SessionCancellationCommand.execute", fake_execute)
+    refund_service = RecordingRefundService()
+    service = AdminService(
+        movie_repository=FakeMovieRepository(movie=build_movie(status=MovieStatuses.ACTIVE)),
+        session_repository=FakeSessionRepository(session=build_session()),
+        ticket_repository=FakeTicketRepository(
+            tickets=[
+                build_ticket("ticket-1", order_id="order-1", seat_number=1),
+                build_ticket("ticket-2", order_id="order-1", seat_number=2),
+                build_ticket("ticket-3", order_id="order-2", seat_number=3),
+                build_ticket("ticket-4", order_id="order-2", seat_number=4, status=TicketStatuses.CANCELLED),
+            ]
+        ),
+        order_repository=FakeOrderRepository(),
+        refund_service=refund_service,
+    )
+    service.movie_status_manager.refresh_statuses = fake_refresh_statuses
+
+    cancelled = await service.cancel_session("session-1", cancelled_by=build_admin_user())
+
+    assert cancelled["status"] == SessionStatuses.CANCELLED
+    assert [(call["order_id"], call["amount_minor"]) for call in refund_service.calls] == [
+        ("order-1", 40000),
+        ("order-2", 20000),
+    ]
+    assert refund_service.calls[0]["reason"] == "session_cancelled"
+    assert refund_service.calls[0]["metadata"] == {
+        "source": "session_cancellation",
+        "session_id": "session-1",
+        "order_id": "order-1",
+        "ticket_ids": ["ticket-1", "ticket-2"],
+    }

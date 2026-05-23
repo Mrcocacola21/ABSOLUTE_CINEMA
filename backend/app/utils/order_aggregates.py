@@ -6,6 +6,11 @@ from dataclasses import dataclass
 
 from app.core.constants import OrderStatuses, TicketStatuses
 
+PAYMENT_RELEASE_ORDER_STATUSES = {
+    OrderStatuses.PAYMENT_FAILED,
+    OrderStatuses.PAYMENT_CANCELLED,
+}
+
 
 @dataclass(frozen=True, slots=True)
 class OrderAggregateSnapshot:
@@ -19,12 +24,23 @@ class OrderAggregateSnapshot:
 
 def build_order_aggregate_snapshot(ticket_documents: list[dict[str, object]]) -> OrderAggregateSnapshot:
     """Compute the stored order aggregate from nested ticket documents."""
-    active_tickets_count = sum(
+    purchased_tickets_count = sum(
         1 for ticket in ticket_documents if ticket["status"] == TicketStatuses.PURCHASED
     )
-    if active_tickets_count <= 0:
+    reserved_tickets_count = sum(
+        1 for ticket in ticket_documents if ticket["status"] == TicketStatuses.RESERVED
+    )
+    expired_tickets_count = sum(
+        1 for ticket in ticket_documents if ticket["status"] == TicketStatuses.EXPIRED
+    )
+
+    if reserved_tickets_count > 0:
+        status = OrderStatuses.PENDING_PAYMENT
+    elif purchased_tickets_count <= 0 and expired_tickets_count > 0:
+        status = OrderStatuses.EXPIRED
+    elif purchased_tickets_count <= 0:
         status = OrderStatuses.CANCELLED
-    elif active_tickets_count == len(ticket_documents):
+    elif purchased_tickets_count == len(ticket_documents):
         status = OrderStatuses.COMPLETED
     else:
         status = OrderStatuses.PARTIALLY_CANCELLED
@@ -33,7 +49,7 @@ def build_order_aggregate_snapshot(ticket_documents: list[dict[str, object]]) ->
         status=status,
         tickets_count=len(ticket_documents),
         total_price=float(sum(float(ticket["price"]) for ticket in ticket_documents)),
-        active_tickets_count=active_tickets_count,
+        active_tickets_count=purchased_tickets_count,
     )
 
 
@@ -44,6 +60,17 @@ def build_order_aggregate_updates(
 ) -> dict[str, object]:
     """Return only the order fields that differ from the derived ticket aggregate."""
     aggregate = build_order_aggregate_snapshot(ticket_documents)
+    current_status = str(order_document.get("status"))
+    if (
+        current_status in PAYMENT_RELEASE_ORDER_STATUSES
+        and aggregate.status in {OrderStatuses.CANCELLED, OrderStatuses.EXPIRED}
+    ):
+        aggregate = OrderAggregateSnapshot(
+            status=current_status,
+            tickets_count=aggregate.tickets_count,
+            total_price=aggregate.total_price,
+            active_tickets_count=aggregate.active_tickets_count,
+        )
     updates: dict[str, object] = {}
 
     if order_document.get("status") != aggregate.status:

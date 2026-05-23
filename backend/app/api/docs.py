@@ -13,7 +13,7 @@ PROJECT_REPOSITORY_URL = "https://github.com/Mrcocacola21/ABSOLUTE_CINEMA"
 OPENAPI_DESCRIPTION = """
 Cinema Showcase is an academic FastAPI backend for a one-hall cinema. The API supports
 public movie and schedule browsing, ticket and order purchase flows, authenticated user
-profiles, and an administrator workspace for movie, session, and attendance management.
+profiles, provider-neutral payment initiation, and an administrator workspace for movie, session, and attendance management.
 
 ## Demo Workflow
 
@@ -78,6 +78,14 @@ API_TAGS: list[dict[str, str]] = [
     {
         "name": "orders",
         "description": "Authenticated multi-seat booking and order-cancellation flows.",
+    },
+    {
+        "name": "payments",
+        "description": (
+            "Provider-neutral payment initiation, inspection, and signed webhook processing endpoints. "
+            "Pending, failed, cancelled, and expired payment states drive reservation finalization, release, and retry semantics. "
+            "Current adapters are sandbox/demo oriented; real PSP adapters can plug in at the provider boundary."
+        ),
     },
     {
         "name": "tickets",

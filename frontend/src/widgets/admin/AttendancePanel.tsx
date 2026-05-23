@@ -18,7 +18,15 @@ type AttendanceStatusFilter = "all" | "scheduled" | "completed" | "cancelled";
 type AttendanceSortOption = "latest" | "highest" | "lowest";
 type AttendancePeriodPreset = "today" | "next7Days" | "next30Days" | "thisMonth" | "allTime" | "custom";
 type BookingSortOption = "latest" | "oldest" | "mostTickets" | "highestValue";
-type BookingOrderStatusFilter = "all" | "completed" | "partially_cancelled" | "cancelled";
+type BookingOrderStatusFilter =
+  | "all"
+  | "pending_payment"
+  | "completed"
+  | "partially_cancelled"
+  | "payment_failed"
+  | "payment_cancelled"
+  | "cancelled"
+  | "expired";
 type BookingTicketStateFilter = "all" | "active" | "unused" | "used" | "cancelled";
 type BookingDateMode = "session" | "purchase";
 type ReportTabId = "attendance" | "bookings" | "accounts";
@@ -74,7 +82,16 @@ const attendanceStatusFilters: AttendanceStatusFilter[] = ["all", "scheduled", "
 const attendanceSortOptions: AttendanceSortOption[] = ["latest", "highest", "lowest"];
 const attendancePeriodPresets: AttendancePeriodPreset[] = ["today", "next7Days", "next30Days", "thisMonth", "allTime"];
 const bookingSortOptions: BookingSortOption[] = ["latest", "oldest", "mostTickets", "highestValue"];
-const bookingOrderStatusFilters: BookingOrderStatusFilter[] = ["all", "completed", "partially_cancelled", "cancelled"];
+const bookingOrderStatusFilters: BookingOrderStatusFilter[] = [
+  "all",
+  "pending_payment",
+  "completed",
+  "partially_cancelled",
+  "payment_failed",
+  "payment_cancelled",
+  "cancelled",
+  "expired",
+];
 const bookingTicketStateFilters: BookingTicketStateFilter[] = ["all", "active", "unused", "used", "cancelled"];
 
 interface AttendancePanelProps {
@@ -124,6 +141,10 @@ function getLocalDateInputValue(value: string | Date): string {
   const day = String(date.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
+}
+
+function getTicketTimelineAt(ticket: TicketListItem): string {
+  return ticket.purchased_at ?? ticket.reserved_at ?? ticket.order_created_at ?? ticket.expires_at ?? ticket.session_start_time;
 }
 
 function getLocalDayBoundary(date: Date, boundary: "start" | "end"): Date {
@@ -537,17 +558,18 @@ export function AttendancePanel({
   const bookingOrdersMap = new Map<string, BookingOrderGroup>();
 
   for (const ticket of tickets) {
+    const ticketTimelineAt = getTicketTimelineAt(ticket);
     const orderId = ticket.order_id ?? ticket.id;
     const existingOrder = bookingOrdersMap.get(orderId);
     if (existingOrder) {
       existingOrder.tickets.push(ticket);
       existingOrder.firstPurchasedAt =
-        new Date(ticket.purchased_at).getTime() < new Date(existingOrder.firstPurchasedAt).getTime()
-          ? ticket.purchased_at
+        new Date(ticketTimelineAt).getTime() < new Date(existingOrder.firstPurchasedAt).getTime()
+          ? ticketTimelineAt
           : existingOrder.firstPurchasedAt;
       existingOrder.latestPurchasedAt =
-        new Date(ticket.purchased_at).getTime() > new Date(existingOrder.latestPurchasedAt).getTime()
-          ? ticket.purchased_at
+        new Date(ticketTimelineAt).getTime() > new Date(existingOrder.latestPurchasedAt).getTime()
+          ? ticketTimelineAt
           : existingOrder.latestPurchasedAt;
       continue;
     }
@@ -565,11 +587,11 @@ export function AttendancePanel({
       sessionEndTime: ticket.session_end_time,
       sessionStatus: ticket.session_status,
       orderStatus: ticket.order_status ?? null,
-      orderCreatedAt: ticket.order_created_at ?? ticket.purchased_at,
+      orderCreatedAt: ticket.order_created_at ?? ticketTimelineAt,
       orderTotalPrice: ticket.order_total_price ?? ticket.price,
       orderTicketsCount: ticket.order_tickets_count ?? 1,
-      firstPurchasedAt: ticket.purchased_at,
-      latestPurchasedAt: ticket.purchased_at,
+      firstPurchasedAt: ticketTimelineAt,
+      latestPurchasedAt: ticketTimelineAt,
       tickets: [ticket],
     });
   }
@@ -579,7 +601,7 @@ export function AttendancePanel({
       (left, right) =>
         left.seat_row - right.seat_row ||
         left.seat_number - right.seat_number ||
-        new Date(left.purchased_at).getTime() - new Date(right.purchased_at).getTime(),
+        new Date(getTicketTimelineAt(left)).getTime() - new Date(getTicketTimelineAt(right)).getTime(),
     );
     const ticketTotal = sortedTickets.reduce((sum, ticket) => sum + ticket.price, 0);
     return {
@@ -618,7 +640,7 @@ export function AttendancePanel({
       const matchesDate =
         bookingDateMode === "session"
           ? getLocalDateInputValue(order.sessionStartTime) === bookingDateFilter
-          : order.tickets.some((ticket) => getLocalDateInputValue(ticket.purchased_at) === bookingDateFilter) ||
+          : order.tickets.some((ticket) => getLocalDateInputValue(getTicketTimelineAt(ticket)) === bookingDateFilter) ||
             getLocalDateInputValue(order.orderCreatedAt) === bookingDateFilter;
 
       if (!matchesDate) {
@@ -638,8 +660,8 @@ export function AttendancePanel({
           formatStateLabel(ticket.status),
           ticket.price,
           formatCurrency(ticket.price, i18n.language),
-          ticket.purchased_at,
-          formatDateTime(ticket.purchased_at, i18n.language),
+          getTicketTimelineAt(ticket),
+          formatDateTime(getTicketTimelineAt(ticket), i18n.language),
           ticket.cancelled_at ?? "",
           ticket.cancelled_at ? formatDateTime(ticket.cancelled_at, i18n.language) : "",
           ticket.checked_in_at ?? "",
@@ -1524,6 +1546,7 @@ export function AttendancePanel({
 
                 <div className="admin-booking-ticket-list">
                   {orderTicketsInView.map((ticket) => {
+                    const ticketTimelineAt = getTicketTimelineAt(ticket);
                     const ticketStateLabel = ticket.checked_in_at
                       ? t("admin.reports.bookings.ticketCheckedIn", { defaultValue: "Checked in" })
                       : ticket.cancelled_at
@@ -1546,7 +1569,7 @@ export function AttendancePanel({
                           </strong>
                           <p className="muted">
                             {t("admin.reports.bookings.purchasedLabel", {
-                              date: formatDateTime(ticket.purchased_at, i18n.language),
+                              date: formatDateTime(ticketTimelineAt, i18n.language),
                             })}
                           </p>
                         </div>

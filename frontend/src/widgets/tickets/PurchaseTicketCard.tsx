@@ -27,12 +27,10 @@ export function PurchaseTicketCard({
   const totalPrice =
     price !== undefined && selectedSeats.length > 0 ? price * selectedSeats.length : undefined;
   const purchaseLabel = isSubmitting
-    ? `${t("common.actions.purchaseTicket")}...`
-    : selectedSeats.length > 1
-      ? t("common.actions.purchaseTickets")
-      : selectedSeats.length === 1
-        ? t("common.actions.purchaseTicket")
-        : t("common.actions.selectSeatsFirst");
+    ? t("checkout.actions.reserving")
+    : selectedSeats.length > 0
+      ? t("checkout.actions.reserveAndCheckout")
+      : t("common.actions.selectSeatsFirst");
 
   return (
     <aside className="booking-module__summary" aria-live="polite">

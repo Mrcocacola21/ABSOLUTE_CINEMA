@@ -11,7 +11,7 @@ from bson import ObjectId
 from app.core.exceptions import DatabaseException
 from app.db.collections import DatabaseCollections
 
-from app.tests.integration.conftest import API_PREFIX, build_session_window
+from app.tests.integration.conftest import API_PREFIX, build_session_window, complete_reserved_order_payment
 
 
 @pytest.mark.asyncio
@@ -78,6 +78,7 @@ async def test_admin_can_read_attendance_session_details(
     )
     assert purchase_response.status_code == 201, purchase_response.text
     checked_order = purchase_response.json()["data"]
+    await complete_reserved_order_payment(client, user_auth["headers"], checked_order["id"])
 
     unchecked_purchase_response = await client.post(
         f"{API_PREFIX}/orders/purchase",
@@ -90,6 +91,8 @@ async def test_admin_can_read_attendance_session_details(
         },
     )
     assert unchecked_purchase_response.status_code == 201, unchecked_purchase_response.text
+    unchecked_order = unchecked_purchase_response.json()["data"]
+    await complete_reserved_order_payment(client, user_auth["headers"], unchecked_order["id"])
 
     check_in_response = await client.post(
         f"{API_PREFIX}/admin/orders/{checked_order['id']}/check-in",
@@ -108,6 +111,7 @@ async def test_admin_can_read_attendance_session_details(
     )
     assert cancelled_purchase_response.status_code == 201, cancelled_purchase_response.text
     cancelled_ticket = cancelled_purchase_response.json()["data"]
+    await complete_reserved_order_payment(client, user_auth["headers"], cancelled_ticket["order_id"])
 
     ticket_cancel_response = await client.patch(
         f"{API_PREFIX}/tickets/{cancelled_ticket['id']}/cancel",
@@ -181,6 +185,7 @@ async def test_admin_attendance_summary_counts_sold_used_cancelled_and_available
     )
     assert order_response.status_code == 201, order_response.text
     order = order_response.json()["data"]
+    await complete_reserved_order_payment(client, user_auth["headers"], order["id"])
 
     check_in_response = await client.post(
         f"{API_PREFIX}/admin/orders/{order['id']}/check-in",
@@ -199,6 +204,7 @@ async def test_admin_attendance_summary_counts_sold_used_cancelled_and_available
     )
     assert cancelled_purchase_response.status_code == 201, cancelled_purchase_response.text
     cancelled_ticket = cancelled_purchase_response.json()["data"]
+    await complete_reserved_order_payment(client, user_auth["headers"], cancelled_ticket["order_id"])
 
     cancel_response = await client.patch(
         f"{API_PREFIX}/tickets/{cancelled_ticket['id']}/cancel",
@@ -631,7 +637,9 @@ async def test_session_update_is_rejected_when_purchased_tickets_exist(
     assert response.status_code == 409
     body = response.json()
     assert body["error"]["code"] == "conflict"
-    assert body["error"]["message"] == "Sessions with purchased tickets cannot be edited. Cancel the session instead."
+    assert body["error"]["message"] == (
+        "Sessions with reserved or purchased tickets cannot be edited. Cancel the session instead."
+    )
 
 
 @pytest.mark.asyncio
@@ -761,6 +769,7 @@ async def test_session_cancellation_cascade_rolls_back_when_order_refresh_fails(
     )
     assert purchase_response.status_code == 201
     order = purchase_response.json()["data"]
+    await complete_reserved_order_payment(client, user_auth["headers"], order["id"])
 
     async def fail_update_order(
         self,

@@ -10,13 +10,32 @@ from zoneinfo import ZoneInfo
 from bson import ObjectId
 
 from app.core.config import get_settings
-from app.core.constants import MovieStatuses, Roles, SessionStatuses, TicketStatuses
+from app.core.constants import (
+    MovieStatuses,
+    OrderStatuses,
+    PaymentAttemptStatuses,
+    PaymentStatuses,
+    PaymentWebhookProcessingStatuses,
+    RefundStatuses,
+    Roles,
+    SessionStatuses,
+    TICKET_BLOCKING_STATUS_VALUES,
+    TicketStatuses,
+)
 from app.schemas.movie import MovieRead
 from app.schemas.order import OrderRead
+from app.schemas.payment import (
+    PaymentAttemptRead,
+    PaymentAuditEventRead,
+    PaymentRead,
+    PaymentWebhookEventRead,
+    RefundRead,
+)
 from app.schemas.session import SessionRead
 from app.schemas.ticket import TicketRead
 from app.schemas.user import UserRead
 from app.security.hashing import password_hasher
+from app.utils.money import amount_to_minor_units
 from app.utils.order_aggregates import build_order_aggregate_snapshot
 
 DEMO_SEED_VERSION = "cinema-demo-v1"
@@ -66,6 +85,8 @@ class DemoOrderTicketTemplate:
     seat_number: int
     status: str = TicketStatuses.PURCHASED
     cancel_after_hours: int = 12
+    was_purchased: bool = True
+    checked_in_after_minutes: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +97,32 @@ class DemoOrderTemplate:
     session_slug: str
     purchase_days_before: int
     tickets: tuple[DemoOrderTicketTemplate, ...]
+    created_minutes_from_now: int | None = None
+    explicit_status: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DemoRefundTemplate:
+    object_id: str
+    amount_minor: int
+    reason: str
+    requested_by: str
+    created_minutes_after_payment: int
+
+
+@dataclass(frozen=True, slots=True)
+class DemoPaymentTemplate:
+    slug: str
+    object_id: str
+    attempt_object_id: str
+    order_slug: str
+    status: str
+    attempt_status: str
+    created_minutes_after_order: int = 1
+    updated_minutes_after_order: int | None = 4
+    failure_code: str | None = None
+    failure_message: str | None = None
+    refunds: tuple[DemoRefundTemplate, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +134,11 @@ class DemoSeedData:
     sessions: list[dict[str, object]]
     orders: list[dict[str, object]]
     tickets: list[dict[str, object]]
+    payments: list[dict[str, object]]
+    payment_attempts: list[dict[str, object]]
+    refunds: list[dict[str, object]]
+    payment_webhook_events: list[dict[str, object]]
+    payment_audit_events: list[dict[str, object]]
 
     @property
     def collection_counts(self) -> dict[str, int]:
@@ -96,6 +148,11 @@ class DemoSeedData:
             "sessions": len(self.sessions),
             "orders": len(self.orders),
             "tickets": len(self.tickets),
+            "payments": len(self.payments),
+            "payment_attempts": len(self.payment_attempts),
+            "refunds": len(self.refunds),
+            "payment_webhook_events": len(self.payment_webhook_events),
+            "payment_audit_events": len(self.payment_audit_events),
         }
 
 
@@ -787,9 +844,9 @@ DEMO_ORDERS: tuple[DemoOrderTemplate, ...] = (
         session_slug="spirited-retro",
         purchase_days_before=4,
         tickets=(
-            DemoOrderTicketTemplate("680000000000000000000401", 2, 5),
-            DemoOrderTicketTemplate("680000000000000000000402", 2, 6),
-            DemoOrderTicketTemplate("680000000000000000000403", 2, 7),
+            DemoOrderTicketTemplate("680000000000000000000401", 2, 5, checked_in_after_minutes=55),
+            DemoOrderTicketTemplate("680000000000000000000402", 2, 6, checked_in_after_minutes=56),
+            DemoOrderTicketTemplate("680000000000000000000403", 2, 7, checked_in_after_minutes=57),
         ),
     ),
     DemoOrderTemplate(
@@ -810,8 +867,8 @@ DEMO_ORDERS: tuple[DemoOrderTemplate, ...] = (
         session_slug="ghost-retro",
         purchase_days_before=6,
         tickets=(
-            DemoOrderTicketTemplate("680000000000000000000406", 1, 10),
-            DemoOrderTicketTemplate("680000000000000000000407", 1, 11),
+            DemoOrderTicketTemplate("680000000000000000000406", 1, 10, checked_in_after_minutes=45),
+            DemoOrderTicketTemplate("680000000000000000000407", 1, 11, checked_in_after_minutes=46),
         ),
     ),
     DemoOrderTemplate(
@@ -849,9 +906,10 @@ DEMO_ORDERS: tuple[DemoOrderTemplate, ...] = (
         user_slug="suzu",
         session_slug="weather-d2-afternoon",
         purchase_days_before=4,
+        created_minutes_from_now=-5,
         tickets=(
-            DemoOrderTicketTemplate("68000000000000000000040d", 3, 8),
-            DemoOrderTicketTemplate("68000000000000000000040e", 3, 9),
+            DemoOrderTicketTemplate("68000000000000000000040d", 3, 8, status=TicketStatuses.RESERVED),
+            DemoOrderTicketTemplate("68000000000000000000040e", 3, 9, status=TicketStatuses.RESERVED),
         ),
     ),
     DemoOrderTemplate(
@@ -883,13 +941,16 @@ DEMO_ORDERS: tuple[DemoOrderTemplate, ...] = (
         user_slug="taki",
         session_slug="your-name-d5-afternoon",
         purchase_days_before=6,
+        created_minutes_from_now=-60,
+        explicit_status=OrderStatuses.PAYMENT_CANCELLED,
         tickets=(
             DemoOrderTicketTemplate(
                 "680000000000000000000411",
                 7,
                 3,
                 status=TicketStatuses.CANCELLED,
-                cancel_after_hours=18,
+                cancel_after_hours=0,
+                was_purchased=False,
             ),
         ),
     ),
@@ -904,6 +965,172 @@ DEMO_ORDERS: tuple[DemoOrderTemplate, ...] = (
             DemoOrderTicketTemplate("680000000000000000000413", 8, 11),
             DemoOrderTicketTemplate("680000000000000000000414", 8, 12),
         ),
+    ),
+    DemoOrderTemplate(
+        slug="weather-expired-order",
+        object_id="68000000000000000000030a",
+        user_slug="chihiro",
+        session_slug="weather-d4-morning",
+        purchase_days_before=4,
+        created_minutes_from_now=-90,
+        tickets=(
+            DemoOrderTicketTemplate(
+                "680000000000000000000415",
+                2,
+                10,
+                status=TicketStatuses.EXPIRED,
+                was_purchased=False,
+            ),
+            DemoOrderTicketTemplate(
+                "680000000000000000000416",
+                2,
+                11,
+                status=TicketStatuses.EXPIRED,
+                was_purchased=False,
+            ),
+        ),
+    ),
+    DemoOrderTemplate(
+        slug="heron-failed-payment-order",
+        object_id="68000000000000000000030b",
+        user_slug="taki",
+        session_slug="heron-d2-evening",
+        purchase_days_before=2,
+        created_minutes_from_now=-35,
+        explicit_status=OrderStatuses.PAYMENT_FAILED,
+        tickets=(
+            DemoOrderTicketTemplate(
+                "680000000000000000000417",
+                6,
+                10,
+                status=TicketStatuses.EXPIRED,
+                was_purchased=False,
+            ),
+            DemoOrderTicketTemplate(
+                "680000000000000000000418",
+                6,
+                11,
+                status=TicketStatuses.EXPIRED,
+                was_purchased=False,
+            ),
+        ),
+    ),
+)
+
+DEMO_PAYMENTS: tuple[DemoPaymentTemplate, ...] = (
+    DemoPaymentTemplate(
+        slug="spirited-retro-payment",
+        object_id="680000000000000000000501",
+        attempt_object_id="680000000000000000000601",
+        order_slug="spirited-retro-order",
+        status=PaymentStatuses.SUCCEEDED,
+        attempt_status=PaymentAttemptStatuses.SUCCEEDED,
+    ),
+    DemoPaymentTemplate(
+        slug="perfect-retro-payment",
+        object_id="680000000000000000000502",
+        attempt_object_id="680000000000000000000602",
+        order_slug="perfect-retro-order",
+        status=PaymentStatuses.SUCCEEDED,
+        attempt_status=PaymentAttemptStatuses.SUCCEEDED,
+    ),
+    DemoPaymentTemplate(
+        slug="ghost-retro-payment",
+        object_id="680000000000000000000503",
+        attempt_object_id="680000000000000000000603",
+        order_slug="ghost-retro-order",
+        status=PaymentStatuses.SUCCEEDED,
+        attempt_status=PaymentAttemptStatuses.SUCCEEDED,
+    ),
+    DemoPaymentTemplate(
+        slug="suzume-future-payment",
+        object_id="680000000000000000000504",
+        attempt_object_id="680000000000000000000604",
+        order_slug="suzume-future-order",
+        status=PaymentStatuses.SUCCEEDED,
+        attempt_status=PaymentAttemptStatuses.SUCCEEDED,
+    ),
+    DemoPaymentTemplate(
+        slug="mononoke-partial-refund-payment",
+        object_id="680000000000000000000505",
+        attempt_object_id="680000000000000000000605",
+        order_slug="mononoke-partial-order",
+        status=PaymentStatuses.PARTIALLY_REFUNDED,
+        attempt_status=PaymentAttemptStatuses.SUCCEEDED,
+        refunds=(
+            DemoRefundTemplate(
+                object_id="680000000000000000000701",
+                amount_minor=25000,
+                reason="customer_ticket_cancellation",
+                requested_by="user:680000000000000000000005",
+                created_minutes_after_payment=60,
+            ),
+        ),
+    ),
+    DemoPaymentTemplate(
+        slug="weather-pending-payment",
+        object_id="680000000000000000000506",
+        attempt_object_id="680000000000000000000606",
+        order_slug="weather-future-order",
+        status=PaymentStatuses.PENDING,
+        attempt_status=PaymentAttemptStatuses.PENDING,
+        updated_minutes_after_order=2,
+    ),
+    DemoPaymentTemplate(
+        slug="cancelled-session-refunded-payment",
+        object_id="680000000000000000000507",
+        attempt_object_id="680000000000000000000607",
+        order_slug="cancelled-session-order",
+        status=PaymentStatuses.REFUNDED,
+        attempt_status=PaymentAttemptStatuses.SUCCEEDED,
+        refunds=(
+            DemoRefundTemplate(
+                object_id="680000000000000000000702",
+                amount_minor=43000,
+                reason="session_cancelled",
+                requested_by="admin:680000000000000000000001",
+                created_minutes_after_payment=90,
+            ),
+        ),
+    ),
+    DemoPaymentTemplate(
+        slug="cancelled-upcoming-payment",
+        object_id="680000000000000000000508",
+        attempt_object_id="680000000000000000000608",
+        order_slug="cancelled-upcoming-order",
+        status=PaymentStatuses.CANCELLED,
+        attempt_status=PaymentAttemptStatuses.SUCCEEDED,
+        updated_minutes_after_order=4,
+    ),
+    DemoPaymentTemplate(
+        slug="heron-future-payment",
+        object_id="680000000000000000000509",
+        attempt_object_id="680000000000000000000609",
+        order_slug="heron-future-order",
+        status=PaymentStatuses.SUCCEEDED,
+        attempt_status=PaymentAttemptStatuses.SUCCEEDED,
+    ),
+    DemoPaymentTemplate(
+        slug="weather-expired-payment",
+        object_id="68000000000000000000050a",
+        attempt_object_id="68000000000000000000060a",
+        order_slug="weather-expired-order",
+        status=PaymentStatuses.EXPIRED,
+        attempt_status=PaymentAttemptStatuses.SUCCEEDED,
+        updated_minutes_after_order=20,
+        failure_code="provider_payment_expired",
+        failure_message="Fake provider reported checkout expiration.",
+    ),
+    DemoPaymentTemplate(
+        slug="heron-failed-payment",
+        object_id="68000000000000000000050b",
+        attempt_object_id="68000000000000000000060b",
+        order_slug="heron-failed-payment-order",
+        status=PaymentStatuses.FAILED,
+        attempt_status=PaymentAttemptStatuses.FAILED,
+        updated_minutes_after_order=6,
+        failure_code="fake_declined",
+        failure_message="Fake provider declined the payment.",
     ),
 )
 
@@ -933,6 +1160,15 @@ def build_demo_seed_data(reference_now: datetime | None = None) -> DemoSeedData:
         session_map=session_map,
         user_map=user_map,
     )
+    order_template_map = {
+        template.slug: order
+        for template, order in zip(DEMO_ORDERS, orders, strict=True)
+    }
+    payments, payment_attempts, refunds, payment_webhook_events, payment_audit_events = _build_payment_records(
+        reference_utc=reference_utc,
+        order_map=order_template_map,
+        user_map=user_map,
+    )
     _apply_session_availability(sessions, tickets, total_seats=settings.total_seats)
 
     dataset = DemoSeedData(
@@ -941,6 +1177,11 @@ def build_demo_seed_data(reference_now: datetime | None = None) -> DemoSeedData:
         sessions=sessions,
         orders=orders,
         tickets=tickets,
+        payments=payments,
+        payment_attempts=payment_attempts,
+        refunds=refunds,
+        payment_webhook_events=payment_webhook_events,
+        payment_audit_events=payment_audit_events,
     )
     validate_demo_seed_data(dataset, reference_now=reference_utc)
     return dataset
@@ -954,11 +1195,23 @@ def validate_demo_seed_data(dataset: DemoSeedData, *, reference_now: datetime) -
     orders = [_as_order_read(document) for document in dataset.orders]
     tickets = [_as_ticket_read(document) for document in dataset.tickets]
     users = [_as_user_read(document) for document in dataset.users]
+    payments = [_as_payment_read(document) for document in dataset.payments]
+    payment_attempts = [_as_payment_attempt_read(document) for document in dataset.payment_attempts]
+    refunds = [_as_refund_read(document) for document in dataset.refunds]
+    payment_webhook_events = [
+        _as_payment_webhook_event_read(document)
+        for document in dataset.payment_webhook_events
+    ]
+    payment_audit_events = [
+        _as_payment_audit_event_read(document)
+        for document in dataset.payment_audit_events
+    ]
 
     movie_by_id = {movie.id: movie for movie in movies}
     session_by_id = {session.id: session for session in sessions}
     order_by_id = {order.id: order for order in orders}
     user_by_id = {user.id: user for user in users}
+    payment_by_id = {payment.id: payment for payment in payments}
 
     if len(movie_by_id) != len(movies):
         raise ValueError("Demo seed data contains duplicate movie identifiers.")
@@ -968,6 +1221,8 @@ def validate_demo_seed_data(dataset: DemoSeedData, *, reference_now: datetime) -
         raise ValueError("Demo seed data contains duplicate order identifiers.")
     if len(user_by_id) != len(users):
         raise ValueError("Demo seed data contains duplicate user identifiers.")
+    if len(payment_by_id) != len(payments):
+        raise ValueError("Demo seed data contains duplicate payment identifiers.")
 
     _validate_status_distribution(movies)
     _validate_future_movie_statuses(movies=movies, sessions=sessions, reference_now=reference_now)
@@ -981,6 +1236,15 @@ def validate_demo_seed_data(dataset: DemoSeedData, *, reference_now: datetime) -
         seats_per_row=settings.hall_seats_per_row,
     )
     _validate_orders(orders=orders, tickets=tickets)
+    _validate_payments(
+        payments=payments,
+        payment_attempts=payment_attempts,
+        refunds=refunds,
+        payment_webhook_events=payment_webhook_events,
+        payment_audit_events=payment_audit_events,
+        order_by_id=order_by_id,
+        user_by_id=user_by_id,
+    )
     _validate_session_availability(
         sessions=sessions,
         tickets=tickets,
@@ -999,6 +1263,31 @@ def demo_seed_object_ids() -> dict[str, list[ObjectId]]:
             _object_id(ticket.object_id)
             for template in DEMO_ORDERS
             for ticket in template.tickets
+        ],
+        "payments": [_object_id(template.object_id) for template in DEMO_PAYMENTS],
+        "payment_attempts": [_object_id(template.attempt_object_id) for template in DEMO_PAYMENTS],
+        "refunds": [
+            _object_id(refund.object_id)
+            for template in DEMO_PAYMENTS
+            for refund in template.refunds
+        ],
+        "payment_webhook_events": [
+            _demo_object_id(series=8, index=index)
+            for index in range(
+                1,
+                1
+                + sum(1 for template in DEMO_PAYMENTS if template.status != PaymentStatuses.PENDING)
+                + sum(len(template.refunds) for template in DEMO_PAYMENTS),
+            )
+        ],
+        "payment_audit_events": [
+            _demo_object_id(series=9, index=index)
+            for index in range(
+                1,
+                1
+                + len(DEMO_PAYMENTS)
+                + sum(len(template.refunds) for template in DEMO_PAYMENTS),
+            )
         ],
     }
 
@@ -1110,25 +1399,38 @@ def _build_orders_and_tickets(
     for template in DEMO_ORDERS:
         session = session_map[template.session_slug]
         user = user_map[template.user_slug]
-        purchased_at = _build_purchase_time(
+        order_created_at = _build_order_created_time(
             reference_utc=reference_utc,
             session_start=session["start_time"],
             purchase_days_before=template.purchase_days_before,
+            created_minutes_from_now=template.created_minutes_from_now,
         )
+        order_expires_at = order_created_at + timedelta(minutes=get_settings().reservation_hold_minutes)
+        ticket_purchase_time = min(order_created_at + timedelta(minutes=4), order_expires_at - timedelta(minutes=1))
 
         order_tickets: list[dict[str, object]] = []
         for ticket_index, ticket_template in enumerate(template.tickets):
-            ticket_purchased_at = purchased_at + timedelta(minutes=ticket_index * 7)
+            ticket_purchased_at = None
+            if ticket_template.status == TicketStatuses.PURCHASED or (
+                ticket_template.status == TicketStatuses.CANCELLED and ticket_template.was_purchased
+            ):
+                ticket_purchased_at = ticket_purchase_time + timedelta(seconds=ticket_index * 20)
             cancelled_at = None
             updated_at = None
+            checked_in_at = None
             if ticket_template.status == TicketStatuses.CANCELLED:
                 cancelled_at = _build_cancelled_at(
-                    purchased_at=ticket_purchased_at,
+                    purchased_at=ticket_purchased_at or order_created_at,
                     session_start=session["start_time"],
                     reference_utc=reference_utc,
                     cancel_after_hours=ticket_template.cancel_after_hours,
                 )
                 updated_at = cancelled_at
+            elif ticket_template.status == TicketStatuses.EXPIRED:
+                updated_at = max(order_expires_at, order_created_at + timedelta(minutes=1))
+            elif ticket_template.checked_in_after_minutes is not None and ticket_purchased_at is not None:
+                checked_in_at = ticket_purchased_at + timedelta(minutes=ticket_template.checked_in_after_minutes)
+                updated_at = checked_in_at
 
             order_tickets.append(
                 {
@@ -1140,9 +1442,12 @@ def _build_orders_and_tickets(
                     "seat_number": ticket_template.seat_number,
                     "price": float(session["price"]),
                     "status": ticket_template.status,
+                    "reserved_at": order_created_at,
+                    "expires_at": order_expires_at,
                     "purchased_at": ticket_purchased_at,
                     "updated_at": updated_at,
                     "cancelled_at": cancelled_at,
+                    "checked_in_at": checked_in_at,
                 }
             )
 
@@ -1160,10 +1465,11 @@ def _build_orders_and_tickets(
                 "_id": _object_id(template.object_id),
                 "user_id": str(user["_id"]),
                 "session_id": str(session["_id"]),
-                "status": aggregate.status,
+                "status": template.explicit_status or aggregate.status,
                 "total_price": aggregate.total_price,
                 "tickets_count": aggregate.tickets_count,
-                "created_at": purchased_at,
+                "expires_at": order_expires_at,
+                "created_at": order_created_at,
                 "updated_at": updated_at,
             }
         )
@@ -1172,19 +1478,343 @@ def _build_orders_and_tickets(
     return orders, tickets
 
 
+def _build_payment_records(
+    *,
+    reference_utc: datetime,
+    order_map: dict[str, dict[str, object]],
+    user_map: dict[str, dict[str, object]],
+) -> tuple[
+    list[dict[str, object]],
+    list[dict[str, object]],
+    list[dict[str, object]],
+    list[dict[str, object]],
+    list[dict[str, object]],
+]:
+    payments: list[dict[str, object]] = []
+    payment_attempts: list[dict[str, object]] = []
+    refunds: list[dict[str, object]] = []
+    payment_webhook_events: list[dict[str, object]] = []
+    payment_audit_events: list[dict[str, object]] = []
+    webhook_index = 1
+    audit_index = 1
+
+    for template in DEMO_PAYMENTS:
+        order = order_map[template.order_slug]
+        payment_id = template.object_id
+        provider_payment_id = f"fake-pay-{payment_id}"
+        provider_attempt_id = f"fake-attempt-{payment_id}"
+        created_at = order["created_at"] + timedelta(minutes=template.created_minutes_after_order)
+        updated_at = (
+            order["created_at"] + timedelta(minutes=template.updated_minutes_after_order)
+            if template.updated_minutes_after_order is not None
+            else None
+        )
+        response_snapshot = _build_provider_payment_snapshot(
+            payment_id=payment_id,
+            provider_payment_id=provider_payment_id,
+            provider_attempt_id=provider_attempt_id,
+            status=template.status,
+            amount_minor=amount_to_minor_units(order["total_price"]),
+            failure_code=template.failure_code,
+            failure_message=template.failure_message,
+        )
+
+        payment_refunds: list[dict[str, object]] = []
+        for refund_template in template.refunds:
+            refund_created_at = created_at + timedelta(minutes=refund_template.created_minutes_after_payment)
+            if order.get("updated_at") is not None:
+                refund_created_at = max(refund_created_at, order["updated_at"] + timedelta(minutes=15))
+            refund_id = refund_template.object_id
+            refund = {
+                "_id": _object_id(refund_id),
+                "payment_id": payment_id,
+                "order_id": str(order["_id"]),
+                "user_id": str(order["user_id"]),
+                "amount_minor": refund_template.amount_minor,
+                "currency": "UAH",
+                "status": RefundStatuses.SUCCEEDED,
+                "provider": "fake",
+                "provider_refund_id": f"fake-refund-{refund_id}",
+                "reason": refund_template.reason,
+                "requested_by": refund_template.requested_by,
+                "request_payload_snapshot": {
+                    "operation": "refund_payment",
+                    "reason": refund_template.reason,
+                    "amount_minor": refund_template.amount_minor,
+                },
+                "response_payload_snapshot": {
+                    "provider": "fake",
+                    "provider_refund_id": f"fake-refund-{refund_id}",
+                    "status": RefundStatuses.SUCCEEDED,
+                    "amount_minor": refund_template.amount_minor,
+                    "currency": "UAH",
+                },
+                "failure_code": None,
+                "failure_message": None,
+                "created_at": refund_created_at,
+                "updated_at": refund_created_at + timedelta(minutes=1),
+            }
+            refunds.append(refund)
+            payment_refunds.append(refund)
+            payment_webhook_events.append(
+                _build_payment_webhook_event(
+                    object_id=_demo_object_id(series=8, index=webhook_index),
+                    provider_event_id=f"evt-demo-refund-{refund_id[-6:]}",
+                    event_type="refund.updated",
+                    payment_id=payment_id,
+                    order_id=str(order["_id"]),
+                    refund_id=refund_id,
+                    payload_snapshot={
+                        "refund": {
+                            "id": refund["provider_refund_id"],
+                            "status": "refund_settled",
+                            "amount_minor": refund_template.amount_minor,
+                            "currency": "UAH",
+                        }
+                    },
+                    created_at=refund_created_at + timedelta(minutes=1),
+                )
+            )
+            webhook_index += 1
+            payment_audit_events.append(
+                _build_payment_audit_event(
+                    object_id=_demo_object_id(series=9, index=audit_index),
+                    action="refund.status_changed",
+                    actor_type="system",
+                    payment_id=payment_id,
+                    order_id=str(order["_id"]),
+                    refund_id=refund_id,
+                    provider="fake",
+                    old_status=RefundStatuses.CREATED,
+                    new_status=RefundStatuses.SUCCEEDED,
+                    reason=refund_template.reason,
+                    safe_context={"amount_minor": refund_template.amount_minor, "currency": "UAH"},
+                    created_at=refund_created_at + timedelta(minutes=1),
+                )
+            )
+            audit_index += 1
+
+        if payment_refunds:
+            updated_at = max(refund["updated_at"] for refund in payment_refunds)
+
+        payment = {
+            "_id": _object_id(payment_id),
+            "order_id": str(order["_id"]),
+            "user_id": str(order["user_id"]),
+            "amount_minor": amount_to_minor_units(order["total_price"]),
+            "currency": "UAH",
+            "status": template.status,
+            "provider": "fake",
+            "provider_payment_id": provider_payment_id,
+            "idempotency_key": f"demo-payment-{template.slug}",
+            "failure_code": template.failure_code,
+            "failure_message": template.failure_message,
+            "metadata": {"source": "demo_seed", "order_slug": template.order_slug},
+            "created_at": created_at,
+            "updated_at": updated_at,
+        }
+        payments.append(payment)
+        payment_attempts.append(
+            {
+                "_id": _object_id(template.attempt_object_id),
+                "payment_id": payment_id,
+                "order_id": str(order["_id"]),
+                "provider": "fake",
+                "status": template.attempt_status,
+                "provider_attempt_id": (
+                    provider_attempt_id
+                    if template.attempt_status == PaymentAttemptStatuses.SUCCEEDED
+                    else None
+                ),
+                "request_payload_snapshot": {
+                    "operation": "create_payment",
+                    "payment_id": payment_id,
+                    "order_id": str(order["_id"]),
+                    "amount_minor": payment["amount_minor"],
+                    "currency": "UAH",
+                    "metadata_keys": ["source", "order_slug"],
+                },
+                "response_payload_snapshot": response_snapshot,
+                "error_code": (
+                    template.failure_code
+                    if template.attempt_status == PaymentAttemptStatuses.FAILED
+                    else None
+                ),
+                "error_message": (
+                    template.failure_message
+                    if template.attempt_status == PaymentAttemptStatuses.FAILED
+                    else None
+                ),
+                "created_at": created_at,
+                "updated_at": updated_at,
+            }
+        )
+        if template.status != PaymentStatuses.PENDING:
+            payment_webhook_events.append(
+                _build_payment_webhook_event(
+                    object_id=_demo_object_id(series=8, index=webhook_index),
+                    provider_event_id=f"evt-demo-payment-{template.slug}",
+                    event_type="payment.updated",
+                    payment_id=payment_id,
+                    order_id=str(order["_id"]),
+                    refund_id=None,
+                    payload_snapshot={
+                        "payment": {
+                            "id": provider_payment_id,
+                            "status": _payment_status_to_fake_raw_status(template.status),
+                            "amount_minor": payment["amount_minor"],
+                            "currency": "UAH",
+                        }
+                    },
+                    created_at=updated_at or created_at,
+                )
+            )
+            webhook_index += 1
+        payment_audit_events.append(
+            _build_payment_audit_event(
+                object_id=_demo_object_id(series=9, index=audit_index),
+                action="payment.initiated",
+                actor_type="user",
+                actor_id=str(order["user_id"]),
+                payment_id=payment_id,
+                order_id=str(order["_id"]),
+                refund_id=None,
+                provider="fake",
+                old_status=PaymentStatuses.CREATED,
+                new_status=template.status,
+                reason=template.failure_code,
+                safe_context={"attempt_id": template.attempt_object_id, "source": "demo_seed"},
+                created_at=updated_at or created_at,
+            )
+        )
+        audit_index += 1
+
+    return payments, payment_attempts, refunds, payment_webhook_events, payment_audit_events
+
+
 def _apply_session_availability(
     sessions: list[dict[str, object]],
     tickets: list[dict[str, object]],
     *,
     total_seats: int,
 ) -> None:
-    purchased_counts: dict[str, int] = defaultdict(int)
+    blocking_counts: dict[str, int] = defaultdict(int)
     for ticket in tickets:
-        if ticket["status"] == TicketStatuses.PURCHASED:
-            purchased_counts[str(ticket["session_id"])] += 1
+        if ticket["status"] in TICKET_BLOCKING_STATUS_VALUES:
+            blocking_counts[str(ticket["session_id"])] += 1
 
     for session in sessions:
-        session["available_seats"] = total_seats - purchased_counts.get(str(session["_id"]), 0)
+        session["available_seats"] = total_seats - blocking_counts.get(str(session["_id"]), 0)
+
+
+def _build_provider_payment_snapshot(
+    *,
+    payment_id: str,
+    provider_payment_id: str,
+    provider_attempt_id: str,
+    status: str,
+    amount_minor: int,
+    failure_code: str | None,
+    failure_message: str | None,
+) -> dict[str, object]:
+    return {
+        "provider": "fake",
+        "provider_payment_id": provider_payment_id,
+        "provider_attempt_id": provider_attempt_id,
+        "status": status,
+        "amount_minor": amount_minor,
+        "currency": "UAH",
+        "redirect_url": f"https://payments.example.test/fake/{provider_payment_id}",
+        "client_payload": {
+            "mode": "fake_redirect",
+            "payment_reference": provider_payment_id,
+        },
+        "safe_metadata": {
+            "payment_id": payment_id,
+            "raw_status": _payment_status_to_fake_raw_status(status),
+            "provider_mode": "fake",
+        },
+        "failure_code": failure_code,
+        "failure_message": failure_message,
+    }
+
+
+def _build_payment_webhook_event(
+    *,
+    object_id: ObjectId,
+    provider_event_id: str,
+    event_type: str,
+    payment_id: str | None,
+    order_id: str | None,
+    refund_id: str | None,
+    payload_snapshot: dict[str, object],
+    created_at: datetime,
+) -> dict[str, object]:
+    return {
+        "_id": object_id,
+        "provider": "fake",
+        "provider_event_id": provider_event_id,
+        "event_type": event_type,
+        "signature_verified": True,
+        "payload_hash": f"demo-{provider_event_id}-hash",
+        "payload_snapshot": payload_snapshot,
+        "processing_status": PaymentWebhookProcessingStatuses.PROCESSED,
+        "processed_at": created_at,
+        "error_message": None,
+        "payment_id": payment_id,
+        "order_id": order_id,
+        "refund_id": refund_id,
+        "created_at": created_at,
+        "updated_at": created_at,
+    }
+
+
+def _build_payment_audit_event(
+    *,
+    object_id: ObjectId,
+    action: str,
+    actor_type: str,
+    payment_id: str | None,
+    order_id: str | None,
+    refund_id: str | None,
+    provider: str | None,
+    old_status: str | None,
+    new_status: str | None,
+    reason: str | None,
+    safe_context: dict[str, object] | None,
+    created_at: datetime,
+    actor_id: str | None = None,
+) -> dict[str, object]:
+    return {
+        "_id": object_id,
+        "action": action,
+        "actor_type": actor_type,
+        "actor_id": actor_id,
+        "payment_id": payment_id,
+        "order_id": order_id,
+        "refund_id": refund_id,
+        "webhook_event_id": None,
+        "provider": provider,
+        "old_status": old_status,
+        "new_status": new_status,
+        "reason": reason,
+        "safe_context": safe_context,
+        "created_at": created_at,
+    }
+
+
+def _payment_status_to_fake_raw_status(status: str) -> str:
+    return {
+        PaymentStatuses.CREATED: "created",
+        PaymentStatuses.PENDING: "authorized",
+        PaymentStatuses.REQUIRES_ACTION: "action_required",
+        PaymentStatuses.SUCCEEDED: "paid",
+        PaymentStatuses.FAILED: "declined",
+        PaymentStatuses.CANCELLED: "voided",
+        PaymentStatuses.EXPIRED: "expired",
+        PaymentStatuses.REFUNDED: "refunded",
+        PaymentStatuses.PARTIALLY_REFUNDED: "partially_refunded",
+    }[status]
 
 
 def _build_local_datetime(
@@ -1206,12 +1836,16 @@ def _build_local_datetime(
     ).astimezone(timezone.utc)
 
 
-def _build_purchase_time(
+def _build_order_created_time(
     *,
     reference_utc: datetime,
     session_start: datetime,
     purchase_days_before: int,
+    created_minutes_from_now: int | None,
 ) -> datetime:
+    if created_minutes_from_now is not None:
+        return reference_utc + timedelta(minutes=created_minutes_from_now)
+
     candidate = session_start - timedelta(days=purchase_days_before, hours=3)
     latest_past_time = reference_utc - timedelta(hours=6)
     if candidate > latest_past_time:
@@ -1290,7 +1924,7 @@ def _validate_tickets(
     rows_count: int,
     seats_per_row: int,
 ) -> None:
-    purchased_seats_by_session: dict[str, set[tuple[int, int]]] = defaultdict(set)
+    blocking_seats_by_session: dict[str, set[tuple[int, int]]] = defaultdict(set)
 
     for ticket in tickets:
         if ticket.session_id not in session_by_id:
@@ -1302,12 +1936,12 @@ def _validate_tickets(
         if ticket.seat_row > rows_count or ticket.seat_number > seats_per_row:
             raise ValueError(f"Ticket {ticket.id} uses a seat outside the configured hall bounds.")
 
-        if ticket.status == TicketStatuses.PURCHASED:
+        if ticket.status in TICKET_BLOCKING_STATUS_VALUES:
             seat = (ticket.seat_row, ticket.seat_number)
-            occupied = purchased_seats_by_session[ticket.session_id]
+            occupied = blocking_seats_by_session[ticket.session_id]
             if seat in occupied:
                 raise ValueError(
-                    f"Demo tickets contain a duplicate purchased seat for session {ticket.session_id}."
+                    f"Demo tickets contain a duplicate blocking seat for session {ticket.session_id}."
                 )
             occupied.add(seat)
 
@@ -1321,12 +1955,104 @@ def _validate_orders(*, orders: list[OrderRead], tickets: list[TicketRead]) -> N
 
     for order in orders:
         aggregate = build_order_aggregate_snapshot(tickets_by_order[order.id])
-        if order.status != aggregate.status:
+        is_payment_release_override = (
+            order.status in {OrderStatuses.PAYMENT_FAILED, OrderStatuses.PAYMENT_CANCELLED}
+            and aggregate.status in {OrderStatuses.CANCELLED, OrderStatuses.EXPIRED}
+        )
+        if order.status != aggregate.status and not is_payment_release_override:
             raise ValueError(f"Order {order.id} has an inconsistent stored status.")
         if order.tickets_count != aggregate.tickets_count:
             raise ValueError(f"Order {order.id} has an inconsistent tickets_count.")
         if float(order.total_price) != float(aggregate.total_price):
             raise ValueError(f"Order {order.id} has an inconsistent total_price.")
+
+
+def _validate_payments(
+    *,
+    payments: list[PaymentRead],
+    payment_attempts: list[PaymentAttemptRead],
+    refunds: list[RefundRead],
+    payment_webhook_events: list[PaymentWebhookEventRead],
+    payment_audit_events: list[PaymentAuditEventRead],
+    order_by_id: dict[str, OrderRead],
+    user_by_id: dict[str, UserRead],
+) -> None:
+    payment_by_id = {payment.id: payment for payment in payments}
+    attempts_by_payment: dict[str, list[PaymentAttemptRead]] = defaultdict(list)
+    refunds_by_payment: dict[str, list[RefundRead]] = defaultdict(list)
+
+    if len(payment_attempts) != len({attempt.id for attempt in payment_attempts}):
+        raise ValueError("Demo seed data contains duplicate payment attempt identifiers.")
+    if len(refunds) != len({refund.id for refund in refunds}):
+        raise ValueError("Demo seed data contains duplicate refund identifiers.")
+    if len(payment_webhook_events) != len({event.id for event in payment_webhook_events}):
+        raise ValueError("Demo seed data contains duplicate webhook event identifiers.")
+    if len(payment_audit_events) != len({event.id for event in payment_audit_events}):
+        raise ValueError("Demo seed data contains duplicate payment audit identifiers.")
+
+    for payment in payments:
+        order = order_by_id.get(payment.order_id)
+        if order is None:
+            raise ValueError(f"Payment {payment.id} references a missing order.")
+        if payment.user_id not in user_by_id:
+            raise ValueError(f"Payment {payment.id} references a missing user.")
+        if payment.user_id != order.user_id:
+            raise ValueError(f"Payment {payment.id} user does not match its order.")
+        if payment.amount_minor != amount_to_minor_units(order.total_price):
+            raise ValueError(f"Payment {payment.id} amount does not match its order total.")
+
+    for attempt in payment_attempts:
+        payment = payment_by_id.get(attempt.payment_id)
+        if payment is None:
+            raise ValueError(f"Payment attempt {attempt.id} references a missing payment.")
+        if attempt.order_id != payment.order_id:
+            raise ValueError(f"Payment attempt {attempt.id} order does not match its payment.")
+        if attempt.provider != payment.provider:
+            raise ValueError(f"Payment attempt {attempt.id} provider does not match its payment.")
+        attempts_by_payment[payment.id].append(attempt)
+
+    for payment in payments:
+        if payment.id not in attempts_by_payment:
+            raise ValueError(f"Payment {payment.id} must include at least one demo attempt.")
+
+    for refund in refunds:
+        payment = payment_by_id.get(refund.payment_id)
+        if payment is None:
+            raise ValueError(f"Refund {refund.id} references a missing payment.")
+        if refund.order_id != payment.order_id or refund.user_id != payment.user_id:
+            raise ValueError(f"Refund {refund.id} does not match its payment context.")
+        if refund.provider != payment.provider:
+            raise ValueError(f"Refund {refund.id} provider does not match its payment.")
+        refunds_by_payment[payment.id].append(refund)
+
+    for payment_id, payment_refunds in refunds_by_payment.items():
+        refunded_amount = sum(
+            refund.amount_minor
+            for refund in payment_refunds
+            if refund.status == RefundStatuses.SUCCEEDED
+        )
+        payment = payment_by_id[payment_id]
+        if refunded_amount <= 0:
+            continue
+        expected_status = (
+            PaymentStatuses.REFUNDED
+            if refunded_amount >= payment.amount_minor
+            else PaymentStatuses.PARTIALLY_REFUNDED
+        )
+        if payment.status != expected_status:
+            raise ValueError(f"Payment {payment.id} has an inconsistent refund aggregate status.")
+
+    for event in payment_webhook_events:
+        if event.payment_id is not None and event.payment_id not in payment_by_id:
+            raise ValueError(f"Webhook event {event.id} references a missing payment.")
+        if event.order_id is not None and event.order_id not in order_by_id:
+            raise ValueError(f"Webhook event {event.id} references a missing order.")
+
+    for event in payment_audit_events:
+        if event.payment_id is not None and event.payment_id not in payment_by_id:
+            raise ValueError(f"Payment audit event {event.id} references a missing payment.")
+        if event.order_id is not None and event.order_id not in order_by_id:
+            raise ValueError(f"Payment audit event {event.id} references a missing order.")
 
 
 def _validate_session_availability(
@@ -1335,13 +2061,13 @@ def _validate_session_availability(
     tickets: list[TicketRead],
     total_seats: int,
 ) -> None:
-    purchased_counts: dict[str, int] = defaultdict(int)
+    blocking_counts: dict[str, int] = defaultdict(int)
     for ticket in tickets:
-        if ticket.status == TicketStatuses.PURCHASED:
-            purchased_counts[ticket.session_id] += 1
+        if ticket.status in TICKET_BLOCKING_STATUS_VALUES:
+            blocking_counts[ticket.session_id] += 1
 
     for session in sessions:
-        expected_available = total_seats - purchased_counts.get(session.id, 0)
+        expected_available = total_seats - blocking_counts.get(session.id, 0)
         if session.available_seats != expected_available:
             raise ValueError(f"Session {session.id} has an inconsistent available seat counter.")
 
@@ -1368,6 +2094,26 @@ def _as_user_read(document: dict[str, object]) -> UserRead:
     return UserRead.model_validate(read_document)
 
 
+def _as_payment_read(document: dict[str, object]) -> PaymentRead:
+    return PaymentRead.model_validate(_to_read_document(document))
+
+
+def _as_payment_attempt_read(document: dict[str, object]) -> PaymentAttemptRead:
+    return PaymentAttemptRead.model_validate(_to_read_document(document))
+
+
+def _as_refund_read(document: dict[str, object]) -> RefundRead:
+    return RefundRead.model_validate(_to_read_document(document))
+
+
+def _as_payment_webhook_event_read(document: dict[str, object]) -> PaymentWebhookEventRead:
+    return PaymentWebhookEventRead.model_validate(_to_read_document(document))
+
+
+def _as_payment_audit_event_read(document: dict[str, object]) -> PaymentAuditEventRead:
+    return PaymentAuditEventRead.model_validate(_to_read_document(document))
+
+
 def _to_read_document(document: dict[str, object]) -> dict[str, object]:
     return {
         **{key: value for key, value in document.items() if key != "_id"},
@@ -1377,3 +2123,7 @@ def _to_read_document(document: dict[str, object]) -> dict[str, object]:
 
 def _object_id(value: str) -> ObjectId:
     return ObjectId(value)
+
+
+def _demo_object_id(*, series: int, index: int) -> ObjectId:
+    return ObjectId(f"680000000000000000000{series:x}{index:02x}")

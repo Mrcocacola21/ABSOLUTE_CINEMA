@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorClientSession
 
 from app.commands.order_aggregate_refresh import refresh_order_aggregate
+from app.commands.reservation_expiry import expire_stale_reservations_for_session
 from app.core.constants import Roles, SessionStatuses, TicketStatuses
 from app.core.exceptions import (
     AuthorizationException,
@@ -77,6 +78,21 @@ class TicketCancellationCommand:
         if session_document is None:
             raise NotFoundException("Session for this ticket was not found.")
 
+        if (
+            ticket_document["status"] == TicketStatuses.RESERVED
+            and ticket_document.get("expires_at") is not None
+            and ticket_document["expires_at"] <= now
+        ):
+            await expire_stale_reservations_for_session(
+                str(ticket_document["session_id"]),
+                now=now,
+                order_repository=self.order_repository,
+                ticket_repository=self.ticket_repository,
+                session_repository=self.session_repository,
+                db_session=db_session,
+            )
+            raise ConflictException("Ticket reservation has already expired.")
+
         cancellation_blocker = self._get_ticket_cancellation_blocker(
             ticket_document=ticket_document,
             session_document=session_document,
@@ -90,7 +106,7 @@ class TicketCancellationCommand:
             status=TicketStatuses.CANCELLED,
             updated_at=now,
             cancelled_at=now,
-            current_status=TicketStatuses.PURCHASED,
+            current_status=str(ticket_document["status"]),
             db_session=db_session,
         )
         if updated_ticket is None:
@@ -125,8 +141,10 @@ class TicketCancellationCommand:
     ) -> str | None:
         if ticket_document["status"] == TicketStatuses.CANCELLED:
             return "Ticket has already been cancelled."
-        if ticket_document["status"] != TicketStatuses.PURCHASED:
-            return "Only purchased tickets can be cancelled."
+        if ticket_document["status"] == TicketStatuses.EXPIRED:
+            return "Ticket reservation has already expired."
+        if ticket_document["status"] not in {TicketStatuses.RESERVED, TicketStatuses.PURCHASED}:
+            return "Only reserved or purchased tickets can be cancelled."
         if ticket_document.get("checked_in_at") is not None:
             return "Checked-in tickets cannot be cancelled."
         if session_document["status"] == SessionStatuses.COMPLETED:

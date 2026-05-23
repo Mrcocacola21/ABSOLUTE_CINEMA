@@ -1,12 +1,13 @@
-"""Command handling multi-ticket order purchase workflow."""
+"""Command handling multi-ticket pending order reservation workflow."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TypedDict
 
 from bson import ObjectId
 
+from app.commands.reservation_expiry import expire_stale_reservations_for_session
 from app.core.config import get_settings
 from app.core.constants import OrderStatuses, SessionStatuses, TicketStatuses
 from app.core.exceptions import (
@@ -17,8 +18,9 @@ from app.core.exceptions import (
 )
 from app.core.logging import get_logger
 from app.db.transactions import run_transaction_with_retry
-from app.observers.events import EventPublisher, new_ticket_purchased_event
+from app.observers.events import EventPublisher, new_ticket_reserved_event
 from app.repositories.orders import OrderRepository
+from app.repositories.payments import PaymentRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.tickets import TicketRepository
 from app.schemas.order import OrderPurchaseRequest
@@ -28,14 +30,14 @@ logger = get_logger(__name__)
 
 
 class OrderPurchaseResult(TypedDict):
-    """Return value for a successful order purchase command."""
+    """Return value for a successful pending order reservation command."""
 
     order: dict[str, object]
     tickets: list[dict[str, object]]
 
 
 class OrderPurchaseCommand:
-    """Encapsulate the multi-ticket order purchasing use case."""
+    """Encapsulate the multi-ticket pending reservation use case."""
 
     def __init__(
         self,
@@ -43,14 +45,16 @@ class OrderPurchaseCommand:
         ticket_repository: TicketRepository,
         order_repository: OrderRepository,
         event_publisher: EventPublisher,
+        payment_repository: PaymentRepository | None = None,
     ) -> None:
         self.session_repository = session_repository
         self.ticket_repository = ticket_repository
         self.order_repository = order_repository
         self.event_publisher = event_publisher
+        self.payment_repository = payment_repository
 
     async def execute(self, payload: OrderPurchaseRequest, current_user: UserRead) -> OrderPurchaseResult:
-        """Purchase multiple seats for one session as one order."""
+        """Reserve multiple seats for one session as a pending order."""
         settings = get_settings()
         self._validate_seat_coordinates(
             payload=payload,
@@ -59,12 +63,22 @@ class OrderPurchaseCommand:
         )
 
         now = datetime.now(tz=timezone.utc)
+        expires_at = now + timedelta(minutes=settings.reservation_hold_minutes)
         await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
 
         try:
             order_id = await self.order_repository.build_order_id()
 
             async def purchase_transaction(db_session) -> OrderPurchaseResult:
+                await expire_stale_reservations_for_session(
+                    payload.session_id,
+                    now=now,
+                    order_repository=self.order_repository,
+                    ticket_repository=self.ticket_repository,
+                    session_repository=self.session_repository,
+                    payment_repository=self.payment_repository,
+                    db_session=db_session,
+                )
                 session = await self.session_repository.get_by_id(payload.session_id, db_session=db_session)
                 if session is None:
                     raise NotFoundException("Session was not found.")
@@ -102,9 +116,10 @@ class OrderPurchaseCommand:
                         "_id": ObjectId(order_id),
                         "user_id": current_user.id,
                         "session_id": payload.session_id,
-                        "status": OrderStatuses.COMPLETED,
+                        "status": OrderStatuses.PENDING_PAYMENT,
                         "total_price": session["price"] * len(payload.seats),
                         "tickets_count": len(payload.seats),
+                        "expires_at": expires_at,
                         "created_at": now,
                         "updated_at": None,
                     },
@@ -122,8 +137,10 @@ class OrderPurchaseCommand:
                                 "seat_row": seat.seat_row,
                                 "seat_number": seat.seat_number,
                                 "price": session["price"],
-                                "status": TicketStatuses.PURCHASED,
-                                "purchased_at": now,
+                                "status": TicketStatuses.RESERVED,
+                                "reserved_at": now,
+                                "expires_at": expires_at,
+                                "purchased_at": None,
                                 "updated_at": None,
                                 "cancelled_at": None,
                                 "checked_in_at": None,
@@ -146,12 +163,12 @@ class OrderPurchaseCommand:
         except Exception as exc:
             if isinstance(exc, (ConflictException, ValidationException, NotFoundException, DatabaseException)):
                 raise
-            raise DatabaseException("Unable to complete the ticket purchase order.") from exc
+            raise DatabaseException("Unable to create the pending ticket reservation.") from exc
 
         for ticket in result["tickets"]:
             try:
                 await self.event_publisher.publish(
-                    new_ticket_purchased_event(
+                    new_ticket_reserved_event(
                         {
                             "ticket_id": ticket["id"],
                             "order_id": order_id,
@@ -161,7 +178,7 @@ class OrderPurchaseCommand:
                     )
                 )
             except Exception as exc:  # pragma: no cover - defensive logging path
-                logger.exception("Ticket purchase event publication failed", exc_info=exc)
+                logger.exception("Ticket reservation event publication failed", exc_info=exc)
 
         return result
 
@@ -196,13 +213,13 @@ class OrderPurchaseCommand:
         requested_tickets_count: int,
     ) -> str | None:
         if session["status"] == SessionStatuses.CANCELLED:
-            return "Cancelled sessions cannot be purchased."
+            return "Cancelled sessions cannot be reserved."
         if session["status"] == SessionStatuses.COMPLETED:
-            return "Completed sessions cannot be purchased."
+            return "Completed sessions cannot be reserved."
         if session["status"] != SessionStatuses.SCHEDULED:
-            return "Only scheduled sessions can be purchased."
+            return "Only scheduled sessions can be reserved."
         if session["start_time"] <= now:
-            return "Past sessions cannot be purchased."
+            return "Past sessions cannot be reserved."
         if session["available_seats"] <= 0:
             return "There are no available seats left for this session."
         if session["available_seats"] < requested_tickets_count:
@@ -211,5 +228,5 @@ class OrderPurchaseCommand:
 
     def _seat_conflict_message(self, requested_tickets_count: int) -> str:
         if requested_tickets_count == 1:
-            return "Selected seat has already been purchased."
-        return "One or more selected seats have already been purchased."
+            return "Selected seat is already reserved or purchased."
+        return "One or more selected seats are already reserved or purchased."

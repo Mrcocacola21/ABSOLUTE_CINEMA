@@ -22,6 +22,7 @@ def test_openapi_metadata_includes_demo_ready_tags_and_contact() -> None:
         "schedule",
         "sessions",
         "orders",
+        "payments",
         "tickets",
         "admin",
     ]
@@ -54,6 +55,10 @@ def test_openapi_marks_protected_routes_and_error_contracts() -> None:
     admin_attendance = spec["paths"]["/api/v1/admin/attendance"]["get"]
     admin_tickets = spec["paths"]["/api/v1/admin/tickets"]["get"]
     admin_users = spec["paths"]["/api/v1/admin/users"]["get"]
+    admin_payments = spec["paths"]["/api/v1/admin/payments"]["get"]
+    admin_payment_report = spec["paths"]["/api/v1/admin/payments/report"]["get"]
+    admin_payment_details = spec["paths"]["/api/v1/admin/payments/{payment_id}"]["get"]
+    admin_payment_refund = spec["paths"]["/api/v1/admin/payments/{payment_id}/refunds"]["post"]
 
     assert users_me["security"] == [{"OAuth2PasswordBearer": []}]
     assert "401" in users_me["responses"]
@@ -67,6 +72,13 @@ def test_openapi_marks_protected_routes_and_error_contracts() -> None:
     assert "checked-in" in admin_attendance["description"]
     assert "newest purchase first" in admin_tickets["description"]
     assert "Password hashes" in admin_users["description"]
+    assert admin_payments["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "remaining refundable amount" in admin_payments["description"]
+    assert admin_payment_report["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "Gross revenue" in admin_payment_report["description"]
+    assert "net revenue" in admin_payment_report["description"]
+    assert "webhook history" in admin_payment_details["description"]
+    assert "financial refund" in admin_payment_refund["description"]
 
     assert public_movies["summary"] == "Browse movies"
     assert "422" in public_movies["responses"]
@@ -86,6 +98,13 @@ def test_openapi_describes_demo_auth_booking_and_profile_flows() -> None:
     ticket_purchase = spec["paths"]["/api/v1/tickets/purchase"]["post"]
     ticket_cancel = spec["paths"]["/api/v1/tickets/{ticket_id}/cancel"]["patch"]
     order_purchase = spec["paths"]["/api/v1/orders/purchase"]["post"]
+    payment_initiation = spec["paths"]["/api/v1/orders/{order_id}/payments"]["post"]
+    payment_retry = spec["paths"]["/api/v1/orders/{order_id}/payments/retry"]["post"]
+    payment_details = spec["paths"]["/api/v1/payments/{payment_id}"]["get"]
+    payment_refund_create = spec["paths"]["/api/v1/payments/{payment_id}/refunds"]["post"]
+    payment_refunds = spec["paths"]["/api/v1/payments/{payment_id}/refunds"]["get"]
+    order_refunds = spec["paths"]["/api/v1/orders/{order_id}/refunds"]["get"]
+    payment_webhook = spec["paths"]["/api/v1/payments/webhook"]["post"]
     my_orders = spec["paths"]["/api/v1/users/me/orders"]["get"]
 
     assert register["summary"] == "Register a new user"
@@ -105,14 +124,34 @@ def test_openapi_describes_demo_auth_booking_and_profile_flows() -> None:
     assert "before the linked session starts" in ticket_cancel["description"]
     assert order_purchase["security"] == [{"OAuth2PasswordBearer": []}]
     assert "one or more specific seats" in order_purchase["description"]
+    assert payment_initiation["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "provider-neutral payment" in payment_initiation["description"]
+    assert payment_retry["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "seat reservation is still active" in payment_retry["description"]
+    assert payment_details["security"] == [{"OAuth2PasswordBearer": []}]
+    assert payment_refund_create["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "financial refund" in payment_refund_create["description"]
+    assert payment_refunds["security"] == [{"OAuth2PasswordBearer": []}]
+    assert order_refunds["security"] == [{"OAuth2PasswordBearer": []}]
+    assert "signature" in payment_webhook["description"]
+    assert "security" not in payment_webhook
     assert my_orders["security"] == [{"OAuth2PasswordBearer": []}]
 
     ticket_schema = spec["components"]["schemas"]["TicketPurchaseRequest"]
     order_schema = spec["components"]["schemas"]["OrderPurchaseRequest"]
+    payment_schema = spec["components"]["schemas"]["PaymentInitiationRequest"]
+    webhook_schema = spec["components"]["schemas"]["PaymentWebhookProcessingRead"]
+    refund_schema = spec["components"]["schemas"]["RefundRead"]
     assert ticket_schema["additionalProperties"] is False
     assert ticket_schema["properties"]["seat_row"]["description"].startswith("One-based seat row")
     assert order_schema["additionalProperties"] is False
     assert "Unique seat coordinates" in order_schema["properties"]["seats"]["description"]
+    assert payment_schema["additionalProperties"] is False
+    assert "return_url" in payment_schema["properties"]
+    assert "duplicate" in webhook_schema["properties"]
+    assert "refund_id" in webhook_schema["properties"]
+    assert "requested_by" in refund_schema["properties"]
+    assert "response_payload_snapshot" in refund_schema["properties"]
 
 
 def test_openapi_documents_admin_movie_session_and_reporting_schemas() -> None:
@@ -131,6 +170,14 @@ def test_openapi_documents_admin_movie_session_and_reporting_schemas() -> None:
         "UserRead",
         "AttendanceReportRead",
         "AttendanceSessionDetailsRead",
+        "AdminPaymentListItemRead",
+        "AdminPaymentDetailsRead",
+        "PaymentReportRead",
+        "PaymentReportSummaryRead",
+        "PaymentReportSessionAggregateRead",
+        "PaymentReportMovieAggregateRead",
+        "PaymentWebhookEventRead",
+        "RefundRead",
     ]:
         assert schema_name in schemas
 
@@ -149,6 +196,14 @@ def test_openapi_documents_admin_movie_session_and_reporting_schemas() -> None:
     assert "total_cancelled_tickets" in attendance_report["properties"]
     assert "cancelled_tickets" in attendance_details["properties"]
     assert "unchecked_active_tickets_count" in attendance_details["properties"]
+    assert "remaining_refundable_amount_minor" in schemas["AdminPaymentListItemRead"]["properties"]
+    assert "webhook_events" in schemas["AdminPaymentDetailsRead"]["properties"]
+    assert "summary" in schemas["PaymentReportRead"]["properties"]
+    assert "gross_revenue_minor" in schemas["PaymentReportSummaryRead"]["properties"]
+    assert "refunded_amount_minor" in schemas["PaymentReportSessionAggregateRead"]["properties"]
+    assert "paid_sessions_count" in schemas["PaymentReportMovieAggregateRead"]["properties"]
+    assert "payment_id" in schemas["PaymentWebhookEventRead"]["properties"]
+    assert "refund_id" in schemas["PaymentWebhookEventRead"]["properties"]
 
 
 def test_openapi_session_examples_use_future_demo_dates() -> None:

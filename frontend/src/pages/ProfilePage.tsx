@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import "./ProfilePage.css";
 
@@ -10,6 +11,7 @@ import { deactivateCurrentUserRequest, updateCurrentUserRequest } from "@/api/us
 import { useAuth } from "@/features/auth/useAuth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { getLocalizedText } from "@/shared/localization";
+import { isPendingPaymentOrder } from "@/shared/payment";
 import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
@@ -48,6 +50,34 @@ function isTicketUsable(ticket: OrderTicket): boolean {
 
 function getOrderUsableTickets(order: Order): OrderTicket[] {
   return order.tickets.filter(isTicketUsable);
+}
+
+function getOrderTicketTimelineAt(ticket: OrderTicket, fallback: string): string {
+  return ticket.purchased_at ?? ticket.reserved_at ?? ticket.expires_at ?? fallback;
+}
+
+function formatTicketTimeline(
+  ticket: OrderTicket,
+  fallback: string,
+  t: TFunction,
+  language: string,
+): string {
+  const baseDate = getOrderTicketTimelineAt(ticket, fallback);
+  const baseText = ticket.purchased_at
+    ? t("profile.orders.purchasedAt", { date: formatDateTime(baseDate, language) })
+    : ticket.status === "expired"
+      ? t("checkout.labels.expiredAt", { date: formatDateTime(baseDate, language) })
+      : t("checkout.labels.reservedAt", { date: formatDateTime(baseDate, language) });
+  const extraParts = [
+    ticket.cancelled_at
+      ? t("profile.orders.cancelledAt", { date: formatDateTime(ticket.cancelled_at, language) })
+      : "",
+    ticket.checked_in_at
+      ? t("profile.orders.checkedInAt", { date: formatDateTime(ticket.checked_in_at, language) })
+      : "",
+  ].filter(Boolean);
+
+  return [baseText, ...extraParts].join(" | ");
 }
 
 export function ProfilePage() {
@@ -546,8 +576,11 @@ export function ProfilePage() {
                 const posterSource = resolvePosterSource(order);
                 const ticketsToShow = activeOrdersTab === "active" ? getOrderUsableTickets(order) : order.tickets;
                 const usableTicketsInOrder = getOrderUsableTickets(order).length;
+                const isPendingCheckout = isPendingPaymentOrder(order);
                 const entrySummary =
-                  usableTicketsInOrder > 0
+                  isPendingCheckout
+                    ? t("checkout.status.reserved.title")
+                    : usableTicketsInOrder > 0
                     ? t("profile.orders.usableSummary", { count: usableTicketsInOrder })
                     : order.checked_in_tickets_count > 0
                       ? t("profile.orders.usedSummary", { count: order.checked_in_tickets_count })
@@ -596,7 +629,15 @@ export function ProfilePage() {
                           <strong>{formatCurrency(order.total_price, i18n.language)}</strong>
                         </div>
 
-                        <Link to={`/me/orders/${order.id}`} className="button profile-order-card__cta">
+                        {isPendingCheckout ? (
+                          <Link to={`/checkout/${order.id}`} className="button profile-order-card__cta">
+                            {t("checkout.actions.continueCheckout")}
+                          </Link>
+                        ) : null}
+                        <Link
+                          to={`/me/orders/${order.id}`}
+                          className={`${isPendingCheckout ? "button--ghost" : "button"} profile-order-card__cta`}
+                        >
                           {t("common.actions.viewDetails")}
                         </Link>
                         <Link to={`/schedule/${order.session_id}`} className="button--ghost profile-order-card__cta">
@@ -606,26 +647,16 @@ export function ProfilePage() {
                     </div>
 
                     <div className="order-history__tickets">
-                      {ticketsToShow.map((ticket) => (
-                        <div key={ticket.id} className="order-history__ticket profile-order-ticket">
+                      {ticketsToShow.map((ticket) => {
+                        const ticketTimeline = formatTicketTimeline(ticket, order.created_at, t, i18n.language);
+                        return (
+                          <div key={ticket.id} className="order-history__ticket profile-order-ticket">
                           <div className="order-history__ticket-copy">
                             <strong>
                               {t("common.labels.seat")} {ticket.seat_row}-{ticket.seat_number}
                             </strong>
                             <p className="muted">
-                              {t("profile.orders.purchasedAt", {
-                                date: formatDateTime(ticket.purchased_at, i18n.language),
-                              })}
-                              {ticket.cancelled_at
-                                ? ` | ${t("profile.orders.cancelledAt", {
-                                    date: formatDateTime(ticket.cancelled_at, i18n.language),
-                                  })}`
-                                : ""}
-                              {ticket.checked_in_at
-                                ? ` | ${t("profile.orders.checkedInAt", {
-                                    date: formatDateTime(ticket.checked_in_at, i18n.language),
-                                  })}`
-                                : ""}
+                              {ticketTimeline}
                             </p>
                           </div>
 
@@ -650,8 +681,9 @@ export function ProfilePage() {
                               </button>
                             ) : null}
                           </div>
-                        </div>
-                      ))}
+                          </div>
+                        );
+                      })}
                     </div>
                   </article>
                 );

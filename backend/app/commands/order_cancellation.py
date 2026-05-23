@@ -8,6 +8,7 @@ from typing import TypedDict
 from motor.motor_asyncio import AsyncIOMotorClientSession
 
 from app.commands.order_aggregate_refresh import refresh_order_aggregate
+from app.commands.reservation_expiry import expire_stale_reservations_for_session
 from app.core.constants import Roles, SessionStatuses, TicketStatuses
 from app.core.exceptions import AuthorizationException, ConflictException, DatabaseException, NotFoundException
 from app.db.transactions import run_transaction_with_retry
@@ -77,6 +78,18 @@ class OrderCancellationCommand:
         if session_document is None:
             raise NotFoundException("Session for this order was not found.")
 
+        await expire_stale_reservations_for_session(
+            str(order_document["session_id"]),
+            now=now,
+            order_repository=self.order_repository,
+            ticket_repository=self.ticket_repository,
+            session_repository=self.session_repository,
+            db_session=db_session,
+        )
+        order_document = await self.order_repository.get_by_id(order_id, db_session=db_session)
+        if order_document is None:
+            raise NotFoundException("Order was not found.")
+
         ticket_documents = await self.ticket_repository.list_by_order(order_id, db_session=db_session)
         if not ticket_documents:
             raise DatabaseException("Order cancellation could not find any tickets to update.")
@@ -84,7 +97,7 @@ class OrderCancellationCommand:
         active_tickets = [
             ticket
             for ticket in ticket_documents
-            if ticket["status"] == TicketStatuses.PURCHASED
+            if ticket["status"] in {TicketStatuses.RESERVED, TicketStatuses.PURCHASED}
         ]
         cancellation_blocker = self._get_order_cancellation_blocker(
             active_tickets=active_tickets,
@@ -95,14 +108,16 @@ class OrderCancellationCommand:
         if cancellation_blocker is not None:
             raise ConflictException(cancellation_blocker)
 
-        cancelled_count = await self.ticket_repository.update_many_status_by_order(
-            order_id,
-            status=TicketStatuses.CANCELLED,
-            updated_at=now,
-            cancelled_at=now,
-            current_status=TicketStatuses.PURCHASED,
-            db_session=db_session,
-        )
+        cancelled_count = 0
+        for current_status in (TicketStatuses.RESERVED, TicketStatuses.PURCHASED):
+            cancelled_count += await self.ticket_repository.update_many_status_by_order(
+                order_id,
+                status=TicketStatuses.CANCELLED,
+                updated_at=now,
+                cancelled_at=now,
+                current_status=current_status,
+                db_session=db_session,
+            )
         if cancelled_count != len(active_tickets):
             raise ConflictException("Order can no longer be cancelled.")
 
@@ -137,7 +152,7 @@ class OrderCancellationCommand:
         now: datetime,
     ) -> str | None:
         if active_tickets_count <= 0:
-            return "Order has already been cancelled."
+            return "Order has already been cancelled or released."
         if any(ticket.get("checked_in_at") is not None for ticket in active_tickets):
             return "Orders with checked-in tickets cannot be cancelled."
         if session_document["status"] == SessionStatuses.COMPLETED:

@@ -26,6 +26,11 @@ from app.seeds.demo_dataset import (
 )
 
 DOMAIN_COLLECTION_ORDER = (
+    DatabaseCollections.REFUNDS,
+    DatabaseCollections.PAYMENT_AUDIT_EVENTS,
+    DatabaseCollections.PAYMENT_WEBHOOK_EVENTS,
+    DatabaseCollections.PAYMENT_ATTEMPTS,
+    DatabaseCollections.PAYMENTS,
     DatabaseCollections.TICKETS,
     DatabaseCollections.ORDERS,
     DatabaseCollections.SESSIONS,
@@ -38,6 +43,11 @@ INSERT_COLLECTION_ORDER = (
     DatabaseCollections.SESSIONS,
     DatabaseCollections.ORDERS,
     DatabaseCollections.TICKETS,
+    DatabaseCollections.PAYMENTS,
+    DatabaseCollections.PAYMENT_ATTEMPTS,
+    DatabaseCollections.REFUNDS,
+    DatabaseCollections.PAYMENT_WEBHOOK_EVENTS,
+    DatabaseCollections.PAYMENT_AUDIT_EVENTS,
 )
 
 logger = get_logger(__name__)
@@ -111,6 +121,11 @@ async def _apply_seed_dataset(
         DatabaseCollections.SESSIONS: dataset.sessions,
         DatabaseCollections.ORDERS: dataset.orders,
         DatabaseCollections.TICKETS: dataset.tickets,
+        DatabaseCollections.PAYMENTS: dataset.payments,
+        DatabaseCollections.PAYMENT_ATTEMPTS: dataset.payment_attempts,
+        DatabaseCollections.REFUNDS: dataset.refunds,
+        DatabaseCollections.PAYMENT_WEBHOOK_EVENTS: dataset.payment_webhook_events,
+        DatabaseCollections.PAYMENT_AUDIT_EVENTS: dataset.payment_audit_events,
     }
     for collection_name in INSERT_COLLECTION_ORDER:
         documents = documents_by_collection[collection_name]
@@ -156,12 +171,8 @@ def _log_summary(summary: DemoSeedSummary) -> None:
         str(summary.reset_applied).lower(),
     )
     logger.info(
-        "Counts: users=%s, movies=%s, sessions=%s, orders=%s, tickets=%s",
-        summary.counts["users"],
-        summary.counts["movies"],
-        summary.counts["sessions"],
-        summary.counts["orders"],
-        summary.counts["tickets"],
+        "Counts: %s",
+        ", ".join(f"{name}={count}" for name, count in summary.counts.items()),
     )
     logger.info("Movie statuses: %s", summary.movie_status_counts)
     logger.info("Session statuses: %s", summary.session_status_counts)

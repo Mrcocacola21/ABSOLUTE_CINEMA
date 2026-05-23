@@ -5,7 +5,18 @@ from __future__ import annotations
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.config import get_settings
-from app.core.constants import MOVIE_STATUS_VALUES, ORDER_STATUS_VALUES, Roles, SessionStatuses, TicketStatuses
+from app.core.constants import (
+    MOVIE_STATUS_VALUES,
+    ORDER_STATUS_VALUES,
+    PAYMENT_ATTEMPT_STATUS_VALUES,
+    PAYMENT_STATUS_VALUES,
+    PAYMENT_WEBHOOK_PROCESSING_STATUS_VALUES,
+    REFUND_STATUS_VALUES,
+    Roles,
+    SessionStatuses,
+    TICKET_STATUS_VALUES,
+    TicketStatuses,
+)
 from app.core.genres import SUPPORTED_GENRE_CODES
 from app.db.collections import DatabaseCollections
 
@@ -249,6 +260,9 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                         "minimum": 1,
                         "maximum": settings.total_seats,
                     },
+                    "expires_at": {
+                        "bsonType": ["date", "null"],
+                    },
                     "created_at": {
                         "bsonType": "date",
                     },
@@ -274,7 +288,6 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                             "seat_number",
                             "price",
                             "status",
-                            "purchased_at",
                         ],
                         "properties": {
                             "order_id": {
@@ -303,10 +316,16 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                                 "minimum": 0.01,
                             },
                             "status": {
-                                "enum": [TicketStatuses.PURCHASED, TicketStatuses.CANCELLED],
+                                "enum": list(TICKET_STATUS_VALUES),
+                            },
+                            "reserved_at": {
+                                "bsonType": ["date", "null"],
+                            },
+                            "expires_at": {
+                                "bsonType": ["date", "null"],
                             },
                             "purchased_at": {
-                                "bsonType": "date",
+                                "bsonType": ["date", "null"],
                             },
                             "updated_at": {
                                 "bsonType": ["date", "null"],
@@ -325,7 +344,18 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                         "$or": [
                             {
                                 "$and": [
+                                    {"$eq": ["$status", TicketStatuses.RESERVED]},
+                                    {"$eq": [{"$ifNull": ["$purchased_at", None]}, None]},
+                                    {"$eq": [{"$ifNull": ["$cancelled_at", None]}, None]},
+                                    {"$eq": [{"$ifNull": ["$checked_in_at", None]}, None]},
+                                    {"$ne": [{"$ifNull": ["$reserved_at", None]}, None]},
+                                    {"$ne": [{"$ifNull": ["$expires_at", None]}, None]},
+                                ]
+                            },
+                            {
+                                "$and": [
                                     {"$eq": ["$status", TicketStatuses.PURCHASED]},
+                                    {"$ne": [{"$ifNull": ["$purchased_at", None]}, None]},
                                     {"$eq": [{"$ifNull": ["$cancelled_at", None]}, None]},
                                 ]
                             },
@@ -336,10 +366,375 @@ COLLECTION_VALIDATORS: dict[str, dict[str, object]] = {
                                     {"$eq": [{"$ifNull": ["$checked_in_at", None]}, None]},
                                 ]
                             },
+                            {
+                                "$and": [
+                                    {"$eq": ["$status", TicketStatuses.EXPIRED]},
+                                    {"$eq": [{"$ifNull": ["$purchased_at", None]}, None]},
+                                    {"$eq": [{"$ifNull": ["$cancelled_at", None]}, None]},
+                                    {"$eq": [{"$ifNull": ["$checked_in_at", None]}, None]},
+                                    {"$ne": [{"$ifNull": ["$expires_at", None]}, None]},
+                                ]
+                            },
                         ]
                     }
                 },
             ]
+        },
+        "validationLevel": "strict",
+        "validationAction": "error",
+    },
+    DatabaseCollections.PAYMENTS: {
+        "validator": {
+            "$jsonSchema": {
+                "bsonType": "object",
+                "required": [
+                    "order_id",
+                    "user_id",
+                    "amount_minor",
+                    "currency",
+                    "status",
+                    "provider",
+                    "idempotency_key",
+                    "created_at",
+                ],
+                "properties": {
+                    "order_id": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                    },
+                    "user_id": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                    },
+                    "amount_minor": {
+                        "bsonType": ["int", "long"],
+                        "minimum": 1,
+                    },
+                    "currency": {
+                        "bsonType": "string",
+                        "pattern": "^[A-Z]{3}$",
+                    },
+                    "status": {
+                        "enum": list(PAYMENT_STATUS_VALUES),
+                    },
+                    "provider": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                    },
+                    "provider_payment_id": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 255,
+                    },
+                    "idempotency_key": {
+                        "bsonType": "string",
+                        "minLength": 8,
+                        "maxLength": 128,
+                    },
+                    "failure_code": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 128,
+                    },
+                    "failure_message": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 1000,
+                    },
+                    "metadata": {
+                        "bsonType": ["object", "null"],
+                    },
+                    "created_at": {
+                        "bsonType": "date",
+                    },
+                    "updated_at": {
+                        "bsonType": ["date", "null"],
+                    },
+                },
+            }
+        },
+        "validationLevel": "strict",
+        "validationAction": "error",
+    },
+    DatabaseCollections.PAYMENT_ATTEMPTS: {
+        "validator": {
+            "$jsonSchema": {
+                "bsonType": "object",
+                "required": [
+                    "payment_id",
+                    "order_id",
+                    "provider",
+                    "status",
+                    "created_at",
+                ],
+                "properties": {
+                    "payment_id": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                    },
+                    "order_id": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                    },
+                    "provider": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                    },
+                    "status": {
+                        "enum": list(PAYMENT_ATTEMPT_STATUS_VALUES),
+                    },
+                    "provider_attempt_id": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 255,
+                    },
+                    "request_payload_snapshot": {
+                        "bsonType": ["object", "null"],
+                    },
+                    "response_payload_snapshot": {
+                        "bsonType": ["object", "null"],
+                    },
+                    "error_code": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 128,
+                    },
+                    "error_message": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 1000,
+                    },
+                    "created_at": {
+                        "bsonType": "date",
+                    },
+                    "updated_at": {
+                        "bsonType": ["date", "null"],
+                    },
+                },
+            }
+        },
+        "validationLevel": "strict",
+        "validationAction": "error",
+    },
+    DatabaseCollections.PAYMENT_WEBHOOK_EVENTS: {
+        "validator": {
+            "$jsonSchema": {
+                "bsonType": "object",
+                "required": [
+                    "provider",
+                    "event_type",
+                    "signature_verified",
+                    "payload_hash",
+                    "processing_status",
+                    "created_at",
+                ],
+                "properties": {
+                    "provider": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                    },
+                    "provider_event_id": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 255,
+                    },
+                    "event_type": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                    },
+                    "signature_verified": {
+                        "bsonType": "bool",
+                    },
+                    "payload_hash": {
+                        "bsonType": "string",
+                        "minLength": 16,
+                        "maxLength": 128,
+                    },
+                    "payload_snapshot": {
+                        "bsonType": ["object", "null"],
+                    },
+                    "processing_status": {
+                        "enum": list(PAYMENT_WEBHOOK_PROCESSING_STATUS_VALUES),
+                    },
+                    "processed_at": {
+                        "bsonType": ["date", "null"],
+                    },
+                    "error_message": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 1000,
+                    },
+                    "payment_id": {
+                        "bsonType": ["string", "null"],
+                        "minLength": 1,
+                    },
+                    "order_id": {
+                        "bsonType": ["string", "null"],
+                        "minLength": 1,
+                    },
+                    "refund_id": {
+                        "bsonType": ["string", "null"],
+                        "minLength": 1,
+                    },
+                    "created_at": {
+                        "bsonType": "date",
+                    },
+                    "updated_at": {
+                        "bsonType": ["date", "null"],
+                    },
+                },
+            }
+        },
+        "validationLevel": "strict",
+        "validationAction": "error",
+    },
+    DatabaseCollections.PAYMENT_AUDIT_EVENTS: {
+        "validator": {
+            "$jsonSchema": {
+                "bsonType": "object",
+                "required": [
+                    "action",
+                    "actor_type",
+                    "created_at",
+                ],
+                "properties": {
+                    "action": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                    },
+                    "actor_type": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                        "maxLength": 32,
+                    },
+                    "actor_id": {
+                        "bsonType": ["string", "null"],
+                        "minLength": 1,
+                        "maxLength": 255,
+                    },
+                    "payment_id": {
+                        "bsonType": ["string", "null"],
+                        "minLength": 1,
+                    },
+                    "order_id": {
+                        "bsonType": ["string", "null"],
+                        "minLength": 1,
+                    },
+                    "refund_id": {
+                        "bsonType": ["string", "null"],
+                        "minLength": 1,
+                    },
+                    "webhook_event_id": {
+                        "bsonType": ["string", "null"],
+                        "minLength": 1,
+                    },
+                    "provider": {
+                        "bsonType": ["string", "null"],
+                        "minLength": 1,
+                        "maxLength": 64,
+                    },
+                    "old_status": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 128,
+                    },
+                    "new_status": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 128,
+                    },
+                    "reason": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 500,
+                    },
+                    "safe_context": {
+                        "bsonType": ["object", "null"],
+                    },
+                    "created_at": {
+                        "bsonType": "date",
+                    },
+                },
+            }
+        },
+        "validationLevel": "strict",
+        "validationAction": "error",
+    },
+    DatabaseCollections.REFUNDS: {
+        "validator": {
+            "$jsonSchema": {
+                "bsonType": "object",
+                "required": [
+                    "payment_id",
+                    "order_id",
+                    "user_id",
+                    "amount_minor",
+                    "currency",
+                    "status",
+                    "provider",
+                    "reason",
+                    "requested_by",
+                    "created_at",
+                ],
+                "properties": {
+                    "payment_id": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                    },
+                    "order_id": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                    },
+                    "user_id": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                    },
+                    "amount_minor": {
+                        "bsonType": ["int", "long"],
+                        "minimum": 1,
+                    },
+                    "currency": {
+                        "bsonType": "string",
+                        "pattern": "^[A-Z]{3}$",
+                    },
+                    "status": {
+                        "enum": list(REFUND_STATUS_VALUES),
+                    },
+                    "provider": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                        "maxLength": 64,
+                    },
+                    "provider_refund_id": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 255,
+                    },
+                    "reason": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                    },
+                    "requested_by": {
+                        "bsonType": "string",
+                        "minLength": 1,
+                        "maxLength": 255,
+                    },
+                    "request_payload_snapshot": {
+                        "bsonType": ["object", "null"],
+                    },
+                    "response_payload_snapshot": {
+                        "bsonType": ["object", "null"],
+                    },
+                    "failure_code": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 128,
+                    },
+                    "failure_message": {
+                        "bsonType": ["string", "null"],
+                        "maxLength": 1000,
+                    },
+                    "created_at": {
+                        "bsonType": "date",
+                    },
+                    "updated_at": {
+                        "bsonType": ["date", "null"],
+                    },
+                },
+            }
         },
         "validationLevel": "strict",
         "validationAction": "error",

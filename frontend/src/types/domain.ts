@@ -3,8 +3,38 @@ import type { GenreCode } from "@/shared/genres";
 export type LanguageCode = "uk" | "en";
 export type UserRole = "user" | "admin";
 export type MovieStatus = "planned" | "active" | "deactivated";
-export type OrderStatus = "completed" | "partially_cancelled" | "cancelled";
-export type OrderValidationState = "valid" | "cancelled" | "expired" | "already_used" | "invalid_token" | "order_not_found" | "order_unavailable";
+export type OrderStatus =
+  | "pending_payment"
+  | "completed"
+  | "partially_cancelled"
+  | "payment_failed"
+  | "payment_cancelled"
+  | "cancelled"
+  | "expired";
+export type TicketStatus = "reserved" | "purchased" | "cancelled" | "expired";
+export type PaymentStatus =
+  | "created"
+  | "pending"
+  | "requires_action"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "expired"
+  | "refunded"
+  | "partially_refunded";
+export type PaymentAttemptStatus = "created" | "pending" | "succeeded" | "failed";
+export type RefundStatus = "created" | "pending" | "succeeded" | "failed" | "cancelled";
+export type PaymentWebhookProcessingStatus = "received" | "processing" | "processed" | "failed" | "skipped";
+export type OrderValidationState =
+  | "valid"
+  | "cancelled"
+  | "expired"
+  | "payment_failed"
+  | "payment_cancelled"
+  | "already_used"
+  | "invalid_token"
+  | "order_not_found"
+  | "order_unavailable";
 
 export interface LocalizedText {
   uk: string;
@@ -85,6 +115,7 @@ export interface SeatAvailability {
   row: number;
   number: number;
   is_available: boolean;
+  status: "available" | "reserved" | "purchased";
 }
 
 export interface SessionSeats {
@@ -104,8 +135,10 @@ export interface Ticket {
   seat_row: number;
   seat_number: number;
   price: number;
-  status: string;
-  purchased_at: string;
+  status: TicketStatus;
+  reserved_at?: string | null;
+  expires_at?: string | null;
+  purchased_at?: string | null;
   updated_at?: string | null;
   cancelled_at?: string | null;
   checked_in_at?: string | null;
@@ -133,8 +166,10 @@ export interface OrderTicket {
   seat_row: number;
   seat_number: number;
   price: number;
-  status: string;
-  purchased_at: string;
+  status: TicketStatus;
+  reserved_at?: string | null;
+  expires_at?: string | null;
+  purchased_at?: string | null;
   updated_at?: string | null;
   cancelled_at?: string | null;
   checked_in_at?: string | null;
@@ -149,6 +184,7 @@ export interface Order {
   status: OrderStatus;
   total_price: number;
   tickets_count: number;
+  expires_at?: string | null;
   created_at: string;
   updated_at?: string | null;
   movie_id: string;
@@ -162,7 +198,9 @@ export interface Order {
   session_price: number;
   session_status: string;
   active_tickets_count: number;
+  reserved_tickets_count: number;
   cancelled_tickets_count: number;
+  expired_tickets_count: number;
   checked_in_tickets_count: number;
   unchecked_active_tickets_count: number;
   tickets: OrderTicket[];
@@ -176,12 +214,210 @@ export interface OrderDetails extends Order {
   validation_url: string;
 }
 
+export interface PaymentInitiation {
+  payment_id: string;
+  order_id: string;
+  provider: string;
+  status: PaymentStatus;
+  amount_minor: number;
+  currency: string;
+  attempt_id?: string | null;
+  attempt_status?: PaymentAttemptStatus | null;
+  provider_payment_id?: string | null;
+  provider_attempt_id?: string | null;
+  redirect_url?: string | null;
+  client_payload?: Record<string, unknown> | null;
+  expires_at?: string | null;
+  reused: boolean;
+}
+
+export interface PaymentAttempt {
+  id: string;
+  payment_id: string;
+  order_id: string;
+  provider: string;
+  provider_attempt_id?: string | null;
+  request_payload_snapshot?: Record<string, unknown> | null;
+  response_payload_snapshot?: Record<string, unknown> | null;
+  status: PaymentAttemptStatus;
+  error_code?: string | null;
+  error_message?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface PaymentDetails {
+  id: string;
+  order_id: string;
+  user_id: string;
+  amount_minor: number;
+  currency: string;
+  provider: string;
+  provider_payment_id?: string | null;
+  idempotency_key: string;
+  metadata?: Record<string, unknown> | null;
+  status: PaymentStatus;
+  failure_code?: string | null;
+  failure_message?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+  attempts: PaymentAttempt[];
+}
+
+export interface Refund {
+  id: string;
+  payment_id: string;
+  order_id: string;
+  user_id: string;
+  amount_minor: number;
+  currency: string;
+  status: RefundStatus;
+  provider: string;
+  provider_refund_id?: string | null;
+  reason: string;
+  requested_by: string;
+  request_payload_snapshot?: Record<string, unknown> | null;
+  response_payload_snapshot?: Record<string, unknown> | null;
+  failure_code?: string | null;
+  failure_message?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface PaymentWebhookEvent {
+  id: string;
+  provider: string;
+  provider_event_id?: string | null;
+  event_type: string;
+  signature_verified: boolean;
+  payload_hash: string;
+  payload_snapshot?: Record<string, unknown> | null;
+  processing_status: PaymentWebhookProcessingStatus;
+  processed_at?: string | null;
+  error_message?: string | null;
+  payment_id?: string | null;
+  order_id?: string | null;
+  refund_id?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface AdminPaymentCustomer {
+  user_id: string;
+  name?: string | null;
+  email?: string | null;
+}
+
+export interface AdminPaymentOrderContext {
+  order_id: string;
+  order_status?: OrderStatus | string | null;
+  session_id?: string | null;
+  movie_id?: string | null;
+  movie_title?: LocalizedText | null;
+  session_start_time?: string | null;
+  session_end_time?: string | null;
+  session_status?: string | null;
+  total_price?: number | null;
+  tickets_count: number;
+  seats: string[];
+  expires_at?: string | null;
+}
+
+export interface AdminPaymentListItem extends Omit<PaymentDetails, "attempts"> {
+  attempts_count: number;
+  refunds_count: number;
+  refunded_amount_minor: number;
+  remaining_refundable_amount_minor: number;
+  refundable: boolean;
+  latest_refund_status?: RefundStatus | null;
+  order_status?: OrderStatus | string | null;
+  customer_name?: string | null;
+  customer_email?: string | null;
+}
+
+export interface AdminPaymentDetails extends PaymentDetails {
+  refunds: Refund[];
+  webhook_events: PaymentWebhookEvent[];
+  order?: AdminPaymentOrderContext | null;
+  customer?: AdminPaymentCustomer | null;
+  attempts_count: number;
+  refunds_count: number;
+  refunded_amount_minor: number;
+  remaining_refundable_amount_minor: number;
+  refundable: boolean;
+  latest_refund_status?: RefundStatus | null;
+}
+
+export interface PaymentReportPeriod {
+  date_from?: string | null;
+  date_to?: string | null;
+  payment_timestamp_basis: string;
+  refund_timestamp_basis: string;
+}
+
+export interface PaymentReportSummary {
+  currency: string;
+  total_payments_count: number;
+  succeeded_payments_count: number;
+  failed_payments_count: number;
+  pending_payments_count: number;
+  cancelled_payments_count: number;
+  expired_payments_count: number;
+  refunded_payments_count: number;
+  partially_refunded_payments_count: number;
+  gross_revenue_minor: number;
+  refunded_amount_minor: number;
+  net_revenue_minor: number;
+  succeeded_orders_count: number;
+  paid_tickets_count: number;
+  success_rate: number;
+}
+
+export interface PaymentReportSessionAggregate {
+  session_id: string;
+  movie_id?: string | null;
+  movie_title?: LocalizedText | null;
+  session_start_time?: string | null;
+  session_end_time?: string | null;
+  session_status?: string | null;
+  currency: string;
+  succeeded_payments_count: number;
+  succeeded_orders_count: number;
+  paid_tickets_count: number;
+  gross_revenue_minor: number;
+  refunded_amount_minor: number;
+  net_revenue_minor: number;
+}
+
+export interface PaymentReportMovieAggregate {
+  movie_id: string;
+  movie_title?: LocalizedText | null;
+  currency: string;
+  paid_sessions_count: number;
+  succeeded_payments_count: number;
+  succeeded_orders_count: number;
+  paid_tickets_count: number;
+  gross_revenue_minor: number;
+  refunded_amount_minor: number;
+  net_revenue_minor: number;
+}
+
+export interface PaymentReport {
+  generated_at: string;
+  period: PaymentReportPeriod;
+  summary: PaymentReportSummary;
+  sessions: PaymentReportSessionAggregate[];
+  movies: PaymentReportMovieAggregate[];
+}
+
 export interface OrderValidationTicket {
   id: string;
   seat_row: number;
   seat_number: number;
-  status: string;
-  purchased_at: string;
+  status: TicketStatus;
+  reserved_at?: string | null;
+  expires_at?: string | null;
+  purchased_at?: string | null;
   cancelled_at?: string | null;
   checked_in_at?: string | null;
   valid_for_entry: boolean;
@@ -201,7 +437,9 @@ export interface OrderValidationResult {
   session_end_time?: string | null;
   session_status?: string | null;
   active_tickets_count: number;
+  reserved_tickets_count: number;
   cancelled_tickets_count: number;
+  expired_tickets_count: number;
   checked_in_tickets_count: number;
   unchecked_active_tickets_count: number;
   tickets: OrderValidationTicket[];
@@ -226,6 +464,7 @@ export interface AttendanceReport {
 }
 
 export interface AttendanceTicketDetails extends Ticket {
+  purchased_at: string;
   user_name?: string | null;
   user_email?: string | null;
   order_status?: OrderStatus | null;

@@ -6,12 +6,9 @@ from datetime import datetime
 
 from pydantic import ConfigDict, Field, model_validator
 
-from app.core.constants import ORDER_STATUS_VALUES, TicketStatuses
+from app.core.constants import ORDER_STATUS_VALUES, TICKET_STATUS_VALUES, OrderStatuses, TicketStatuses
 from app.schemas.common import BaseSchema
 from app.schemas.localization import LocalizedText
-
-TICKET_STATUS_VALUES = (TicketStatuses.PURCHASED, TicketStatuses.CANCELLED)
-
 
 class OrderSeatInput(BaseSchema):
     """One seat included in an order purchase request."""
@@ -34,7 +31,7 @@ class OrderSeatInput(BaseSchema):
 
 
 class OrderPurchaseRequest(BaseSchema):
-    """Payload for purchasing multiple seats for one session."""
+    """Payload for reserving multiple seats for one session pending payment."""
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -52,10 +49,10 @@ class OrderPurchaseRequest(BaseSchema):
         },
     )
 
-    session_id: str = Field(description="Identifier of the scheduled session being purchased.")
+    session_id: str = Field(description="Identifier of the scheduled session being reserved.")
     seats: list[OrderSeatInput] = Field(
         min_length=1,
-        description="Unique seat coordinates to purchase in one grouped order.",
+        description="Unique seat coordinates to reserve in one grouped pending order.",
     )
 
     @model_validator(mode="after")
@@ -76,6 +73,7 @@ class OrderRead(BaseSchema):
     status: str
     total_price: float = Field(ge=0)
     tickets_count: int = Field(ge=1)
+    expires_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -84,6 +82,10 @@ class OrderRead(BaseSchema):
         """Restrict order status values to the supported lifecycle states."""
         if self.status not in ORDER_STATUS_VALUES:
             raise ValueError("Unsupported order status.")
+        if self.status == OrderStatuses.PENDING_PAYMENT and self.expires_at is None:
+            raise ValueError("Pending payment orders must include expires_at.")
+        if self.status == OrderStatuses.EXPIRED and self.expires_at is None:
+            raise ValueError("Expired orders must include expires_at.")
         return self
 
 
@@ -96,7 +98,9 @@ class OrderTicketRead(BaseSchema):
     seat_number: int = Field(ge=1)
     price: float = Field(gt=0)
     status: str
-    purchased_at: datetime
+    reserved_at: datetime | None = None
+    expires_at: datetime | None = None
+    purchased_at: datetime | None = None
     updated_at: datetime | None = None
     cancelled_at: datetime | None = None
     checked_in_at: datetime | None = None
@@ -108,12 +112,20 @@ class OrderTicketRead(BaseSchema):
         """Keep nested order tickets aligned with supported ticket lifecycle values."""
         if self.status not in TICKET_STATUS_VALUES:
             raise ValueError("Unsupported ticket status.")
+        if self.status == TicketStatuses.RESERVED and self.expires_at is None:
+            raise ValueError("Reserved tickets must include expires_at.")
+        if self.status == TicketStatuses.RESERVED and self.purchased_at is not None:
+            raise ValueError("Reserved tickets cannot include purchased_at.")
+        if self.status == TicketStatuses.PURCHASED and self.purchased_at is None:
+            raise ValueError("Purchased tickets must include purchased_at.")
         if self.status == TicketStatuses.CANCELLED and self.cancelled_at is None:
             raise ValueError("Cancelled tickets must include cancelled_at.")
         if self.status == TicketStatuses.PURCHASED and self.cancelled_at is not None:
             raise ValueError("Purchased tickets cannot include cancelled_at.")
-        if self.status == TicketStatuses.CANCELLED and self.checked_in_at is not None:
-            raise ValueError("Cancelled tickets cannot be checked in.")
+        if self.status in {TicketStatuses.CANCELLED, TicketStatuses.EXPIRED} and self.checked_in_at is not None:
+            raise ValueError("Inactive tickets cannot be checked in.")
+        if self.status == TicketStatuses.EXPIRED and self.cancelled_at is not None:
+            raise ValueError("Expired tickets cannot include cancelled_at.")
         return self
 
 
@@ -131,7 +143,9 @@ class OrderListRead(OrderRead):
     session_price: float = Field(gt=0)
     session_status: str
     active_tickets_count: int = Field(ge=0)
+    reserved_tickets_count: int = Field(default=0, ge=0)
     cancelled_tickets_count: int = Field(ge=0)
+    expired_tickets_count: int = Field(default=0, ge=0)
     checked_in_tickets_count: int = Field(default=0, ge=0)
     unchecked_active_tickets_count: int = Field(default=0, ge=0)
     tickets: list[OrderTicketRead]
@@ -154,7 +168,9 @@ class OrderValidationTicketRead(BaseSchema):
     seat_row: int = Field(ge=1)
     seat_number: int = Field(ge=1)
     status: str
-    purchased_at: datetime
+    reserved_at: datetime | None = None
+    expires_at: datetime | None = None
+    purchased_at: datetime | None = None
     cancelled_at: datetime | None = None
     checked_in_at: datetime | None = None
     valid_for_entry: bool
@@ -176,7 +192,9 @@ class OrderValidationRead(BaseSchema):
     session_end_time: datetime | None = None
     session_status: str | None = None
     active_tickets_count: int = Field(default=0, ge=0)
+    reserved_tickets_count: int = Field(default=0, ge=0)
     cancelled_tickets_count: int = Field(default=0, ge=0)
+    expired_tickets_count: int = Field(default=0, ge=0)
     checked_in_tickets_count: int = Field(default=0, ge=0)
     unchecked_active_tickets_count: int = Field(default=0, ge=0)
     tickets: list[OrderValidationTicketRead] = Field(default_factory=list)

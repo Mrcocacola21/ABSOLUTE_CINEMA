@@ -12,4 +12,8 @@ class SeatAvailabilityRead(BaseSchema):
 
     row: int = Field(ge=1, description="One-based row number.")
     number: int = Field(ge=1, description="One-based seat number within the row.")
-    is_available: bool = Field(description="Whether this seat can currently be purchased.")
+    is_available: bool = Field(description="Whether this seat can currently be reserved.")
+    status: str = Field(
+        default="available",
+        description="Seat availability state: available, reserved, or purchased.",
+    )

@@ -7,6 +7,9 @@ import shutil
 import tempfile
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta
+import hashlib
+import hmac
+import json
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -58,6 +61,108 @@ def build_session_window(
         start += timedelta(days=1)
     end = start + timedelta(minutes=duration_minutes)
     return start, end
+
+
+def sign_fake_webhook_payload(payload: dict[str, object]) -> tuple[bytes, str]:
+    """Build a signed fake-provider webhook body for integration tests."""
+    raw_body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    signature = hmac.new(b"fake-webhook-secret", raw_body, hashlib.sha256).hexdigest()
+    return raw_body, signature
+
+
+async def complete_reserved_order_payment(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    order_id: str,
+) -> dict[str, object]:
+    """Initiate payment and process a successful fake-provider webhook for one reserved order."""
+    initiation_response = await client.post(
+        f"{API_PREFIX}/orders/{order_id}/payments",
+        headers=headers,
+        json={"metadata": {"source": "integration_test_completion"}},
+    )
+    assert initiation_response.status_code == 201, initiation_response.text
+    initiation = initiation_response.json()["data"]
+
+    raw_body, signature = sign_fake_webhook_payload(
+        {
+            "event_id": f"evt-integration-paid-{order_id}",
+            "event_type": "payment.updated",
+            "occurred_at": datetime.now(tz=ZoneInfo("UTC")).isoformat(),
+            "payment": {
+                "id": initiation["provider_payment_id"],
+                "status": "paid",
+                "amount_minor": initiation["amount_minor"],
+                "currency": initiation["currency"],
+            },
+        }
+    )
+    webhook_response = await client.post(
+        f"{API_PREFIX}/payments/webhook",
+        headers={"x-fake-payment-signature": signature},
+        content=raw_body,
+    )
+    assert webhook_response.status_code == 200, webhook_response.text
+    assert webhook_response.json()["data"]["processing_status"] == "processed"
+    return initiation
+
+
+async def purchase_order_and_complete(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    session_id: str,
+    seats: list[dict[str, int]],
+) -> dict[str, object]:
+    """Reserve seats, complete fake-provider payment, and return refreshed order details."""
+    response = await client.post(
+        f"{API_PREFIX}/orders/purchase",
+        headers=headers,
+        json={
+            "session_id": session_id,
+            "seats": seats,
+        },
+    )
+    assert response.status_code == 201, response.text
+    order = response.json()["data"]
+    await complete_reserved_order_payment(client, headers, order["id"])
+
+    detail_response = await client.get(
+        f"{API_PREFIX}/users/me/orders/{order['id']}",
+        headers=headers,
+    )
+    assert detail_response.status_code == 200, detail_response.text
+    return detail_response.json()["data"]
+
+
+async def purchase_ticket_and_complete(
+    client: httpx.AsyncClient,
+    headers: dict[str, str],
+    *,
+    session_id: str,
+    seat_row: int,
+    seat_number: int,
+) -> dict[str, object]:
+    """Reserve one ticket through the legacy wrapper, complete payment, and return the refreshed ticket."""
+    response = await client.post(
+        f"{API_PREFIX}/tickets/purchase",
+        headers=headers,
+        json={
+            "session_id": session_id,
+            "seat_row": seat_row,
+            "seat_number": seat_number,
+        },
+    )
+    assert response.status_code == 201, response.text
+    reserved_ticket = response.json()["data"]
+    await complete_reserved_order_payment(client, headers, reserved_ticket["order_id"])
+
+    detail_response = await client.get(
+        f"{API_PREFIX}/users/me/orders/{reserved_ticket['order_id']}",
+        headers=headers,
+    )
+    assert detail_response.status_code == 200, detail_response.text
+    tickets = detail_response.json()["data"]["tickets"]
+    return next(ticket for ticket in tickets if ticket["id"] == reserved_ticket["id"])
 
 
 @pytest.fixture(scope="session")
@@ -140,6 +245,11 @@ async def clean_database(app: object) -> AsyncIterator[None]:
     collections = (
         DatabaseCollections.ORDERS,
         DatabaseCollections.TICKETS,
+        DatabaseCollections.PAYMENTS,
+        DatabaseCollections.PAYMENT_ATTEMPTS,
+        DatabaseCollections.PAYMENT_WEBHOOK_EVENTS,
+        DatabaseCollections.PAYMENT_AUDIT_EVENTS,
+        DatabaseCollections.REFUNDS,
         DatabaseCollections.SESSIONS,
         DatabaseCollections.MOVIES,
         DatabaseCollections.USERS,

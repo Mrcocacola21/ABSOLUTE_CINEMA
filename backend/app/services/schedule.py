@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from app.commands.reservation_expiry import sync_expired_reservations_for_session
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.exceptions import NotFoundException
 from app.factories.schedule_factory import ScheduleItemFactory, SessionDetailsFactory
 from app.repositories.movies import MovieRepository
+from app.repositories.orders import OrderRepository
+from app.repositories.payments import PaymentRepository
 from app.repositories.sessions import SessionRepository
 from app.repositories.tickets import TicketRepository
 from app.schemas.common import PaginationMeta, PaginationParams
@@ -36,10 +39,14 @@ class ScheduleService:
         session_repository: SessionRepository,
         ticket_repository: TicketRepository,
         movie_repository: MovieRepository,
+        order_repository: OrderRepository,
+        payment_repository: PaymentRepository | None = None,
     ) -> None:
         self.session_repository = session_repository
         self.ticket_repository = ticket_repository
         self.movie_repository = movie_repository
+        self.order_repository = order_repository
+        self.payment_repository = payment_repository
         self.movie_status_manager = MovieStatusManager(
             movie_repository=movie_repository,
             session_repository=session_repository,
@@ -57,6 +64,21 @@ class ScheduleService:
             current_time=now,
             movie_id=filters.movie_id,
         )
+        expired_count = 0
+        for session_document in session_documents:
+            expired_count += await sync_expired_reservations_for_session(
+                str(session_document["id"]),
+                now=now,
+                order_repository=self.order_repository,
+                ticket_repository=self.ticket_repository,
+                session_repository=self.session_repository,
+                payment_repository=self.payment_repository,
+            )
+        if expired_count:
+            session_documents = await self.session_repository.list_public_schedule(
+                current_time=now,
+                movie_id=filters.movie_id,
+            )
         sessions = [SessionRead.model_validate(document) for document in session_documents]
         movies = await self.movie_repository.list_by_ids([session.movie_id for session in sessions])
         movie_map = {movie["id"]: movie for movie in movies}
@@ -82,6 +104,14 @@ class ScheduleService:
         """Return a session by id or raise if it does not exist."""
         now = datetime.now(tz=timezone.utc)
         await self.movie_status_manager.refresh_statuses(current_time=now)
+        await sync_expired_reservations_for_session(
+            session_id,
+            now=now,
+            order_repository=self.order_repository,
+            ticket_repository=self.ticket_repository,
+            session_repository=self.session_repository,
+            payment_repository=self.payment_repository,
+        )
         session_document = await self.session_repository.get_by_id(session_id)
         if session_document is None:
             raise NotFoundException("Session was not found.")
@@ -101,7 +131,7 @@ class ScheduleService:
         session = await self.get_session_details(session_id)
         tickets = await self.ticket_repository.list_by_session(session_id)
         occupied = {
-            (ticket["seat_row"], ticket["seat_number"])
+            (int(ticket["seat_row"]), int(ticket["seat_number"])): str(ticket["status"])
             for ticket in tickets
         }
         derived_available_seats = max(session.total_seats - len(occupied), 0)
@@ -118,6 +148,7 @@ class ScheduleService:
                 row=row_index,
                 number=seat_index,
                 is_available=(row_index, seat_index) not in occupied,
+                status=occupied.get((row_index, seat_index), "available"),
             )
             for row_index in range(1, settings.hall_rows_count + 1)
             for seat_index in range(1, settings.hall_seats_per_row + 1)

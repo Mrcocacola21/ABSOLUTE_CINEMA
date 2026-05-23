@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     cinema_timezone: str = "Europe/Kyiv"
     hall_rows_count: int = 8
     hall_seats_per_row: int = 12
+    reservation_hold_minutes: int = 15
+    payment_provider: str = "fake"
+    payment_webhook_secret: str = "fake-webhook-secret"
     first_session_hour: int = 9
     last_session_start_hour: int = 22
     admin_emails: list[str] = Field(default_factory=list)
@@ -73,6 +76,24 @@ class Settings(BaseSettings):
         if not normalized.startswith("/"):
             normalized = f"/{normalized}"
         return normalized or "/media"
+
+    @field_validator("payment_provider")
+    @classmethod
+    def normalize_payment_provider(cls, value: str) -> str:
+        """Normalize the configured payment provider key."""
+        normalized = value.strip().lower()
+        if not normalized:
+            raise ValueError("payment_provider must not be empty.")
+        return normalized
+
+    @field_validator("payment_webhook_secret")
+    @classmethod
+    def validate_payment_webhook_secret(cls, value: str) -> str:
+        """Ensure webhook verification cannot be silently disabled."""
+        normalized = value.strip()
+        if len(normalized) < 8:
+            raise ValueError("payment_webhook_secret must be at least 8 characters.")
+        return normalized
 
     @property
     def total_seats(self) -> int:

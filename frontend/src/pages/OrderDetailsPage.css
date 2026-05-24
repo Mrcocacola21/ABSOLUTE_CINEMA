@@ -1,6 +1,7 @@
 .order-detail-page {
   display: grid;
   gap: 22px;
+  align-content: start;
 }
 
 .order-detail-hero {

@@ -73,6 +73,19 @@ function buildPaymentUrls(orderId: string) {
   };
 }
 
+function formatAttemptStatusLabel(status: string, t: TFunction): string {
+  const defaultLabels: Record<string, string> = {
+    created: "Provider attempt created",
+    pending: "Provider handoff pending",
+    succeeded: "Provider handoff ready",
+    failed: "Provider handoff failed",
+  };
+
+  return t(`checkout.payment.attemptStatus.${status}`, {
+    defaultValue: defaultLabels[status] ?? formatStateLabel(status),
+  });
+}
+
 function getPrimaryPaymentAction(
   order: OrderDetails,
   payment: PaymentDetails | null,
@@ -283,6 +296,8 @@ export function CheckoutPage() {
     lastInitiation.redirect_url
       ? lastInitiation.redirect_url
       : null;
+  const visiblePrimaryPaymentAction =
+    activeRedirectUrl && primaryPaymentAction === "continue" ? null : primaryPaymentAction;
 
   const seatLabels = useMemo(
     () => order?.tickets.map((ticket) => `${ticket.seat_row}-${ticket.seat_number}`).join(", ") ?? "",
@@ -509,16 +524,16 @@ export function CheckoutPage() {
               </button>
             ) : null}
 
-            {primaryPaymentAction ? (
+            {visiblePrimaryPaymentAction ? (
               <button
-                className={primaryPaymentAction === "retry" ? "button--ghost" : "button"}
+                className={visiblePrimaryPaymentAction === "retry" ? "button--ghost" : "button"}
                 type="button"
                 disabled={isSubmitting || isRefreshing}
-                onClick={() => void handlePaymentAction(primaryPaymentAction)}
+                onClick={() => void handlePaymentAction(visiblePrimaryPaymentAction)}
               >
                 {isSubmitting
                   ? t("checkout.actions.preparingPayment")
-                  : t(`checkout.actions.${primaryPaymentAction}Payment`)}
+                  : t(`checkout.actions.${visiblePrimaryPaymentAction}Payment`)}
               </button>
             ) : null}
 
@@ -538,7 +553,7 @@ export function CheckoutPage() {
               <ol>
                 {payment.attempts.slice(0, 4).map((attempt) => (
                   <li key={attempt.id}>
-                    <span>{formatStateLabel(attempt.status)}</span>
+                    <span>{formatAttemptStatusLabel(attempt.status, t)}</span>
                     <strong>{formatDateTime(attempt.created_at, i18n.language)}</strong>
                   </li>
                 ))}

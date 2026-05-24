@@ -1,5 +1,24 @@
 .admin-payments-header {
   align-items: flex-start;
+  min-width: 0;
+}
+
+.admin-payments-filters,
+.admin-payment-analytics,
+.admin-payments-workspace,
+.admin-payments-list,
+.admin-payment-details {
+  min-width: 0;
+}
+
+.admin-payment-details > .panel,
+.admin-payment-section {
+  min-width: 0;
+}
+
+.admin-payment-details > .panel > *,
+.admin-payment-section > * {
+  min-width: 0;
 }
 
 .admin-payments-filters form {
@@ -402,7 +421,11 @@
 
 @media (max-width: 760px) {
   .admin-payment-analytics__header,
-  .admin-payment-report-table-card__header {
+  .admin-payment-report-table-card__header,
+  .admin-payments-list__header,
+  .admin-payment-details__heading,
+  .admin-payment-section__header,
+  .admin-payment-history-card__header {
     display: grid;
   }
 

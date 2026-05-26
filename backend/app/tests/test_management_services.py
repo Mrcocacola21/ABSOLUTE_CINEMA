@@ -963,7 +963,7 @@ async def test_ticket_service_cancellation_restores_seat_counter(
 
 
 @pytest.mark.asyncio
-async def test_ticket_cancellation_triggers_refund_for_paid_order_ticket(
+async def test_ticket_cancellation_leaves_refund_for_explicit_customer_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -991,25 +991,11 @@ async def test_ticket_cancellation_triggers_refund_for_paid_order_ticket(
     cancelled = await service.cancel_ticket("ticket-1", current_user=build_regular_user())
 
     assert cancelled.status == TicketStatuses.CANCELLED
-    assert refund_service.calls == [
-        {
-            "order_id": "order-1",
-            "amount_minor": 20000,
-            "reason": "ticket_cancelled",
-            "requested_by": "user-1",
-            "metadata": {
-                "source": "ticket_cancellation",
-                "ticket_id": "ticket-1",
-                "order_id": "order-1",
-            },
-            "cap_to_remaining": True,
-            "fail_on_provider_error": False,
-        }
-    ]
+    assert refund_service.calls == []
 
 
 @pytest.mark.asyncio
-async def test_order_cancellation_triggers_refund_for_paid_tickets(
+async def test_order_cancellation_leaves_refund_for_explicit_customer_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def fake_execute(self, *, order_id: str, current_user: UserRead) -> dict[str, object]:
@@ -1039,15 +1025,7 @@ async def test_order_cancellation_triggers_refund_for_paid_tickets(
 
     await service.cancel_order("order-1", current_user=build_regular_user())
 
-    assert len(refund_service.calls) == 1
-    assert refund_service.calls[0]["order_id"] == "order-1"
-    assert refund_service.calls[0]["amount_minor"] == 40000
-    assert refund_service.calls[0]["reason"] == "order_cancelled"
-    assert refund_service.calls[0]["metadata"] == {
-        "source": "order_cancellation",
-        "order_id": "order-1",
-        "ticket_ids": ["ticket-1", "ticket-2"],
-    }
+    assert refund_service.calls == []
 
 
 @pytest.mark.asyncio

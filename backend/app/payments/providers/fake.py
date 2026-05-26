@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 from typing import Any
+from urllib.parse import urlencode
 
 from app.core.constants import PaymentStatuses, RefundStatuses
 from app.payments.providers.base import (
@@ -50,10 +51,12 @@ class FakePaymentProvider(PaymentProvider):
         default_create_raw_status: str = "authorized",
         default_refund_raw_status: str = "refund_settled",
         webhook_secret: str = "fake-webhook-secret",
+        checkout_base_url: str | None = None,
     ) -> None:
         self.default_create_raw_status = default_create_raw_status
         self.default_refund_raw_status = default_refund_raw_status
         self.webhook_secret = webhook_secret
+        self.checkout_base_url = checkout_base_url.rstrip("/") if checkout_base_url else None
         self._payment_statuses: dict[str, str] = {}
         self._payment_amounts: dict[str, int] = {}
         self._payment_currencies: dict[str, str] = {}
@@ -84,9 +87,9 @@ class FakePaymentProvider(PaymentProvider):
             status=status,
             amount_minor=request.amount_minor,
             currency=request.currency,
-            redirect_url=f"https://payments.example.test/fake/{provider_payment_id}",
+            redirect_url=self._build_redirect_url(request, provider_payment_id=provider_payment_id),
             client_payload={
-                "mode": "fake_redirect",
+                "mode": "fake_local_redirect" if self.checkout_base_url else "fake_redirect",
                 "payment_reference": provider_payment_id,
             },
             failure_code="fake_declined" if status == PaymentStatuses.FAILED else None,
@@ -305,6 +308,17 @@ class FakePaymentProvider(PaymentProvider):
         if metadata is None:
             return default
         return str(metadata.get("fake_raw_status") or default)
+
+    def _build_redirect_url(
+        self,
+        request: ProviderPaymentCreateRequest,
+        *,
+        provider_payment_id: str,
+    ) -> str:
+        if not self.checkout_base_url:
+            return f"https://payments.example.test/fake/{provider_payment_id}"
+        query = urlencode({"orderId": request.order_id})
+        return f"{self.checkout_base_url}/payment/fake/{request.payment_id}?{query}"
 
     def _header(self, headers: dict[str, str] | None, key: str) -> str | None:
         if not headers:

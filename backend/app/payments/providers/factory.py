@@ -14,6 +14,9 @@ def build_payment_provider(provider_name: str | None = None) -> PaymentProvider:
     normalized_name = normalize_provider(provider_name or settings.payment_provider)
 
     if normalized_name == "fake":
-        return FakePaymentProvider(webhook_secret=settings.payment_webhook_secret)
+        return FakePaymentProvider(
+            webhook_secret=settings.payment_webhook_secret,
+            checkout_base_url=settings.frontend_base_url,
+        )
 
     raise ValueError(f"Unsupported payment provider '{normalized_name}'.")

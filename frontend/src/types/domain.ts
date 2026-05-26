@@ -25,6 +25,8 @@ export type PaymentStatus =
 export type PaymentAttemptStatus = "created" | "pending" | "succeeded" | "failed";
 export type RefundStatus = "created" | "pending" | "succeeded" | "failed" | "cancelled";
 export type PaymentWebhookProcessingStatus = "received" | "processing" | "processed" | "failed" | "skipped";
+export type PaymentSimulationResult = "succeeded" | "failed" | "cancelled" | "pending";
+export type CustomerRefundScope = "order" | "tickets";
 export type OrderValidationState =
   | "valid"
   | "cancelled"
@@ -175,6 +177,10 @@ export interface OrderTicket {
   checked_in_at?: string | null;
   is_cancellable: boolean;
   valid_for_entry: boolean;
+  is_refundable: boolean;
+  refund_status?: RefundStatus | null;
+  refund_id?: string | null;
+  refund_amount_minor: number;
 }
 
 export interface Order {
@@ -203,6 +209,13 @@ export interface Order {
   expired_tickets_count: number;
   checked_in_tickets_count: number;
   unchecked_active_tickets_count: number;
+  payment_id?: string | null;
+  payment_status?: PaymentStatus | null;
+  refunds_count: number;
+  refunded_amount_minor: number;
+  remaining_refundable_amount_minor: number;
+  latest_refund_status?: RefundStatus | null;
+  full_refund_available: boolean;
   tickets: OrderTicket[];
 }
 
@@ -284,6 +297,22 @@ export interface Refund {
   updated_at?: string | null;
 }
 
+export interface CustomerRefundRequest {
+  scope: CustomerRefundScope;
+  ticket_ids?: string[];
+  reason?: string | null;
+}
+
+export interface CustomerRefundResult {
+  refund: Refund;
+  payment: PaymentDetails;
+  refunds: Refund[];
+  refunds_count: number;
+  refunded_amount_minor: number;
+  remaining_refundable_amount_minor: number;
+  latest_refund_status?: RefundStatus | null;
+}
+
 export interface PaymentWebhookEvent {
   id: string;
   provider: string;
@@ -300,6 +329,26 @@ export interface PaymentWebhookEvent {
   refund_id?: string | null;
   created_at: string;
   updated_at?: string | null;
+}
+
+export interface PaymentWebhookProcessing {
+  event_id?: string | null;
+  provider: string;
+  provider_event_id?: string | null;
+  event_type: string;
+  processing_status: PaymentWebhookProcessingStatus;
+  duplicate: boolean;
+  payment_id?: string | null;
+  refund_id?: string | null;
+  order_id?: string | null;
+  message: string;
+}
+
+export interface PaymentSimulation {
+  result: PaymentSimulationResult;
+  payment: PaymentDetails;
+  webhook: PaymentWebhookProcessing;
+  message: string;
 }
 
 export interface AdminPaymentCustomer {

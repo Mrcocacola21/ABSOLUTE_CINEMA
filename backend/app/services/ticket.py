@@ -8,7 +8,6 @@ from app.commands.reservation_expiry import sync_expired_reservations_for_sessio
 from app.commands.ticket_cancellation import TicketCancellationCommand
 from app.commands.ticket_purchase import TicketPurchaseCommand
 from app.core.constants import OrderStatuses, SessionStatuses, TicketStatuses
-from app.core.logging import get_logger
 from app.observers.events import build_default_event_publisher
 from app.repositories.movies import MovieRepository
 from app.repositories.orders import OrderRepository
@@ -22,9 +21,6 @@ from app.schemas.ticket import TicketListRead, TicketPurchaseRequest, TicketRead
 from app.schemas.user import UserRead
 from app.security.order_validation import create_order_validation_token
 from app.services.refund import RefundService
-from app.utils.money import amount_to_minor_units
-
-logger = get_logger(__name__)
 
 
 class TicketService:
@@ -62,57 +58,12 @@ class TicketService:
 
     async def cancel_ticket(self, ticket_id: str, current_user: UserRead) -> TicketRead:
         """Cancel a purchased ticket before the linked session starts."""
-        original_ticket = await self.ticket_repository.get_by_id(ticket_id)
         command = TicketCancellationCommand(
             session_repository=self.session_repository,
             ticket_repository=self.ticket_repository,
             order_repository=self.order_repository,
         )
-        cancelled_ticket = await command.execute(ticket_id=ticket_id, current_user=current_user)
-        await self._refund_cancelled_ticket_if_paid(
-            original_ticket=original_ticket,
-            cancelled_ticket=cancelled_ticket,
-            requested_by=current_user,
-        )
-        return cancelled_ticket
-
-    async def _refund_cancelled_ticket_if_paid(
-        self,
-        *,
-        original_ticket: dict[str, object] | None,
-        cancelled_ticket: TicketRead,
-        requested_by: UserRead,
-    ) -> None:
-        if self.refund_service is None or original_ticket is None:
-            return
-        if original_ticket["status"] != TicketStatuses.PURCHASED or not original_ticket.get("order_id"):
-            return
-
-        amount_minor = amount_to_minor_units(original_ticket["price"])
-        try:
-            await self.refund_service.refund_order_amount(
-                order_id=str(original_ticket["order_id"]),
-                amount_minor=amount_minor,
-                reason="ticket_cancelled",
-                requested_by=requested_by.id,
-                metadata={
-                    "source": "ticket_cancellation",
-                    "ticket_id": cancelled_ticket.id,
-                    "order_id": str(original_ticket["order_id"]),
-                },
-                cap_to_remaining=True,
-                fail_on_provider_error=False,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Ticket cancellation refund could not be completed",
-                extra={
-                    "ticket_id": cancelled_ticket.id,
-                    "order_id": str(original_ticket["order_id"]),
-                    "requested_by": requested_by.id,
-                },
-                exc_info=exc,
-            )
+        return await command.execute(ticket_id=ticket_id, current_user=current_user)
 
     async def list_current_user_tickets(self, current_user: UserRead) -> list[TicketListRead]:
         """Return tickets belonging to the authenticated user."""

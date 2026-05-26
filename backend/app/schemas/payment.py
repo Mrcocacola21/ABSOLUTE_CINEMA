@@ -17,6 +17,13 @@ from app.schemas.common import BaseSchema
 from app.schemas.localization import LocalizedText
 
 DEFAULT_PAYMENT_CURRENCY: Final[str] = "UAH"
+PAYMENT_SIMULATION_RESULT_VALUES: Final[tuple[str, ...]] = (
+    "succeeded",
+    "failed",
+    "cancelled",
+    "pending",
+)
+CUSTOMER_REFUND_SCOPE_VALUES: Final[tuple[str, ...]] = ("order", "tickets")
 SAFE_MAPPING_MAX_DEPTH: Final[int] = 4
 SAFE_MAPPING_MAX_KEYS: Final[int] = 50
 SAFE_LIST_MAX_ITEMS: Final[int] = 100
@@ -236,6 +243,36 @@ class PaymentInitiationRead(BaseSchema):
         return validate_safe_snapshot(value, field_name="client_payload")
 
 
+class PaymentSimulationRequest(BaseSchema):
+    """Demo-only request for simulating the local fake-provider payment result."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "example": {
+                "result": "succeeded",
+            }
+        },
+    )
+
+    result: str = Field(
+        description=(
+            "Fake-provider result to emit through the signed webhook pipeline. "
+            "`pending` leaves the payment unresolved."
+        ),
+        json_schema_extra={"enum": list(PAYMENT_SIMULATION_RESULT_VALUES)},
+    )
+
+    @field_validator("result")
+    @classmethod
+    def validate_result(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in PAYMENT_SIMULATION_RESULT_VALUES:
+            raise ValueError("Unsupported payment simulation result.")
+        return normalized
+
+
 class PaymentAttemptCreate(BaseSchema):
     """Internal payload used to create a payment attempt."""
 
@@ -351,6 +388,22 @@ class PaymentWebhookProcessingRead(BaseSchema):
     def validate_processing_status(cls, value: str) -> str:
         if value not in PAYMENT_WEBHOOK_PROCESSING_STATUS_VALUES:
             raise ValueError("Unsupported webhook processing status.")
+        return value
+
+
+class PaymentSimulationRead(BaseSchema):
+    """Result returned after a demo fake-provider simulation is processed."""
+
+    result: str
+    payment: PaymentDetailsRead
+    webhook: PaymentWebhookProcessingRead
+    message: str
+
+    @field_validator("result")
+    @classmethod
+    def validate_result(cls, value: str) -> str:
+        if value not in PAYMENT_SIMULATION_RESULT_VALUES:
+            raise ValueError("Unsupported payment simulation result.")
         return value
 
 
@@ -471,6 +524,91 @@ class RefundRequest(BaseSchema):
     @classmethod
     def validate_metadata(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
         return validate_safe_snapshot(value, field_name="metadata")
+
+
+class CustomerRefundRequest(BaseSchema):
+    """Customer-facing request to refund a cancelled ticket or a whole cancelled order."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "scope": "tickets",
+                    "ticket_ids": ["6803a522e5d4c4d94e7e1a10"],
+                    "reason": "customer_cancelled_ticket",
+                },
+                {
+                    "scope": "order",
+                    "ticket_ids": [],
+                    "reason": "customer_cancelled_order",
+                },
+            ]
+        },
+    )
+
+    scope: str = Field(
+        default="order",
+        description=(
+            "`tickets` creates a partial refund for the selected cancelled ticket ids. "
+            "`order` refunds the remaining refundable amount for a fully cancelled order."
+        ),
+    )
+    ticket_ids: list[str] = Field(
+        default_factory=list,
+        max_length=50,
+        description="Cancelled ticket ids to refund when scope is `tickets`; leave empty for a full-order refund.",
+    )
+    reason: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Optional customer-safe reason stored on the refund record.",
+    )
+
+    @field_validator("scope")
+    @classmethod
+    def validate_scope(cls, value: str) -> str:
+        if value not in CUSTOMER_REFUND_SCOPE_VALUES:
+            raise ValueError("Unsupported customer refund scope.")
+        return value
+
+    @field_validator("ticket_ids")
+    @classmethod
+    def validate_ticket_ids(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value]
+        if any(not item for item in normalized):
+            raise ValueError("Ticket ids must not be empty.")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("Ticket ids must be unique.")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_scope_payload(self) -> "CustomerRefundRequest":
+        if self.scope == "tickets" and not self.ticket_ids:
+            raise ValueError("At least one ticket id is required for a ticket refund.")
+        if self.scope == "order" and self.ticket_ids:
+            raise ValueError("Full-order refunds must not include ticket ids.")
+        return self
+
+
+class CustomerRefundRead(BaseSchema):
+    """Result returned after a customer refund request is accepted by the refund subsystem."""
+
+    refund: RefundRead
+    payment: PaymentDetailsRead
+    refunds: list[RefundRead] = Field(default_factory=list)
+    refunds_count: int = Field(ge=0)
+    refunded_amount_minor: int = Field(ge=0)
+    remaining_refundable_amount_minor: int = Field(ge=0)
+    latest_refund_status: str | None = None
+
+    @field_validator("latest_refund_status")
+    @classmethod
+    def validate_latest_refund_status(cls, value: str | None) -> str | None:
+        if value is not None and value not in REFUND_STATUS_VALUES:
+            raise ValueError("Unsupported refund status.")
+        return value
 
 
 class AdminPaymentCustomerRead(BaseSchema):

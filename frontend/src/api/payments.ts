@@ -1,6 +1,14 @@
 import { apiClient } from "@/api/client";
 import type { ApiResponse } from "@/types/api";
-import type { PaymentDetails, PaymentInitiation } from "@/types/domain";
+import type {
+  CustomerRefundRequest,
+  CustomerRefundResult,
+  PaymentDetails,
+  PaymentInitiation,
+  PaymentSimulation,
+  PaymentSimulationResult,
+  Refund,
+} from "@/types/domain";
 
 export interface PaymentInitiationPayload {
   idempotency_key?: string;
@@ -52,5 +60,29 @@ export async function getOrderPaymentDetailsRequest(orderId: string) {
 
 export async function getPaymentDetailsRequest(paymentId: string) {
   const { data } = await apiClient.get<ApiResponse<PaymentDetails>>(`/payments/${paymentId}`);
+  return data;
+}
+
+export async function listOrderRefundsRequest(orderId: string) {
+  const { data } = await apiClient.get<ApiResponse<Refund[]>>(`/orders/${orderId}/refunds`);
+  return data;
+}
+
+export async function requestOrderRefundRequest(orderId: string, payload: CustomerRefundRequest) {
+  const { data } = await apiClient.post<ApiResponse<CustomerRefundResult>>(
+    `/orders/${orderId}/refunds/request`,
+    payload,
+  );
+  return data;
+}
+
+export async function simulateFakeProviderPaymentRequest(
+  paymentId: string,
+  result: PaymentSimulationResult,
+) {
+  const { data } = await apiClient.post<ApiResponse<PaymentSimulation>>(
+    `/payments/${paymentId}/simulate`,
+    { result },
+  );
   return data;
 }

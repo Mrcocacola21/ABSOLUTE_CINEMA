@@ -38,7 +38,8 @@
 .order-detail-tickets,
 .order-detail-side,
 .order-detail-entry,
-.order-detail-session {
+.order-detail-session,
+.order-detail-refunds {
   display: grid;
   gap: 16px;
   align-content: start;
@@ -187,8 +188,43 @@
   justify-content: flex-end;
 }
 
-.order-detail-ticket__cancel {
+.order-detail-ticket__cancel,
+.order-detail-ticket__refund {
   min-height: 42px;
+}
+
+.order-detail-ticket__refund,
+.order-detail-refunds__action {
+  border-color: rgba(244, 166, 98, 0.34);
+  color: #ffe8d3;
+}
+
+.order-detail-refunds__action {
+  justify-content: center;
+}
+
+.order-detail-refund-badge {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.order-detail-refund-badge--created,
+.order-detail-refund-badge--pending {
+  border-color: rgba(244, 166, 98, 0.28);
+  background: rgba(244, 166, 98, 0.1);
+  color: #ffe8d3;
+}
+
+.order-detail-refund-badge--succeeded {
+  border-color: rgba(119, 194, 157, 0.28);
+  background: rgba(119, 194, 157, 0.1);
+  color: #dffce9;
+}
+
+.order-detail-refund-badge--failed,
+.order-detail-refund-badge--cancelled {
+  border-color: rgba(227, 123, 118, 0.25);
+  background: rgba(227, 123, 118, 0.12);
+  color: #ffe1df;
 }
 
 .order-detail-validity {

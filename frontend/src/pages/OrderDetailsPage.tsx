@@ -6,6 +6,11 @@ import type { TFunction } from "i18next";
 import "./OrderDetailsPage.css";
 
 import { downloadMyOrderPdfRequest, getMyOrderRequest } from "@/api/orders";
+import {
+  getOrderPaymentDetailsRequest,
+  listOrderRefundsRequest,
+  requestOrderRefundRequest,
+} from "@/api/payments";
 import { cancelTicketRequest } from "@/api/tickets";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { getLocalizedText } from "@/shared/localization";
@@ -14,7 +19,7 @@ import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
-import type { OrderDetails, OrderTicket } from "@/types/domain";
+import type { OrderDetails, OrderTicket, PaymentDetails, Refund, RefundStatus } from "@/types/domain";
 
 function getInitials(value: string): string {
   return value
@@ -68,13 +73,35 @@ function formatTicketTimeline(
   return [baseText, ...extraParts].join(" | ");
 }
 
+function formatMinorAmount(amountMinor: number, currency: string | undefined, language: string): string {
+  return new Intl.NumberFormat(language, {
+    style: "currency",
+    currency: currency || "UAH",
+    maximumFractionDigits: 2,
+  }).format(amountMinor / 100);
+}
+
+function getRefundStatusLabel(status: RefundStatus, t: TFunction): string {
+  const fallbackByStatus: Record<RefundStatus, string> = {
+    created: "Refund requested",
+    pending: "Refund pending",
+    succeeded: "Refunded",
+    failed: "Refund failed",
+    cancelled: "Refund cancelled",
+  };
+  return t(`orderDetails.refunds.status.${status}`, { defaultValue: fallbackByStatus[status] });
+}
+
 export function OrderDetailsPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const { t, i18n } = useTranslation();
   const [order, setOrder] = useState<OrderDetails | null>(null);
+  const [payment, setPayment] = useState<PaymentDetails | null>(null);
+  const [refunds, setRefunds] = useState<Refund[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [cancellingTicketId, setCancellingTicketId] = useState<string | null>(null);
+  const [refundingTarget, setRefundingTarget] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [feedback, setFeedback] = useState<{
     tone: "success" | "error" | "info";
@@ -94,11 +121,19 @@ export function OrderDetailsPage() {
     }
 
     try {
-      const response = await getMyOrderRequest(orderId);
-      setOrder(response.data);
+      const [orderResponse, paymentResponse, refundsResponse] = await Promise.all([
+        getMyOrderRequest(orderId),
+        getOrderPaymentDetailsRequest(orderId).catch(() => null),
+        listOrderRefundsRequest(orderId).catch(() => null),
+      ]);
+      setOrder(orderResponse.data);
+      setPayment(paymentResponse?.data ?? null);
+      setRefunds(refundsResponse?.data ?? []);
       setErrorMessage("");
     } catch (error) {
       setOrder(null);
+      setPayment(null);
+      setRefunds([]);
       setErrorMessage(
         extractApiErrorMessage(
           error,
@@ -189,6 +224,103 @@ export function OrderDetailsPage() {
     }
   }
 
+  async function handleTicketRefund(ticket: OrderTicket) {
+    if (!order) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      t("orderDetails.refunds.ticketConfirm", {
+        defaultValue: "Request a refund for row {{row}}, seat {{seat}}?",
+        row: ticket.seat_row,
+        seat: ticket.seat_number,
+      }),
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setRefundingTarget(`ticket:${ticket.id}`);
+    setFeedback(null);
+    try {
+      const response = await requestOrderRefundRequest(order.id, {
+        scope: "tickets",
+        ticket_ids: [ticket.id],
+        reason: "customer_cancelled_ticket",
+      });
+      setPayment(response.data.payment);
+      setRefunds(response.data.refunds);
+      await loadOrder({ background: true });
+      setFeedback({
+        tone: "success",
+        title: t("orderDetails.refunds.requestSuccessTitle", { defaultValue: "Refund requested" }),
+        message: t("orderDetails.refunds.ticketRequestSuccessMessage", {
+          defaultValue: "The refund was created against the order payment and the status was refreshed.",
+        }),
+      });
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        title: t("orderDetails.refunds.requestErrorTitle", { defaultValue: "Refund request failed" }),
+        message: extractApiErrorMessage(
+          error,
+          t("orderDetails.refunds.requestErrorMessage", {
+            defaultValue: "The refund request could not be created.",
+          }),
+        ),
+      });
+    } finally {
+      setRefundingTarget(null);
+    }
+  }
+
+  async function handleFullRefund() {
+    if (!order) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      t("orderDetails.refunds.fullConfirm", {
+        defaultValue: "Request a full refund for this cancelled order?",
+      }),
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setRefundingTarget("order");
+    setFeedback(null);
+    try {
+      const response = await requestOrderRefundRequest(order.id, {
+        scope: "order",
+        reason: "customer_cancelled_order",
+      });
+      setPayment(response.data.payment);
+      setRefunds(response.data.refunds);
+      await loadOrder({ background: true });
+      setFeedback({
+        tone: "success",
+        title: t("orderDetails.refunds.requestSuccessTitle", { defaultValue: "Refund requested" }),
+        message: t("orderDetails.refunds.fullRequestSuccessMessage", {
+          defaultValue: "The remaining refundable payment amount was submitted as a refund.",
+        }),
+      });
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        title: t("orderDetails.refunds.requestErrorTitle", { defaultValue: "Refund request failed" }),
+        message: extractApiErrorMessage(
+          error,
+          t("orderDetails.refunds.requestErrorMessage", {
+            defaultValue: "The refund request could not be created.",
+          }),
+        ),
+      });
+    } finally {
+      setRefundingTarget(null);
+    }
+  }
+
   if (isLoading) {
     return (
       <StatePanel
@@ -228,6 +360,11 @@ export function OrderDetailsPage() {
   const canDownloadPdf = isPaidOrder(order);
   const canContinueCheckout = isPendingPaymentOrder(order);
   const validTickets = order.tickets.filter((ticket) => ticket.valid_for_entry);
+  const refundCurrency = payment?.currency ?? "UAH";
+  const refundedAmount = order.refunded_amount_minor;
+  const remainingRefundableAmount = order.remaining_refundable_amount_minor;
+  const latestRefundStatus = order.latest_refund_status;
+  const hasRefundHistory = refunds.length > 0 || order.refunds_count > 0;
   const entrySummary =
     validTickets.length > 0
       ? t("profile.orders.usableSummary", { count: validTickets.length })
@@ -283,6 +420,18 @@ export function OrderDetailsPage() {
               {isDownloadingPdf
                 ? t("orderDetails.pdf.loading", { defaultValue: "Preparing PDF..." })
                 : t("common.actions.downloadPdf")}
+            </button>
+          ) : null}
+          {order.full_refund_available ? (
+            <button
+              className="button--ghost"
+              type="button"
+              disabled={refundingTarget === "order"}
+              onClick={() => void handleFullRefund()}
+            >
+              {refundingTarget === "order"
+                ? t("orderDetails.refunds.requesting", { defaultValue: "Requesting..." })
+                : t("orderDetails.refunds.fullAction", { defaultValue: "Request full refund" })}
             </button>
           ) : null}
           <Link to={`/schedule/${order.session_id}`} className="button--ghost">
@@ -420,6 +569,11 @@ export function OrderDetailsPage() {
                         : t("orderDetails.validity.ticketInvalid", { defaultValue: "Entry not valid" })}
                     </span>
                     <span className="badge">{formatCurrency(ticket.price, i18n.language)}</span>
+                    {ticket.refund_status ? (
+                      <span className={`badge order-detail-refund-badge order-detail-refund-badge--${ticket.refund_status}`}>
+                        {getRefundStatusLabel(ticket.refund_status, t)}
+                      </span>
+                    ) : null}
                     {ticket.is_cancellable ? (
                       <button
                         className="button--ghost order-detail-ticket__cancel"
@@ -432,6 +586,18 @@ export function OrderDetailsPage() {
                           : t("common.actions.cancelTicket")}
                       </button>
                     ) : null}
+                    {ticket.is_refundable ? (
+                      <button
+                        className="button--ghost order-detail-ticket__refund"
+                        type="button"
+                        disabled={refundingTarget === `ticket:${ticket.id}`}
+                        onClick={() => void handleTicketRefund(ticket)}
+                      >
+                        {refundingTarget === `ticket:${ticket.id}`
+                          ? t("orderDetails.refunds.requesting", { defaultValue: "Requesting..." })
+                          : t("orderDetails.refunds.ticketAction", { defaultValue: "Request refund" })}
+                      </button>
+                    ) : null}
                   </div>
                   </article>
                 );
@@ -441,6 +607,62 @@ export function OrderDetailsPage() {
         </section>
 
         <aside className="order-detail-side">
+          <article className="panel order-detail-refunds">
+            <div className="order-detail-section-head">
+              <div>
+                <h2 className="section-title">
+                  {t("orderDetails.refunds.title", { defaultValue: "Refunds" })}
+                </h2>
+                <p className="muted">
+                  {order.full_refund_available
+                    ? t("orderDetails.refunds.fullAvailable", {
+                        defaultValue: "This cancelled order has refundable payment balance.",
+                      })
+                    : hasRefundHistory
+                      ? t("orderDetails.refunds.historyIntro", {
+                          defaultValue: "Refund activity for this order payment.",
+                        })
+                      : t("orderDetails.refunds.noneIntro", {
+                          defaultValue: "Refund actions appear after paid tickets are cancelled.",
+                        })}
+                </p>
+              </div>
+              {latestRefundStatus ? (
+                <span className={`badge order-detail-refund-badge order-detail-refund-badge--${latestRefundStatus}`}>
+                  {getRefundStatusLabel(latestRefundStatus, t)}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="order-detail-side-list">
+              <div>
+                <span>{t("orderDetails.refunds.refunded", { defaultValue: "Refunded" })}</span>
+                <strong>{formatMinorAmount(refundedAmount, refundCurrency, i18n.language)}</strong>
+              </div>
+              <div>
+                <span>{t("orderDetails.refunds.remaining", { defaultValue: "Remaining refundable" })}</span>
+                <strong>{formatMinorAmount(remainingRefundableAmount, refundCurrency, i18n.language)}</strong>
+              </div>
+              <div>
+                <span>{t("orderDetails.refunds.count", { defaultValue: "Refund records" })}</span>
+                <strong>{order.refunds_count}</strong>
+              </div>
+            </div>
+
+            {order.full_refund_available ? (
+              <button
+                className="button order-detail-refunds__action"
+                type="button"
+                disabled={refundingTarget === "order"}
+                onClick={() => void handleFullRefund()}
+              >
+                {refundingTarget === "order"
+                  ? t("orderDetails.refunds.requesting", { defaultValue: "Requesting..." })
+                  : t("orderDetails.refunds.fullAction", { defaultValue: "Request full refund" })}
+              </button>
+            ) : null}
+          </article>
+
           <article className={`panel order-detail-entry ${validityClass}`}>
             <span className="page-eyebrow">
               {t("orderDetails.validation.title", { defaultValue: "Entry validation" })}

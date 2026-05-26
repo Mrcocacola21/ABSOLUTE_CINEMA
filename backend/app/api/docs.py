@@ -22,8 +22,10 @@ profiles, provider-neutral payment initiation, and an administrator workspace fo
 3. When the access token expires, call `POST /api/v1/auth/refresh` with `data.refresh_token`.
 4. Restore the authenticated session with `GET /api/v1/users/me`.
 5. Use the **Authorize** button in Swagger UI to obtain an access token automatically for manual API exploration.
-4. Explore the public catalog with the `movies` and `schedule` tags.
-5. Use the `admin` tag for protected management flows when signed in as an administrator.
+6. Explore the public catalog with the `movies` and `schedule` tags.
+7. Use the `payments` tag to initiate checkout and, in local fake-provider demos, simulate the provider result through the webhook pipeline.
+8. Cancel a paid ticket/order first, then use the customer refund request route to create ticket-level partial refunds or full-order refunds against the payment.
+9. Use the `admin` tag for protected management flows when signed in as an administrator.
 
 ## Administrator Demo Notes
 
@@ -84,6 +86,8 @@ API_TAGS: list[dict[str, str]] = [
         "description": (
             "Provider-neutral payment initiation, inspection, and signed webhook processing endpoints. "
             "Pending, failed, cancelled, and expired payment states drive reservation finalization, release, and retry semantics. "
+            "The local fake-provider simulation endpoint is documented as development/demo-only and still enters through webhook logic. "
+            "Customer refund requests stay payment/order based: ticket-level requests become partial refunds against the payment. "
             "Current adapters are sandbox/demo oriented; real PSP adapters can plug in at the provider boundary."
         ),
     },

@@ -85,7 +85,7 @@ The project is demo-oriented, but the backend is intentionally structured with v
 - Users can inspect order details and order history.
 - Ticket cancellation is supported for eligible tickets before the session starts.
 - Order cancellation exists at the API/service level and cancels active tickets in the order when rules allow it.
-- Cancellation paths restore seats and, when applicable, request refunds through the refund service.
+- Customer cancellation restores seats; customer refunds are requested explicitly afterward so the user can choose a ticket-level partial refund or a full cancelled-order refund.
 
 ### Payment Subsystem
 
@@ -108,11 +108,14 @@ Implemented payment behavior:
 - HMAC signature verification for fake-provider webhooks.
 - Payment success finalizes the reserved order.
 - Payment failure, cancellation, or expiry releases the reservation and restores seats.
+- Local fake-provider page for demos with success, failed, cancelled, and keep-pending actions.
+- Demo fake-provider actions are sent through the signed webhook processing lifecycle; the frontend does not mark payments paid by itself.
 - Admin payment workspace with filters, payment details, attempts, webhooks, refunds, and revenue summary.
 - Full and partial refund support through the fake provider.
+- Customer refund request endpoint for cancelled tickets/orders. Ticket-level requests are implemented as partial refunds against the order payment, not as ticket-owned money.
 - Safe payload snapshot validation/redaction to avoid storing sensitive provider data.
 
-Important demo caveat: the fake provider returns an illustrative redirect URL under `https://payments.example.test/...`. That URL is not a real checkout page. Fresh local orders become completed only when a matching signed webhook is processed. The seeded demo data already includes successful, pending, failed, cancelled, expired, refunded, and partially refunded payment states for demonstration.
+Important demo behavior: the fake provider redirects to the local frontend fake payment page at `/payment/fake/{paymentId}`. Fresh local orders still become completed only when the backend processes a matching provider-style webhook; the demo buttons generate those fake-provider events for controlled presentations. The seeded demo data also includes successful, pending, failed, cancelled, expired, refunded, and partially refunded payment states for demonstration.
 
 ### PDF And QR Validation
 
@@ -625,8 +628,8 @@ Do not rely on a README-stored percentage during defense. Regenerate coverage fr
 
 - The system models one hall only. There is no multi-hall or multi-branch concept.
 - Docker Compose is a development/demo setup, not a production deployment.
-- The only payment provider is the fake provider. There is no live acquiring provider, card collection form, or real checkout redirect.
-- Fresh orders created through the UI remain pending until a provider webhook is processed. Seeded data is the easiest way to demonstrate completed payment states.
+- The only payment provider is the fake provider. There is no live acquiring provider or real card collection form.
+- Fresh orders created through the UI remain pending until a provider webhook is processed; the local fake payment page can generate demo webhook outcomes.
 - Reservation expiry and session status synchronization are request-driven. There is no background worker/scheduler.
 - Frontend automated tests are not currently configured.
 - Uploaded media uses local filesystem storage.

@@ -22,6 +22,7 @@ from app.schemas.payment import (
     AdminPaymentDetailsRead,
     AdminPaymentListItemRead,
     AdminPaymentOrderContextRead,
+    CustomerRefundRead,
     PaymentAttemptRead,
     PaymentDetailsRead,
     PaymentInitiationRead,
@@ -30,6 +31,7 @@ from app.schemas.payment import (
     PaymentReportRead,
     PaymentReportSessionAggregateRead,
     PaymentReportSummaryRead,
+    PaymentSimulationRead,
     PaymentWebhookEventRead,
     PaymentWebhookProcessingRead,
     RefundRead,
@@ -101,6 +103,32 @@ class FakePaymentApiService:
         _ = current_user
         return self._payment_details(payment_id="payment-1", order_id=order_id)
 
+    async def simulate_fake_provider_payment(
+        self,
+        payment_id: str,
+        *,
+        result: str,
+        current_user: UserRead,
+    ) -> PaymentSimulationRead:
+        _ = current_user
+        webhook = PaymentWebhookProcessingRead(
+            event_id="webhook-simulated-1",
+            provider="fake",
+            provider_event_id=f"evt-demo-{result}",
+            event_type="payment.updated",
+            processing_status=PaymentWebhookProcessingStatuses.PROCESSED,
+            duplicate=False,
+            payment_id=payment_id,
+            order_id="order-1",
+            message="Payment webhook event processed.",
+        )
+        return PaymentSimulationRead(
+            result=result,
+            payment=self._payment_details(payment_id=payment_id, order_id="order-1"),
+            webhook=webhook,
+            message="Fake-provider simulation processed through the payment webhook pipeline.",
+        )
+
     async def process_provider_webhook(
         self,
         *,
@@ -129,6 +157,38 @@ class FakePaymentApiService:
             amount_minor=int(kwargs["amount_minor"] or 12345),
             reason=str(kwargs["reason"]),
             requested_by=str(kwargs["requested_by"]),
+        )
+
+    async def request_order_refund(
+        self,
+        *,
+        order_id: str,
+        payload: object,
+        current_user: UserRead,
+    ) -> CustomerRefundRead:
+        self.refund_calls.append(
+            {
+                "order_id": order_id,
+                "payload": payload,
+                "current_user": current_user,
+            }
+        )
+        refund = self._refund_read(
+            refund_id="refund-1",
+            payment_id="payment-1",
+            amount_minor=2345,
+            reason="customer_cancelled_ticket",
+            requested_by=f"user:{current_user.id}",
+        )
+        payment = self._payment_details(payment_id="payment-1", order_id=order_id)
+        return CustomerRefundRead(
+            refund=refund,
+            payment=payment,
+            refunds=[refund],
+            refunds_count=1,
+            refunded_amount_minor=2345,
+            remaining_refundable_amount_minor=10000,
+            latest_refund_status=RefundStatuses.SUCCEEDED,
         )
 
     async def list_payment_refunds(self, payment_id: str, *, current_user: UserRead) -> list[RefundRead]:
@@ -468,6 +528,25 @@ async def test_payment_inspection_endpoints_return_attempt_history() -> None:
 
 
 @pytest.mark.asyncio
+async def test_payment_simulation_endpoint_requires_auth_and_returns_webhook_result() -> None:
+    app = create_application()
+    app.dependency_overrides[get_current_user] = build_user
+    app.dependency_overrides[get_payment_service] = lambda: FakePaymentApiService()
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post("/api/v1/payments/payment-1/simulate", json={"result": "succeeded"})
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["success"] is True
+    assert body["message"] == "Fake payment simulation processed."
+    assert body["data"]["result"] == "succeeded"
+    assert body["data"]["webhook"]["processing_status"] == PaymentWebhookProcessingStatuses.PROCESSED
+    assert body["data"]["payment"]["id"] == "payment-1"
+
+
+@pytest.mark.asyncio
 async def test_refund_endpoints_create_and_list_refunds() -> None:
     app = create_application()
     service = FakePaymentApiService()
@@ -491,6 +570,31 @@ async def test_refund_endpoints_create_and_list_refunds() -> None:
     assert order_list_response.status_code == 200, order_list_response.text
     assert service.refund_calls[0]["requested_by"] == "admin:user-1"
     assert service.refund_calls[0]["metadata"] == {"source": "admin"}
+
+
+@pytest.mark.asyncio
+async def test_customer_refund_request_endpoint_uses_authenticated_user_and_returns_refresh_data() -> None:
+    app = create_application()
+    service = FakePaymentApiService()
+    app.dependency_overrides[get_current_user] = build_user
+    app.dependency_overrides[get_payment_service] = lambda: service
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/v1/orders/order-1/refunds/request",
+            json={"scope": "tickets", "ticket_ids": ["ticket-1"]},
+        )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["message"] == "Refund request created."
+    assert body["data"]["refund"]["amount_minor"] == 2345
+    assert body["data"]["payment"]["id"] == "payment-1"
+    assert body["data"]["refunds_count"] == 1
+    assert service.refund_calls[0]["order_id"] == "order-1"
+    assert service.refund_calls[0]["payload"].scope == "tickets"
+    assert service.refund_calls[0]["payload"].ticket_ids == ["ticket-1"]
 
 
 @pytest.mark.asyncio

@@ -23,6 +23,7 @@ import {
   isPendingPaymentOrder,
   isReleasedOrder,
   isReservationPastDue,
+  resolvePaymentRedirectUrl,
 } from "@/shared/payment";
 import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
@@ -292,9 +293,8 @@ export function CheckoutPage() {
   const activeRedirectUrl =
     payment &&
     lastInitiation?.payment_id === payment.id &&
-    hasActivePayment(payment) &&
-    lastInitiation.redirect_url
-      ? lastInitiation.redirect_url
+    hasActivePayment(payment)
+      ? resolvePaymentRedirectUrl(lastInitiation)
       : null;
   const visiblePrimaryPaymentAction =
     activeRedirectUrl && primaryPaymentAction === "continue" ? null : primaryPaymentAction;
@@ -327,15 +327,16 @@ export function CheckoutPage() {
           ? await retryOrderPaymentRequest(order.id, payload)
           : await initiateOrderPaymentRequest(order.id, payload);
       setLastInitiation(response.data);
+      const redirectUrl = resolvePaymentRedirectUrl(response.data);
+      if (redirectUrl) {
+        window.location.assign(redirectUrl);
+        return;
+      }
       await loadCheckout({ background: true });
       setFeedback({
-        tone: response.data.redirect_url ? "success" : "info",
-        title: response.data.redirect_url
-          ? t("checkout.feedback.nextStepTitle")
-          : t("checkout.feedback.statusUpdatedTitle"),
-        message: response.data.redirect_url
-          ? t("checkout.feedback.nextStepMessage")
-          : t("checkout.feedback.statusUpdatedMessage"),
+        tone: "info",
+        title: t("checkout.feedback.statusUpdatedTitle"),
+        message: t("checkout.feedback.statusUpdatedMessage"),
       });
     } catch (error) {
       setFeedback({

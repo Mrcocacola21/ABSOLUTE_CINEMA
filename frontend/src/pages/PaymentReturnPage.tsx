@@ -15,7 +15,13 @@ import {
 } from "@/api/payments";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
 import { getLocalizedText } from "@/shared/localization";
-import { canRetryPayment, hasActivePayment, isPaidOrder, isReleasedOrder } from "@/shared/payment";
+import {
+  canRetryPayment,
+  hasActivePayment,
+  isPaidOrder,
+  isReleasedOrder,
+  resolvePaymentRedirectUrl,
+} from "@/shared/payment";
 import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
@@ -208,15 +214,16 @@ export function PaymentReturnPage() {
     try {
       const response = await retryOrderPaymentRequest(order.id, payload);
       setLastInitiation(response.data);
+      const redirectUrl = resolvePaymentRedirectUrl(response.data);
+      if (redirectUrl) {
+        window.location.assign(redirectUrl);
+        return;
+      }
       await loadReturnState({ background: true });
       setFeedback({
-        tone: response.data.redirect_url ? "success" : "info",
-        title: response.data.redirect_url
-          ? t("checkout.feedback.nextStepTitle")
-          : t("checkout.feedback.statusUpdatedTitle"),
-        message: response.data.redirect_url
-          ? t("checkout.feedback.nextStepMessage")
-          : t("checkout.feedback.statusUpdatedMessage"),
+        tone: "info",
+        title: t("checkout.feedback.statusUpdatedTitle"),
+        message: t("checkout.feedback.statusUpdatedMessage"),
       });
     } catch (error) {
       setFeedback({
@@ -266,9 +273,8 @@ export function PaymentReturnPage() {
   const activeRedirectUrl =
     payment &&
     lastInitiation?.payment_id === payment.id &&
-    hasActivePayment(payment) &&
-    lastInitiation.redirect_url
-      ? lastInitiation.redirect_url
+    hasActivePayment(payment)
+      ? resolvePaymentRedirectUrl(lastInitiation)
       : null;
 
   return (

@@ -1,4 +1,4 @@
-import type { Order, PaymentDetails, PaymentStatus } from "@/types/domain";
+import type { Order, PaymentDetails, PaymentInitiation, PaymentStatus } from "@/types/domain";
 
 export const ACTIVE_PAYMENT_STATUSES: PaymentStatus[] = [
   "created",
@@ -45,4 +45,16 @@ export function canInitiatePayment(order: Order, payment: PaymentDetails | null)
     return false;
   }
   return !payment || hasActivePayment(payment);
+}
+
+export function resolvePaymentRedirectUrl(initiation: PaymentInitiation | null): string | null {
+  if (!initiation) {
+    return null;
+  }
+  if (initiation.provider === "fake" && typeof window !== "undefined") {
+    const url = new URL(`/payment/fake/${initiation.payment_id}`, window.location.origin);
+    url.searchParams.set("orderId", initiation.order_id);
+    return url.toString();
+  }
+  return initiation.redirect_url ?? null;
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 from datetime import datetime, timezone
 from typing import Any
@@ -35,6 +36,7 @@ from app.core.exceptions import (
     NotFoundException,
     ValidationException,
 )
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.transactions import run_transaction_with_retry
 from app.payments.providers.base import (
@@ -62,6 +64,8 @@ from app.schemas.payment import (
     AdminPaymentDetailsRead,
     AdminPaymentListItemRead,
     AdminPaymentOrderContextRead,
+    CustomerRefundRead,
+    CustomerRefundRequest,
     DEFAULT_PAYMENT_CURRENCY,
     PaymentDetailsRead,
     PaymentAttemptCreate,
@@ -75,6 +79,7 @@ from app.schemas.payment import (
     PaymentReportSessionAggregateRead,
     PaymentReportSummaryRead,
     PaymentRead,
+    PaymentSimulationRead,
     PaymentWebhookEventCreate,
     PaymentWebhookEventRead,
     PaymentWebhookProcessingRead,
@@ -175,6 +180,14 @@ REPORT_PENDING_PAYMENT_STATUSES = {
     PaymentStatuses.CREATED,
     PaymentStatuses.PENDING,
     PaymentStatuses.REQUIRES_ACTION,
+}
+DEMO_SIMULATION_PROVIDER = "fake"
+DEMO_SIMULATION_ENVIRONMENTS = {"development", "dev", "demo", "test", "testing", "local"}
+DEMO_SIMULATION_RAW_STATUSES = {
+    "succeeded": "paid",
+    "failed": "declined",
+    "cancelled": "voided",
+    "pending": "authorized",
 }
 
 
@@ -315,6 +328,43 @@ class PaymentService:
             raise NotFoundException("Payment for this order was not found.")
         latest_payment = PaymentRead.model_validate(payments[0])
         return await self._build_payment_details(latest_payment)
+
+    async def simulate_fake_provider_payment(
+        self,
+        payment_id: str,
+        *,
+        result: str,
+        current_user: UserRead,
+    ) -> PaymentSimulationRead:
+        """Demo-only fake-provider action that enters through the signed webhook pipeline."""
+        normalized_result = result.strip().lower()
+        if normalized_result not in DEMO_SIMULATION_RAW_STATUSES:
+            raise ValidationException("Unsupported payment simulation result.")
+        self._ensure_demo_simulation_allowed()
+
+        now = datetime.now(tz=timezone.utc)
+        payment = await self._get_payment_or_not_found(payment_id)
+        self._ensure_payment_access(payment, current_user=current_user)
+        if payment.provider != DEMO_SIMULATION_PROVIDER:
+            raise ConflictException("Demo payment simulation is available only for fake-provider payments.")
+
+        payment = await self._sync_payment_order_expiry_if_elapsed(payment, now=now)
+        provider_payment_id = self._require_provider_payment_id(payment)
+        raw_body, headers = self._build_demo_simulation_webhook(
+            payment=payment,
+            provider_payment_id=provider_payment_id,
+            result=normalized_result,
+            now=now,
+        )
+        webhook_result = await self.process_provider_webhook(raw_body=raw_body, headers=headers)
+        updated_payment = await self.get_payment_details(payment.id, current_user=current_user)
+
+        return PaymentSimulationRead(
+            result=normalized_result,
+            payment=updated_payment,
+            webhook=webhook_result,
+            message="Fake-provider simulation processed through the payment webhook pipeline.",
+        )
 
     async def process_provider_webhook(
         self,
@@ -770,6 +820,62 @@ class PaymentService:
             metadata=metadata,
             fail_on_provider_error=fail_on_provider_error,
         )
+
+    async def request_order_refund(
+        self,
+        *,
+        order_id: str,
+        payload: CustomerRefundRequest,
+        current_user: UserRead,
+    ) -> CustomerRefundRead:
+        """Create a customer-requested order or ticket refund through the payment refund subsystem."""
+        order_document = await self.order_repository.get_by_id(order_id)
+        if order_document is None:
+            raise NotFoundException("Order was not found.")
+        self._ensure_order_access(order_document, current_user=current_user)
+
+        tickets = await self.ticket_repository.list_by_order(order_id)
+        if not tickets:
+            raise ConflictException("Order has no tickets to refund.")
+
+        payment = await self._find_customer_refundable_payment(order_id)
+        payment_read = PaymentRead.model_validate(payment)
+        self._ensure_payment_access(payment_read, current_user=current_user)
+        if not payment_read.provider_payment_id:
+            raise ConflictException("Payment has not been created with a provider yet.")
+
+        existing_refunds = await self.refund_service.list_order_refunds(order_id)
+        blocking_ticket_ids = self._extract_blocking_refund_ticket_ids(existing_refunds, payment_id=payment_read.id)
+        remaining_amount = await self.refund_service.get_remaining_refundable_amount(payment_read.id)
+        if remaining_amount <= 0:
+            raise ConflictException("Order has no remaining refundable amount.")
+
+        selected_tickets = self._select_customer_refund_tickets(
+            payload=payload,
+            tickets=tickets,
+            blocking_ticket_ids=blocking_ticket_ids,
+        )
+        refund_amount_minor = self._calculate_customer_refund_amount(
+            payload=payload,
+            selected_tickets=selected_tickets,
+            all_tickets=tickets,
+            remaining_amount_minor=remaining_amount,
+        )
+        metadata = {
+            "source": "customer_refund_request",
+            "scope": payload.scope,
+            "order_id": order_id,
+            "ticket_ids": [str(ticket["id"]) for ticket in selected_tickets],
+        }
+        refund = await self.refund_service.refund_payment(
+            payment_id=payment_read.id,
+            amount_minor=refund_amount_minor,
+            reason=payload.reason or self._default_customer_refund_reason(payload.scope),
+            requested_by=f"user:{current_user.id}",
+            metadata=metadata,
+            fail_on_provider_error=True,
+        )
+        return await self._build_customer_refund_result(refund)
 
     async def list_payment_refunds(
         self,
@@ -1826,6 +1932,50 @@ class PaymentService:
     def _hash_webhook_payload(self, raw_body: bytes) -> str:
         return hashlib.sha256(raw_body).hexdigest()
 
+    def _ensure_demo_simulation_allowed(self) -> None:
+        settings = get_settings()
+        configured_provider = normalize_provider(settings.payment_provider)
+        active_provider = normalize_provider(self.payment_provider.name)
+        environment = settings.environment.strip().lower()
+
+        if configured_provider != DEMO_SIMULATION_PROVIDER or active_provider != DEMO_SIMULATION_PROVIDER:
+            raise AuthorizationException("Demo payment simulation is available only with the fake payment provider.")
+        if environment not in DEMO_SIMULATION_ENVIRONMENTS:
+            raise AuthorizationException("Demo payment simulation is disabled outside development or demo environments.")
+
+    def _build_demo_simulation_webhook(
+        self,
+        *,
+        payment: PaymentRead,
+        provider_payment_id: str,
+        result: str,
+        now: datetime,
+    ) -> tuple[bytes, dict[str, str]]:
+        settings = get_settings()
+        raw_status = DEMO_SIMULATION_RAW_STATUSES[result]
+        payload = {
+            "event_id": f"evt-demo-{payment.id}-{result}-{uuid4().hex}",
+            "event_type": "payment.updated",
+            "occurred_at": now.isoformat(),
+            "payment": {
+                "provider_payment_id": provider_payment_id,
+                "status": raw_status,
+                "amount_minor": payment.amount_minor,
+                "currency": payment.currency,
+            },
+            "demo_simulation": {
+                "result": result,
+                "source": "local_fake_payment_page",
+            },
+        }
+        raw_body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        signature = hmac.new(
+            settings.payment_webhook_secret.encode("utf-8"),
+            raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+        return raw_body, {"x-fake-payment-signature": signature}
+
     def _safe_webhook_payload_snapshot(self, raw_body: bytes) -> dict[str, Any] | None:
         try:
             parsed = json.loads(raw_body.decode("utf-8"))
@@ -2036,6 +2186,139 @@ class PaymentService:
             ),
             "latest_refund_status": refunds[0].status if refunds else None,
         }
+
+    async def _find_customer_refundable_payment(self, order_id: str) -> dict[str, Any]:
+        payments = await self.payment_repository.list_by_order(order_id)
+        for payment in payments:
+            if payment["status"] in ADMIN_REFUNDABLE_PAYMENT_STATUSES:
+                return payment
+        if any(payment["status"] == PaymentStatuses.REFUNDED for payment in payments):
+            raise ConflictException("Order payment is already fully refunded.")
+        raise ConflictException("Order does not have a successful payment with refundable funds.")
+
+    def _select_customer_refund_tickets(
+        self,
+        *,
+        payload: CustomerRefundRequest,
+        tickets: list[dict[str, Any]],
+        blocking_ticket_ids: set[str],
+    ) -> list[dict[str, Any]]:
+        tickets_by_id = {str(ticket["id"]): ticket for ticket in tickets}
+        if payload.scope == "tickets":
+            missing_ids = [ticket_id for ticket_id in payload.ticket_ids if ticket_id not in tickets_by_id]
+            if missing_ids:
+                raise ConflictException("Selected ticket does not belong to this order.")
+            selected_tickets = [tickets_by_id[ticket_id] for ticket_id in payload.ticket_ids]
+            self._ensure_customer_tickets_refundable(selected_tickets, blocking_ticket_ids=blocking_ticket_ids)
+            return selected_tickets
+
+        active_tickets = [
+            ticket
+            for ticket in tickets
+            if ticket["status"] == TicketStatuses.PURCHASED
+        ]
+        if active_tickets:
+            raise ConflictException("Cancel all active tickets before requesting a full order refund.")
+
+        selected_tickets = [
+            ticket
+            for ticket in tickets
+            if ticket["status"] == TicketStatuses.CANCELLED
+            and ticket.get("checked_in_at") is None
+            and str(ticket["id"]) not in blocking_ticket_ids
+        ]
+        if not selected_tickets:
+            raise ConflictException("Order has no cancelled tickets eligible for refund.")
+        return selected_tickets
+
+    def _ensure_customer_tickets_refundable(
+        self,
+        tickets: list[dict[str, Any]],
+        *,
+        blocking_ticket_ids: set[str],
+    ) -> None:
+        for ticket in tickets:
+            if ticket["status"] != TicketStatuses.CANCELLED:
+                raise ConflictException("Only cancelled tickets can be refunded by the customer.")
+            if ticket.get("checked_in_at") is not None:
+                raise ConflictException("Checked-in tickets cannot be refunded.")
+            if str(ticket["id"]) in blocking_ticket_ids:
+                raise ConflictException("A refund has already been requested for this ticket.")
+
+    def _calculate_customer_refund_amount(
+        self,
+        *,
+        payload: CustomerRefundRequest,
+        selected_tickets: list[dict[str, Any]],
+        all_tickets: list[dict[str, Any]],
+        remaining_amount_minor: int,
+    ) -> int:
+        selected_amount = sum(amount_to_minor_units(ticket["price"]) for ticket in selected_tickets)
+        if selected_amount <= 0:
+            raise ConflictException("Refund amount must be greater than zero.")
+
+        if payload.scope == "order":
+            has_active_ticket = any(ticket["status"] == TicketStatuses.PURCHASED for ticket in all_tickets)
+            if has_active_ticket:
+                raise ConflictException("Cancel all active tickets before requesting a full order refund.")
+            return min(selected_amount, remaining_amount_minor)
+
+        if selected_amount > remaining_amount_minor:
+            raise ConflictException("Refund amount exceeds the remaining refundable payment amount.")
+        return selected_amount
+
+    async def _build_customer_refund_result(self, refund: RefundRead) -> CustomerRefundRead:
+        payment_document = await self.payment_repository.get_by_id(refund.payment_id)
+        if payment_document is None:
+            raise NotFoundException("Payment was not found.")
+        payment = PaymentRead.model_validate(payment_document)
+        refunds = await self.refund_service.list_order_refunds(refund.order_id)
+        refunds_for_payment = [item for item in refunds if item.payment_id == payment.id]
+        aggregate = self._build_admin_refund_aggregate(payment, refunds_for_payment)
+        return CustomerRefundRead(
+            refund=refund,
+            payment=await self._build_payment_details(payment),
+            refunds=refunds,
+            refunds_count=len(refunds_for_payment),
+            refunded_amount_minor=aggregate["refunded_amount_minor"],
+            remaining_refundable_amount_minor=aggregate["remaining_refundable_amount_minor"],
+            latest_refund_status=aggregate["latest_refund_status"],
+        )
+
+    def _extract_blocking_refund_ticket_ids(
+        self,
+        refunds: list[RefundRead],
+        *,
+        payment_id: str,
+    ) -> set[str]:
+        ticket_ids: set[str] = set()
+        for refund in refunds:
+            if refund.payment_id != payment_id or refund.status not in ADMIN_REFUND_RESERVED_STATUSES:
+                continue
+            ticket_ids.update(self._extract_refund_ticket_ids(refund))
+        return ticket_ids
+
+    def _extract_refund_ticket_ids(self, refund: RefundRead) -> list[str]:
+        snapshot = refund.request_payload_snapshot
+        if not isinstance(snapshot, dict):
+            return []
+        metadata = snapshot.get("metadata")
+        if not isinstance(metadata, dict):
+            return []
+
+        ticket_ids: list[str] = []
+        raw_ticket_id = metadata.get("ticket_id")
+        if isinstance(raw_ticket_id, str) and raw_ticket_id.strip():
+            ticket_ids.append(raw_ticket_id.strip())
+        raw_ticket_ids = metadata.get("ticket_ids")
+        if isinstance(raw_ticket_ids, list):
+            ticket_ids.extend(str(ticket_id).strip() for ticket_id in raw_ticket_ids if str(ticket_id).strip())
+        return list(dict.fromkeys(ticket_ids))
+
+    def _default_customer_refund_reason(self, scope: str) -> str:
+        if scope == "tickets":
+            return "customer_cancelled_ticket"
+        return "customer_cancelled_order"
 
     async def _record_audit_event(
         self,

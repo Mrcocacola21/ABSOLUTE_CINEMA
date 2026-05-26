@@ -16,7 +16,7 @@ import { resolvePosterSource } from "@/shared/posters";
 import { formatCurrency, formatDateTime, formatStateLabel } from "@/shared/presentation";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
-import type { Order, OrderTicket } from "@/types/domain";
+import type { Order, OrderTicket, RefundStatus } from "@/types/domain";
 
 interface ProfileFormState {
   name: string;
@@ -78,6 +78,17 @@ function formatTicketTimeline(
   ].filter(Boolean);
 
   return [baseText, ...extraParts].join(" | ");
+}
+
+function getRefundStatusLabel(status: RefundStatus, t: TFunction): string {
+  const fallbackByStatus: Record<RefundStatus, string> = {
+    created: "Refund requested",
+    pending: "Refund pending",
+    succeeded: "Refunded",
+    failed: "Refund failed",
+    cancelled: "Refund cancelled",
+  };
+  return t(`profile.orders.refunds.status.${status}`, { defaultValue: fallbackByStatus[status] });
 }
 
 export function ProfilePage() {
@@ -619,6 +630,15 @@ export function ProfilePage() {
                           <span className="badge">
                             {entrySummary}
                           </span>
+                          {order.latest_refund_status ? (
+                            <span className={`badge profile-refund-badge profile-refund-badge--${order.latest_refund_status}`}>
+                              {getRefundStatusLabel(order.latest_refund_status, t)}
+                            </span>
+                          ) : order.full_refund_available ? (
+                            <span className="badge profile-refund-badge profile-refund-badge--pending">
+                              {t("profile.orders.refunds.available", { defaultValue: "Refund available" })}
+                            </span>
+                          ) : null}
                           {order.age_rating ? <span className="badge">{order.age_rating}</span> : null}
                         </div>
                       </div>
@@ -638,7 +658,9 @@ export function ProfilePage() {
                           to={`/me/orders/${order.id}`}
                           className={`${isPendingCheckout ? "button--ghost" : "button"} profile-order-card__cta`}
                         >
-                          {t("common.actions.viewDetails")}
+                          {order.full_refund_available
+                            ? t("profile.orders.refunds.requestCta", { defaultValue: "Request refund" })
+                            : t("common.actions.viewDetails")}
                         </Link>
                         <Link to={`/schedule/${order.session_id}`} className="button--ghost profile-order-card__cta">
                           {t("common.actions.viewSession")}
@@ -665,6 +687,11 @@ export function ProfilePage() {
                             {ticket.valid_for_entry ? (
                               <span className="badge badge--active">{t("profile.orders.validForEntry")}</span>
                             ) : null}
+                            {ticket.refund_status ? (
+                              <span className={`badge profile-refund-badge profile-refund-badge--${ticket.refund_status}`}>
+                                {getRefundStatusLabel(ticket.refund_status, t)}
+                              </span>
+                            ) : null}
                             <span className="badge">{formatCurrency(ticket.price, i18n.language)}</span>
                             {ticket.is_cancellable ? (
                               <button
@@ -679,6 +706,11 @@ export function ProfilePage() {
                                   ? t("profile.orders.cancelLoading")
                                   : t("common.actions.cancelTicket")}
                               </button>
+                            ) : null}
+                            {ticket.is_refundable ? (
+                              <Link to={`/me/orders/${order.id}`} className="button--ghost profile-order-ticket__action">
+                                {t("profile.orders.refunds.ticketCta", { defaultValue: "Request refund" })}
+                              </Link>
                             ) : null}
                           </div>
                           </div>

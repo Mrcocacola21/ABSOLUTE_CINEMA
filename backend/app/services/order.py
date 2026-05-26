@@ -10,9 +10,8 @@ from app.commands.order_finalization import OrderFinalizationCommand
 from app.commands.order_purchase import OrderPurchaseCommand
 from app.commands.reservation_expiry import sync_expired_reservations_for_session
 from app.core.config import get_settings
-from app.core.constants import OrderStatuses, Roles, SessionStatuses, TicketStatuses
+from app.core.constants import OrderStatuses, PaymentStatuses, RefundStatuses, Roles, SessionStatuses, TicketStatuses
 from app.core.exceptions import AuthorizationException, ConflictException, NotFoundException
-from app.core.logging import get_logger
 from app.observers.events import build_default_event_publisher
 from app.repositories.movies import MovieRepository
 from app.repositories.orders import OrderRepository
@@ -37,12 +36,19 @@ from app.utils.identifiers import is_valid_object_id
 from app.utils.money import amount_to_minor_units
 from app.utils.order_aggregates import build_order_aggregate_updates
 
-logger = get_logger(__name__)
-
 VALIDATION_STATE_VALID = "valid"
 VALIDATION_STATE_CANCELLED = "cancelled"
 VALIDATION_STATE_EXPIRED = "expired"
 VALIDATION_STATE_ALREADY_USED = "already_used"
+ORDER_REFUND_RESERVED_STATUSES = {
+    RefundStatuses.CREATED,
+    RefundStatuses.PENDING,
+    RefundStatuses.SUCCEEDED,
+}
+ORDER_REFUNDABLE_PAYMENT_STATUSES = {
+    PaymentStatuses.SUCCEEDED,
+    PaymentStatuses.PARTIALLY_REFUNDED,
+}
 
 
 class OrderService:
@@ -95,60 +101,13 @@ class OrderService:
 
     async def cancel_order(self, order_id: str, current_user: UserRead) -> OrderDetailsRead:
         """Cancel all active reserved or purchased tickets contained in one order."""
-        original_tickets = await self.ticket_repository.list_by_order(order_id)
-        refundable_tickets = [
-            ticket
-            for ticket in original_tickets
-            if ticket["status"] == TicketStatuses.PURCHASED and ticket.get("checked_in_at") is None
-        ]
         command = OrderCancellationCommand(
             order_repository=self.order_repository,
             ticket_repository=self.ticket_repository,
             session_repository=self.session_repository,
         )
         await command.execute(order_id=order_id, current_user=current_user)
-        await self._refund_cancelled_order_tickets(
-            order_id=order_id,
-            refundable_tickets=refundable_tickets,
-            requested_by=current_user,
-        )
         return await self.get_current_user_order(order_id=order_id, current_user=current_user)
-
-    async def _refund_cancelled_order_tickets(
-        self,
-        *,
-        order_id: str,
-        refundable_tickets: list[dict[str, object]],
-        requested_by: UserRead,
-    ) -> None:
-        if self.refund_service is None or not refundable_tickets:
-            return
-
-        amount_minor = sum(amount_to_minor_units(ticket["price"]) for ticket in refundable_tickets)
-        try:
-            await self.refund_service.refund_order_amount(
-                order_id=order_id,
-                amount_minor=amount_minor,
-                reason="order_cancelled",
-                requested_by=requested_by.id,
-                metadata={
-                    "source": "order_cancellation",
-                    "order_id": order_id,
-                    "ticket_ids": [str(ticket["id"]) for ticket in refundable_tickets],
-                },
-                cap_to_remaining=True,
-                fail_on_provider_error=False,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Order cancellation refund could not be completed",
-                extra={
-                    "order_id": order_id,
-                    "requested_by": requested_by.id,
-                    "ticket_count": len(refundable_tickets),
-                },
-                exc_info=exc,
-            )
 
     async def finalize_pending_order(self, order_id: str) -> OrderRead:
         """Internal hook for a future payment success flow."""
@@ -313,6 +272,10 @@ class OrderService:
                 ticket_documents=tickets,
                 updated_at=now,
             )
+            refund_context = await self._build_order_refund_context(
+                order_document=normalized_order,
+                ticket_documents=tickets,
+            )
             result.append(
                 self._build_order_read(
                     order_document=normalized_order,
@@ -320,6 +283,7 @@ class OrderService:
                     session_document=session.model_dump(mode="python"),
                     movie_document=movie.model_dump(mode="python"),
                     now=now,
+                    refund_context=refund_context,
                 )
             )
         return result
@@ -375,6 +339,142 @@ class OrderService:
         )
         return updated_order or {**order_document, **updates, "updated_at": updated_at}
 
+    async def _build_order_refund_context(
+        self,
+        *,
+        order_document: dict[str, object],
+        ticket_documents: list[dict[str, object]],
+    ) -> dict[str, object]:
+        """Build customer-safe refund summary data for an order response."""
+        if self.payment_repository is None:
+            return {}
+
+        order_id = str(order_document["id"])
+        payments = await self.payment_repository.list_by_order(order_id)
+        if not payments:
+            return {}
+
+        latest_payment = payments[0]
+        refundable_payment = next(
+            (
+                payment
+                for payment in payments
+                if payment["status"] in ORDER_REFUNDABLE_PAYMENT_STATUSES
+            ),
+            None,
+        )
+        aggregate_payment = refundable_payment or latest_payment
+
+        refunds = await self.refund_service.list_order_refunds(order_id) if self.refund_service is not None else []
+        refunds_for_payment = [
+            refund for refund in refunds if refund.payment_id == str(aggregate_payment["id"])
+        ]
+        refunded_amount = sum(
+            refund.amount_minor
+            for refund in refunds_for_payment
+            if refund.status == RefundStatuses.SUCCEEDED
+        )
+        reserved_amount = sum(
+            refund.amount_minor
+            for refund in refunds_for_payment
+            if refund.status in ORDER_REFUND_RESERVED_STATUSES
+        )
+        remaining_refundable_amount = (
+            max(int(aggregate_payment["amount_minor"]) - reserved_amount, 0)
+            if aggregate_payment["status"] in ORDER_REFUNDABLE_PAYMENT_STATUSES
+            else 0
+        )
+        ticket_refunds = self._build_ticket_refund_contexts(
+            ticket_documents=ticket_documents,
+            refunds=refunds_for_payment,
+            remaining_refundable_amount=remaining_refundable_amount,
+            payment_refundable=bool(
+                aggregate_payment.get("provider_payment_id")
+                and aggregate_payment["status"] in ORDER_REFUNDABLE_PAYMENT_STATUSES
+            ),
+        )
+        has_active_purchased_ticket = any(
+            ticket["status"] == TicketStatuses.PURCHASED
+            for ticket in ticket_documents
+        )
+        has_refundable_cancelled_ticket = any(
+            bool(context.get("is_refundable"))
+            for context in ticket_refunds.values()
+        )
+
+        return {
+            "payment_id": str(aggregate_payment["id"]),
+            "payment_status": str(aggregate_payment["status"]),
+            "refunds_count": len(refunds_for_payment),
+            "refunded_amount_minor": refunded_amount,
+            "remaining_refundable_amount_minor": remaining_refundable_amount,
+            "latest_refund_status": refunds_for_payment[0].status if refunds_for_payment else None,
+            "full_refund_available": bool(
+                aggregate_payment.get("provider_payment_id")
+                and aggregate_payment["status"] in ORDER_REFUNDABLE_PAYMENT_STATUSES
+                and remaining_refundable_amount > 0
+                and not has_active_purchased_ticket
+                and has_refundable_cancelled_ticket
+            ),
+            "tickets": ticket_refunds,
+        }
+
+    def _build_ticket_refund_contexts(
+        self,
+        *,
+        ticket_documents: list[dict[str, object]],
+        refunds: list[object],
+        remaining_refundable_amount: int,
+        payment_refundable: bool,
+    ) -> dict[str, dict[str, object]]:
+        """Return per-ticket refund status and eligibility derived from payment refunds."""
+        refunds_by_ticket: dict[str, object] = {}
+        blocking_refunded_ticket_ids: set[str] = set()
+        for refund in refunds:
+            ticket_ids = self._extract_refund_ticket_ids(refund)
+            for ticket_id in ticket_ids:
+                refunds_by_ticket.setdefault(ticket_id, refund)
+                if getattr(refund, "status", None) in ORDER_REFUND_RESERVED_STATUSES:
+                    blocking_refunded_ticket_ids.add(ticket_id)
+
+        contexts: dict[str, dict[str, object]] = {}
+        for ticket in ticket_documents:
+            ticket_id = str(ticket["id"])
+            latest_refund = refunds_by_ticket.get(ticket_id)
+            ticket_amount = amount_to_minor_units(ticket["price"])
+            is_refundable = (
+                payment_refundable
+                and remaining_refundable_amount >= ticket_amount
+                and ticket["status"] == TicketStatuses.CANCELLED
+                and ticket.get("checked_in_at") is None
+                and ticket_id not in blocking_refunded_ticket_ids
+            )
+            contexts[ticket_id] = {
+                "is_refundable": is_refundable,
+                "refund_id": getattr(latest_refund, "id", None),
+                "refund_status": getattr(latest_refund, "status", None),
+                "refund_amount_minor": int(getattr(latest_refund, "amount_minor", 0) or 0),
+            }
+        return contexts
+
+    def _extract_refund_ticket_ids(self, refund: object) -> list[str]:
+        """Extract ticket ids from customer/admin refund metadata when present."""
+        snapshot = getattr(refund, "request_payload_snapshot", None)
+        if not isinstance(snapshot, dict):
+            return []
+        metadata = snapshot.get("metadata")
+        if not isinstance(metadata, dict):
+            return []
+
+        ticket_ids: list[str] = []
+        raw_ticket_id = metadata.get("ticket_id")
+        if isinstance(raw_ticket_id, str) and raw_ticket_id.strip():
+            ticket_ids.append(raw_ticket_id.strip())
+        raw_ticket_ids = metadata.get("ticket_ids")
+        if isinstance(raw_ticket_ids, list):
+            ticket_ids.extend(str(ticket_id).strip() for ticket_id in raw_ticket_ids if str(ticket_id).strip())
+        return list(dict.fromkeys(ticket_ids))
+
     def _build_order_read(
         self,
         *,
@@ -383,17 +483,23 @@ class OrderService:
         session_document: dict[str, object],
         movie_document: dict[str, object],
         now: datetime,
+        refund_context: dict[str, object] | None = None,
     ) -> OrderListRead:
         """Build one enriched order DTO."""
         order = OrderRead.model_validate(order_document)
         session = SessionRead.model_validate(session_document)
         movie = MovieRead.model_validate(movie_document)
+        refund_context = refund_context or {}
+        ticket_refund_contexts = refund_context.get("tickets", {})
+        if not isinstance(ticket_refund_contexts, dict):
+            ticket_refund_contexts = {}
         tickets = [
             self._build_order_ticket(
                 ticket_document=document,
                 session=session,
                 order_status=order.status,
                 now=now,
+                refund_context=ticket_refund_contexts.get(str(document["id"])),
             )
             for document in ticket_documents
         ]
@@ -426,6 +532,19 @@ class OrderService:
             expired_tickets_count=expired_tickets_count,
             checked_in_tickets_count=checked_in_tickets_count,
             unchecked_active_tickets_count=unchecked_active_tickets_count,
+            payment_id=refund_context.get("payment_id") if isinstance(refund_context.get("payment_id"), str) else None,
+            payment_status=(
+                refund_context.get("payment_status") if isinstance(refund_context.get("payment_status"), str) else None
+            ),
+            refunds_count=int(refund_context.get("refunds_count") or 0),
+            refunded_amount_minor=int(refund_context.get("refunded_amount_minor") or 0),
+            remaining_refundable_amount_minor=int(refund_context.get("remaining_refundable_amount_minor") or 0),
+            latest_refund_status=(
+                refund_context.get("latest_refund_status")
+                if isinstance(refund_context.get("latest_refund_status"), str)
+                else None
+            ),
+            full_refund_available=bool(refund_context.get("full_refund_available")),
             tickets=tickets,
         )
 
@@ -543,8 +662,10 @@ class OrderService:
         session: SessionRead,
         now: datetime,
         order_status: str = OrderStatuses.COMPLETED,
+        refund_context: object | None = None,
     ) -> OrderTicketRead:
         """Build one nested ticket DTO inside an order response."""
+        refund_data = refund_context if isinstance(refund_context, dict) else {}
         return OrderTicketRead(
             id=str(ticket_document["id"]),
             order_id=str(ticket_document.get("order_id")) if ticket_document.get("order_id") else None,
@@ -569,6 +690,18 @@ class OrderService:
                 order_status=order_status,
                 now=now,
             ),
+            is_refundable=bool(refund_data.get("is_refundable")),
+            refund_status=(
+                str(refund_data["refund_status"])
+                if refund_data.get("refund_status") is not None
+                else None
+            ),
+            refund_id=(
+                str(refund_data["refund_id"])
+                if refund_data.get("refund_id") is not None
+                else None
+            ),
+            refund_amount_minor=int(refund_data.get("refund_amount_minor") or 0),
         )
 
     def _is_ticket_cancellable(

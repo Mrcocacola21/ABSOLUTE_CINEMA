@@ -18,9 +18,13 @@ from app.core.exceptions import ConflictException
 from app.core.responses import ApiResponse
 from app.factories.response_factory import ApiResponseFactory
 from app.schemas.payment import (
+    CustomerRefundRead,
+    CustomerRefundRequest,
     PaymentDetailsRead,
     PaymentInitiationRead,
     PaymentInitiationRequest,
+    PaymentSimulationRead,
+    PaymentSimulationRequest,
     PaymentWebhookProcessingRead,
     RefundRead,
     RefundRequest,
@@ -173,6 +177,40 @@ async def get_order_payment_details(
 
 
 @router.post(
+    "/payments/{payment_id}/simulate",
+    response_model=ApiResponse[PaymentSimulationRead],
+    summary="Simulate fake-provider payment result",
+    description=(
+        "Development/demo-only endpoint for the local fake payment page. The endpoint is guarded to the configured "
+        "fake provider in a non-production environment, requires the authenticated payment owner or an administrator, "
+        "builds a signed fake-provider webhook, and sends it through the same webhook processor that finalizes paid "
+        "orders or releases failed/cancelled reservations. `pending` emits a fake-provider pending event and keeps "
+        "the payment unresolved."
+    ),
+    response_description="Wrapped simulation result with refreshed payment details and webhook processing state.",
+    responses=merge_openapi_responses(
+        AUTHORIZATION_ERROR_RESPONSE,
+        NOT_FOUND_ERROR_RESPONSE,
+        CONFLICT_ERROR_RESPONSE,
+        VALIDATION_ERROR_RESPONSE,
+    ),
+)
+async def simulate_fake_provider_payment(
+    payment_id: str,
+    payload: PaymentSimulationRequest,
+    current_user: UserRead = Depends(get_current_user),
+    payment_service: PaymentService = Depends(get_payment_service),
+) -> ApiResponse[PaymentSimulationRead]:
+    """Drive a demo fake-provider result through the real webhook finalization path."""
+    simulation = await payment_service.simulate_fake_provider_payment(
+        payment_id,
+        result=payload.result,
+        current_user=current_user,
+    )
+    return ApiResponseFactory.success(data=simulation, message="Fake payment simulation processed.")
+
+
+@router.post(
     "/payments/{payment_id}/refunds",
     response_model=ApiResponse[RefundRead],
     status_code=status.HTTP_201_CREATED,
@@ -206,6 +244,40 @@ async def create_payment_refund(
         metadata=payload.metadata,
     )
     return ApiResponseFactory.created(data=refund, message="Refund created.")
+
+
+@router.post(
+    "/orders/{order_id}/refunds/request",
+    response_model=ApiResponse[CustomerRefundRead],
+    status_code=status.HTTP_201_CREATED,
+    summary="Request customer order refund",
+    description=(
+        "Create a customer-facing refund request without moving money outside the payment subsystem. "
+        "`scope=tickets` computes a partial refund from the selected cancelled ticket ids and creates a refund "
+        "against the order payment. `scope=order` refunds the remaining refundable payment amount only after the "
+        "order has no active purchased tickets. Normal users can request refunds only for their own orders."
+    ),
+    response_description="Wrapped refund record with refreshed payment and order refund history.",
+    responses=merge_openapi_responses(
+        AUTHORIZATION_ERROR_RESPONSE,
+        NOT_FOUND_ERROR_RESPONSE,
+        CONFLICT_ERROR_RESPONSE,
+        VALIDATION_ERROR_RESPONSE,
+    ),
+)
+async def request_customer_order_refund(
+    order_id: str,
+    payload: CustomerRefundRequest,
+    current_user: UserRead = Depends(get_current_user),
+    payment_service: PaymentService = Depends(get_payment_service),
+) -> ApiResponse[CustomerRefundRead]:
+    """Request a customer refund while preserving payment/order financial ownership."""
+    refund = await payment_service.request_order_refund(
+        order_id=order_id,
+        payload=payload,
+        current_user=current_user,
+    )
+    return ApiResponseFactory.created(data=refund, message="Refund request created.")
 
 
 @router.get(

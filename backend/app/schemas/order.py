@@ -6,7 +6,14 @@ from datetime import datetime
 
 from pydantic import ConfigDict, Field, model_validator
 
-from app.core.constants import ORDER_STATUS_VALUES, TICKET_STATUS_VALUES, OrderStatuses, TicketStatuses
+from app.core.constants import (
+    ORDER_STATUS_VALUES,
+    PAYMENT_STATUS_VALUES,
+    REFUND_STATUS_VALUES,
+    TICKET_STATUS_VALUES,
+    OrderStatuses,
+    TicketStatuses,
+)
 from app.schemas.common import BaseSchema
 from app.schemas.localization import LocalizedText
 
@@ -106,6 +113,10 @@ class OrderTicketRead(BaseSchema):
     checked_in_at: datetime | None = None
     is_cancellable: bool
     valid_for_entry: bool
+    is_refundable: bool = False
+    refund_status: str | None = None
+    refund_id: str | None = None
+    refund_amount_minor: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def validate_ticket_state(self) -> "OrderTicketRead":
@@ -126,6 +137,8 @@ class OrderTicketRead(BaseSchema):
             raise ValueError("Inactive tickets cannot be checked in.")
         if self.status == TicketStatuses.EXPIRED and self.cancelled_at is not None:
             raise ValueError("Expired tickets cannot include cancelled_at.")
+        if self.refund_status is not None and self.refund_status not in REFUND_STATUS_VALUES:
+            raise ValueError("Unsupported refund status.")
         return self
 
 
@@ -148,7 +161,23 @@ class OrderListRead(OrderRead):
     expired_tickets_count: int = Field(default=0, ge=0)
     checked_in_tickets_count: int = Field(default=0, ge=0)
     unchecked_active_tickets_count: int = Field(default=0, ge=0)
+    payment_id: str | None = None
+    payment_status: str | None = None
+    refunds_count: int = Field(default=0, ge=0)
+    refunded_amount_minor: int = Field(default=0, ge=0)
+    remaining_refundable_amount_minor: int = Field(default=0, ge=0)
+    latest_refund_status: str | None = None
+    full_refund_available: bool = False
     tickets: list[OrderTicketRead]
+
+    @model_validator(mode="after")
+    def validate_payment_refund_state(self) -> "OrderListRead":
+        """Validate optional payment/refund state used by customer refund actions."""
+        if self.payment_status is not None and self.payment_status not in PAYMENT_STATUS_VALUES:
+            raise ValueError("Unsupported payment status.")
+        if self.latest_refund_status is not None and self.latest_refund_status not in REFUND_STATUS_VALUES:
+            raise ValueError("Unsupported refund status.")
+        return self
 
 
 class OrderDetailsRead(OrderListRead):

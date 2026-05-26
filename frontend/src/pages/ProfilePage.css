@@ -465,6 +465,30 @@
   min-height: 42px;
 }
 
+.profile-refund-badge {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.profile-refund-badge--created,
+.profile-refund-badge--pending {
+  border-color: rgba(244, 166, 98, 0.28);
+  background: rgba(244, 166, 98, 0.1);
+  color: #ffe8d3;
+}
+
+.profile-refund-badge--succeeded {
+  border-color: rgba(119, 194, 157, 0.28);
+  background: rgba(119, 194, 157, 0.1);
+  color: #dffce9;
+}
+
+.profile-refund-badge--failed,
+.profile-refund-badge--cancelled {
+  border-color: rgba(227, 123, 118, 0.25);
+  background: rgba(227, 123, 118, 0.12);
+  color: #ffe1df;
+}
+
 @media (max-width: 1100px) {
   .profile-hero,
   .profile-layout {

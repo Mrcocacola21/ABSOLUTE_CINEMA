@@ -7,6 +7,7 @@ import { AdminDashboardPage } from "@/pages/AdminDashboardPage";
 import { AdminOrderValidationPage } from "@/pages/AdminOrderValidationPage";
 import { AdminPaymentsPage } from "@/pages/AdminPaymentsPage";
 import { CheckoutPage } from "@/pages/CheckoutPage";
+import { FakePaymentPage } from "@/pages/FakePaymentPage";
 import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
 import { MovieDetailsPage } from "@/pages/MovieDetailsPage";
@@ -33,6 +34,7 @@ export function AppRouter() {
           <Route path="/register" element={<RegisterPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/checkout/:orderId" element={<CheckoutPage />} />
+            <Route path="/payment/fake/:paymentId" element={<FakePaymentPage />} />
             <Route path="/payment/return" element={<PaymentReturnPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/me/orders/:orderId" element={<OrderDetailsPage />} />

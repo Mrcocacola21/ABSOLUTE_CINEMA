@@ -12,6 +12,7 @@ import logging
 import pytest
 from pydantic import ValidationError
 
+from app.core.config import Settings
 from app.core.constants import (
     OrderStatuses,
     PaymentAttemptStatuses,
@@ -36,7 +37,7 @@ from app.payments.providers.base import (
     ProviderRefundResult,
 )
 from app.payments.providers.fake import FakePaymentProvider
-from app.schemas.payment import PaymentCreate, PaymentRead, RefundCreate
+from app.schemas.payment import CustomerRefundRequest, PaymentCreate, PaymentRead, RefundCreate
 from app.schemas.user import UserRead
 from app.services.payment import PaymentService
 from app.services.refund import RefundService
@@ -713,22 +714,32 @@ def build_refund(
     }
 
 
-def build_reserved_ticket(*, status: str = TicketStatuses.RESERVED) -> dict[str, object]:
+def build_reserved_ticket(
+    ticket_id: str = "ticket-1",
+    *,
+    order_id: str = "order-1",
+    user_id: str = "user-1",
+    seat_number: int = 1,
+    price: float = 123.45,
+    status: str = TicketStatuses.RESERVED,
+    cancelled_at: datetime | None = None,
+    checked_in_at: datetime | None = None,
+) -> dict[str, object]:
     now = datetime.now(tz=timezone.utc)
     return {
-        "id": "ticket-1",
-        "user_id": "user-1",
-        "order_id": "order-1",
+        "id": ticket_id,
+        "user_id": user_id,
+        "order_id": order_id,
         "session_id": "session-1",
         "seat_row": 1,
-        "seat_number": 1,
-        "price": 123.45,
+        "seat_number": seat_number,
+        "price": price,
         "status": status,
         "reserved_at": now,
         "expires_at": now + timedelta(minutes=15),
-        "purchased_at": None,
-        "cancelled_at": None,
-        "checked_in_at": None,
+        "purchased_at": now if status in {TicketStatuses.PURCHASED, TicketStatuses.CANCELLED} else None,
+        "cancelled_at": cancelled_at if cancelled_at is not None else (now if status == TicketStatuses.CANCELLED else None),
+        "checked_in_at": checked_in_at,
         "created_at": now,
         "updated_at": None,
     }
@@ -1519,6 +1530,173 @@ async def test_payment_service_refund_flow_calls_provider_and_refreshes_payment_
 
 
 @pytest.mark.asyncio
+async def test_customer_ticket_refund_request_creates_partial_refund_for_cancelled_ticket() -> None:
+    payment_repository = FakePaymentRepository(
+        [
+            build_payment(
+                amount_minor=20000,
+                status=PaymentStatuses.SUCCEEDED,
+                provider="fake",
+                provider_payment_id="fake-pay-payment-1",
+            )
+        ]
+    )
+    refund_repository = FakeRefundRepository()
+    tickets = FakeTicketRepository(
+        [
+            build_reserved_ticket(
+                "ticket-1",
+                price=123.45,
+                status=TicketStatuses.CANCELLED,
+                seat_number=1,
+            ),
+            build_reserved_ticket(
+                "ticket-2",
+                price=76.55,
+                status=TicketStatuses.PURCHASED,
+                seat_number=2,
+            ),
+        ]
+    )
+    service, _, _ = build_payment_service(
+        order=build_order(status=OrderStatuses.PARTIALLY_CANCELLED, expires_at=None, tickets_count=2),
+        payment_repository=payment_repository,
+        refund_repository=refund_repository,
+        ticket_repository=tickets,
+        payment_provider=FakePaymentProvider(),
+    )
+
+    result = await service.request_order_refund(
+        order_id="order-1",
+        payload=CustomerRefundRequest(scope="tickets", ticket_ids=["ticket-1"]),
+        current_user=build_user(),
+    )
+
+    assert result.refund.amount_minor == 12345
+    assert result.refund.status == RefundStatuses.SUCCEEDED
+    assert result.refund.reason == "customer_cancelled_ticket"
+    assert result.refund.request_payload_snapshot["metadata"]["scope"] == "tickets"
+    assert result.refund.request_payload_snapshot["metadata"]["ticket_ids"] == ["ticket-1"]
+    assert payment_repository.payments["payment-1"]["status"] == PaymentStatuses.PARTIALLY_REFUNDED
+    assert result.remaining_refundable_amount_minor == 7655
+
+
+@pytest.mark.asyncio
+async def test_customer_full_order_refund_requires_cancelled_order_and_refunds_remaining_amount() -> None:
+    payment_repository = FakePaymentRepository(
+        [
+            build_payment(
+                amount_minor=20000,
+                status=PaymentStatuses.SUCCEEDED,
+                provider="fake",
+                provider_payment_id="fake-pay-payment-1",
+            )
+        ]
+    )
+    tickets = FakeTicketRepository(
+        [
+            build_reserved_ticket("ticket-1", price=120.0, status=TicketStatuses.CANCELLED, seat_number=1),
+            build_reserved_ticket("ticket-2", price=80.0, status=TicketStatuses.CANCELLED, seat_number=2),
+        ]
+    )
+    service, _, _ = build_payment_service(
+        order=build_order(status=OrderStatuses.CANCELLED, expires_at=None, tickets_count=2),
+        payment_repository=payment_repository,
+        ticket_repository=tickets,
+        payment_provider=FakePaymentProvider(),
+    )
+
+    result = await service.request_order_refund(
+        order_id="order-1",
+        payload=CustomerRefundRequest(scope="order"),
+        current_user=build_user(),
+    )
+
+    assert result.refund.amount_minor == 20000
+    assert result.refund.request_payload_snapshot["metadata"]["scope"] == "order"
+    assert sorted(result.refund.request_payload_snapshot["metadata"]["ticket_ids"]) == ["ticket-1", "ticket-2"]
+    assert payment_repository.payments["payment-1"]["status"] == PaymentStatuses.REFUNDED
+    assert result.remaining_refundable_amount_minor == 0
+
+
+@pytest.mark.asyncio
+async def test_customer_refund_request_rejects_foreign_order_active_ticket_duplicate_and_over_refund() -> None:
+    base_payment = build_payment(
+        amount_minor=10000,
+        status=PaymentStatuses.SUCCEEDED,
+        provider="fake",
+        provider_payment_id="fake-pay-payment-1",
+    )
+
+    foreign_service, _, _ = build_payment_service(
+        order=build_order(status=OrderStatuses.CANCELLED, user_id="other-user", expires_at=None),
+        payment_repository=FakePaymentRepository([base_payment]),
+        ticket_repository=FakeTicketRepository([build_reserved_ticket(status=TicketStatuses.CANCELLED)]),
+    )
+    with pytest.raises(AuthorizationException, match="own orders"):
+        await foreign_service.request_order_refund(
+            order_id="order-1",
+            payload=CustomerRefundRequest(scope="tickets", ticket_ids=["ticket-1"]),
+            current_user=build_user(),
+        )
+
+    active_service, _, _ = build_payment_service(
+        order=build_order(status=OrderStatuses.COMPLETED, expires_at=None),
+        payment_repository=FakePaymentRepository([base_payment]),
+        ticket_repository=FakeTicketRepository([build_reserved_ticket(status=TicketStatuses.PURCHASED)]),
+    )
+    with pytest.raises(ConflictException, match="Only cancelled tickets"):
+        await active_service.request_order_refund(
+            order_id="order-1",
+            payload=CustomerRefundRequest(scope="tickets", ticket_ids=["ticket-1"]),
+            current_user=build_user(),
+        )
+    with pytest.raises(ConflictException, match="Cancel all active tickets"):
+        await active_service.request_order_refund(
+            order_id="order-1",
+            payload=CustomerRefundRequest(scope="order"),
+            current_user=build_user(),
+        )
+
+    duplicate_refund = build_refund(
+        amount_minor=5000,
+        status=RefundStatuses.PENDING,
+    )
+    duplicate_refund["request_payload_snapshot"] = {
+        "operation": "refund_payment",
+        "metadata": {"ticket_ids": ["ticket-1"]},
+    }
+    duplicate_service, _, _ = build_payment_service(
+        order=build_order(status=OrderStatuses.CANCELLED, expires_at=None),
+        payment_repository=FakePaymentRepository([base_payment]),
+        refund_repository=FakeRefundRepository([duplicate_refund]),
+        ticket_repository=FakeTicketRepository([build_reserved_ticket(status=TicketStatuses.CANCELLED)]),
+    )
+    with pytest.raises(ConflictException, match="already been requested"):
+        await duplicate_service.request_order_refund(
+            order_id="order-1",
+            payload=CustomerRefundRequest(scope="tickets", ticket_ids=["ticket-1"]),
+            current_user=build_user(),
+        )
+
+    reserved_refund = build_refund("refund-reserved", amount_minor=9000, status=RefundStatuses.CREATED)
+    over_refund_service, _, _ = build_payment_service(
+        order=build_order(status=OrderStatuses.CANCELLED, expires_at=None),
+        payment_repository=FakePaymentRepository([base_payment]),
+        refund_repository=FakeRefundRepository([reserved_refund]),
+        ticket_repository=FakeTicketRepository(
+            [build_reserved_ticket(status=TicketStatuses.CANCELLED, price=20.0)]
+        ),
+    )
+    with pytest.raises(ConflictException, match="exceeds the remaining"):
+        await over_refund_service.request_order_refund(
+            order_id="order-1",
+            payload=CustomerRefundRequest(scope="tickets", ticket_ids=["ticket-1"]),
+            current_user=build_user(),
+        )
+
+
+@pytest.mark.asyncio
 async def test_refund_service_provider_backed_partial_and_full_refunds_accumulate() -> None:
     payment_repository = FakePaymentRepository(
         [
@@ -2122,6 +2300,89 @@ async def test_cancelled_payment_webhook_cancels_pending_order_and_restores_seat
     assert tickets.tickets[0]["cancelled_at"] is not None
     assert service.order_repository.orders["order-1"]["status"] == OrderStatuses.PAYMENT_CANCELLED
     assert sessions.session["available_seats"] == 96
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("result", "payment_status", "order_status", "ticket_status", "restored_quantity"),
+    [
+        ("succeeded", PaymentStatuses.SUCCEEDED, OrderStatuses.COMPLETED, TicketStatuses.PURCHASED, 0),
+        ("failed", PaymentStatuses.FAILED, OrderStatuses.PAYMENT_FAILED, TicketStatuses.EXPIRED, 1),
+        ("cancelled", PaymentStatuses.CANCELLED, OrderStatuses.PAYMENT_CANCELLED, TicketStatuses.CANCELLED, 1),
+        ("pending", PaymentStatuses.PENDING, OrderStatuses.PENDING_PAYMENT, TicketStatuses.RESERVED, 0),
+    ],
+)
+async def test_demo_payment_simulation_uses_signed_webhook_lifecycle(
+    monkeypatch,
+    result: str,
+    payment_status: str,
+    order_status: str,
+    ticket_status: str,
+    restored_quantity: int,
+) -> None:
+    monkeypatch.setattr("app.services.payment.run_transaction_with_retry", run_without_real_transaction)
+    payment_repository = FakePaymentRepository(
+        [
+            build_payment(
+                status=PaymentStatuses.PENDING,
+                provider="fake",
+                provider_payment_id="fake-pay-payment-1",
+                amount_minor=12345,
+            )
+        ]
+    )
+    webhook_events = FakePaymentWebhookEventRepository()
+    tickets = FakeTicketRepository([build_reserved_ticket()])
+    sessions = FakeSessionRepository()
+    service, _, _ = build_payment_service(
+        payment_repository=payment_repository,
+        payment_webhook_event_repository=webhook_events,
+        ticket_repository=tickets,
+        session_repository=sessions,
+    )
+
+    simulation = await service.simulate_fake_provider_payment(
+        "payment-1",
+        result=result,
+        current_user=build_user(),
+    )
+
+    assert simulation.result == result
+    assert simulation.webhook.processing_status == PaymentWebhookProcessingStatuses.PROCESSED
+    assert simulation.payment.status == payment_status
+    assert payment_repository.payments["payment-1"]["status"] == payment_status
+    assert service.order_repository.orders["order-1"]["status"] == order_status
+    assert tickets.tickets[0]["status"] == ticket_status
+    assert sessions.restored_quantity == restored_quantity
+    event = next(iter(webhook_events.events.values()))
+    assert event["signature_verified"] is True
+    assert event["payload_snapshot"]["demo_simulation"]["source"] == "local_fake_payment_page"
+
+
+@pytest.mark.asyncio
+async def test_demo_payment_simulation_is_disabled_outside_demo_environments(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.payment.get_settings",
+        lambda: Settings(environment="production", payment_provider="fake"),
+    )
+    service, _, _ = build_payment_service(
+        payment_repository=FakePaymentRepository(
+            [
+                build_payment(
+                    status=PaymentStatuses.PENDING,
+                    provider="fake",
+                    provider_payment_id="fake-pay-payment-1",
+                )
+            ]
+        )
+    )
+
+    with pytest.raises(AuthorizationException, match="disabled outside development or demo"):
+        await service.simulate_fake_provider_payment(
+            "payment-1",
+            result="succeeded",
+            current_user=build_user(),
+        )
 
 
 @pytest.mark.asyncio

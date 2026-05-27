@@ -639,17 +639,3 @@ Do not rely on a README-stored percentage during defense. Regenerate coverage fr
 - Stateless JWT refresh tokens are not backed by a server-side token revocation list.
 - Some demo poster URLs point to external sources and can depend on network availability.
 
-## Presentation Checklist
-
-For a demo or defense, a reliable flow is:
-
-1. Start the stack with Docker Compose.
-2. Seed demo data with `python -m app.seeds.demo_seed --reset`.
-3. Open the frontend at `http://localhost:5173`.
-4. Sign in as `admin@cinema-showcase.dev` / `CinemaDemo123!`.
-5. Show admin movie/session management and reporting.
-6. Open Swagger at `http://localhost:8000/docs` to show API structure and schemas.
-7. Sign in as a normal user and demonstrate schedule, seat selection, checkout reservation, profile, order details, and paid-order PDF from seeded data.
-8. Use the admin QR validation page with a seeded paid order to show validation/check-in behavior.
-9. Show the admin payments workspace for payment attempts, webhook history, refunds, and revenue reporting.
-10. Run the backend tests and coverage command from the Testing and Coverage sections.

@@ -199,7 +199,8 @@ class OrderService:
                 "actor_id": requested_by.id,
                 "order_id": result.order_id,
                 "validity_code": result.validity_code,
-                "entry_status_code": result.entry_status_code,
+                "is_valid_for_entry": result.is_valid_for_entry,
+                "can_check_in": result.can_check_in,
             },
         )
         return result
@@ -249,7 +250,8 @@ class OrderService:
                 "order_id": order_id,
                 "checked_in_count": checked_in_count,
                 "validity_code": result.validity_code,
-                "entry_status_code": result.entry_status_code,
+                "is_valid_for_entry": result.is_valid_for_entry,
+                "can_check_in": result.can_check_in,
             },
         )
         return result

@@ -161,6 +161,8 @@ async def test_admin_qr_validation_distinguishes_valid_cancelled_expired_invalid
     assert valid_result["token_status"] == "valid_token"
     assert valid_result["is_valid_for_entry"] is True
     assert valid_result["validity_code"] == "valid"
+    assert "entry_status_code" not in valid_result
+    assert "entry_status_message" not in valid_result
     assert valid_result["can_check_in"] is True
     assert valid_result["active_tickets_count"] == 1
     assert valid_result["unchecked_active_tickets_count"] == 1
@@ -281,6 +283,7 @@ async def test_admin_check_in_changes_qr_state_to_already_used_and_blocks_repeat
     assert check_in_response.status_code == 200, check_in_response.text
     checked_in = check_in_response.json()["data"]
     assert checked_in["validity_code"] == "already_used"
+    assert "entry_status_code" not in checked_in
     assert checked_in["is_valid_for_entry"] is False
     assert checked_in["can_check_in"] is False
     assert checked_in["checked_in_tickets_count"] == 2

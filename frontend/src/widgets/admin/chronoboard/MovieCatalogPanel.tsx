@@ -391,7 +391,6 @@ export function MovieCatalogPanel({
               <p className="page-eyebrow">{t("admin.movies.catalogEyebrow")}</p>
               <h3 className="section-title">{t("common.labels.currentLineup")}</h3>
             </div>
-            <span className="badge">{catalogMovies.length}</span>
           </div>
 
           <label className="field">

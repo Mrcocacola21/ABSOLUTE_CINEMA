@@ -922,7 +922,7 @@ export function AttendancePanel({
                 total: attendancePeriodSessions.length,
               })}
             </span>
-            <span className="badge">{attendancePeriodRangeLabel}</span>
+            
           </div>
         </div>
 
@@ -1275,20 +1275,6 @@ export function AttendancePanel({
             <p className="page-eyebrow">{t("admin.reports.bookings.eyebrow")}</p>
             <h3 className="section-title">{t("admin.reports.bookings.title")}</h3>
             <p className="muted">{t("admin.reports.bookings.intro")}</p>
-          </div>
-          <div className="admin-report-panel__header-meta">
-            <span className="badge">
-              {t("admin.reports.bookings.totalOrdersCount", {
-                count: bookingOrders.length,
-                defaultValue: "{{count}} total orders",
-              })}
-            </span>
-            <span className="badge">
-              {t("admin.reports.bookings.filteredOrdersCount", {
-                count: visibleBookingOrders.length,
-                defaultValue: "{{count}} shown",
-              })}
-            </span>
           </div>
         </div>
 

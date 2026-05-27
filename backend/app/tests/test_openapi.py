@@ -189,6 +189,7 @@ def test_openapi_documents_admin_movie_session_and_reporting_schemas() -> None:
         "UserRead",
         "AttendanceReportRead",
         "AttendanceSessionDetailsRead",
+        "OrderValidationRead",
         "AdminPaymentListItemRead",
         "AdminPaymentDetailsRead",
         "PaymentReportRead",
@@ -205,6 +206,8 @@ def test_openapi_documents_admin_movie_session_and_reporting_schemas() -> None:
     session_create = schemas["SessionCreate"]
     attendance_report = schemas["AttendanceReportRead"]
     attendance_details = schemas["AttendanceSessionDetailsRead"]
+    order_validation = schemas["OrderValidationRead"]
+    admin_order_validation = spec["paths"]["/api/v1/admin/orders/validate/{token}"]["get"]
 
     assert movie_create["additionalProperties"] is False
     assert movie_create["properties"]["status"]["enum"] == ["planned", "active", "deactivated"]
@@ -215,6 +218,11 @@ def test_openapi_documents_admin_movie_session_and_reporting_schemas() -> None:
     assert "total_cancelled_tickets" in attendance_report["properties"]
     assert "cancelled_tickets" in attendance_details["properties"]
     assert "unchecked_active_tickets_count" in attendance_details["properties"]
+    assert "validity_code" in order_validation["properties"]
+    assert "entry_status_code" not in order_validation["properties"]
+    assert admin_order_validation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "ApiResponse_OrderValidationRead_"
+    )
     assert "remaining_refundable_amount_minor" in schemas["AdminPaymentListItemRead"]["properties"]
     assert "webhook_events" in schemas["AdminPaymentDetailsRead"]["properties"]
     assert "summary" in schemas["PaymentReportRead"]["properties"]

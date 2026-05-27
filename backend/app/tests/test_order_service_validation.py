@@ -99,8 +99,19 @@ class FakeTicketRepository:
         checked_in_at: datetime,
         updated_at: datetime,
     ) -> int:
-        _ = (order_id, checked_in_at, updated_at)
-        return self.check_in_count
+        updated_count = 0
+        for ticket in self.tickets:
+            if updated_count >= self.check_in_count:
+                break
+            if (
+                str(ticket.get("order_id")) == order_id
+                and ticket.get("status") == TicketStatuses.PURCHASED
+                and ticket.get("checked_in_at") is None
+            ):
+                ticket["checked_in_at"] = checked_in_at
+                ticket["updated_at"] = updated_at
+                updated_count += 1
+        return updated_count
 
 
 def build_service() -> OrderService:
@@ -189,11 +200,11 @@ def build_movie_document() -> dict[str, object]:
     }
 
 
-def build_ticket_document(*, status: str = TicketStatuses.PURCHASED) -> dict[str, object]:
+def build_ticket_document(*, order_id: str = "order-1", status: str = TicketStatuses.PURCHASED) -> dict[str, object]:
     now = datetime.now(tz=timezone.utc)
     return {
         "id": "ticket-1",
-        "order_id": "order-1",
+        "order_id": order_id,
         "seat_row": 1,
         "seat_number": 1,
         "price": 200.0,
@@ -424,6 +435,29 @@ async def test_validate_order_token_returns_unavailable_when_linked_data_is_miss
 
 
 @pytest.mark.asyncio
+async def test_validate_order_token_returns_current_validation_shape_without_legacy_entry_status() -> None:
+    order_id = str(ObjectId())
+    service = build_service_with_repositories(
+        sessions=[build_session_document()],
+        movies=[build_movie_document()],
+        order=build_order_document(order_id),
+        tickets=[build_ticket_document(order_id=order_id)],
+    )
+
+    validation = await service.validate_order_token(
+        create_order_validation_token(order_id),
+        requested_by=build_user("admin-1", role=Roles.ADMIN),
+    )
+    payload = validation.model_dump(mode="json")
+
+    assert validation.token_status == "valid_token"
+    assert validation.validity_code == VALIDATION_STATE_VALID
+    assert validation.can_check_in is True
+    assert "validity_code" in payload
+    assert "entry_status_code" not in payload
+
+
+@pytest.mark.asyncio
 async def test_synchronize_order_aggregate_falls_back_to_derived_fields_when_update_returns_none() -> None:
     service = build_service_with_repositories(
         order=build_order_document(),
@@ -452,3 +486,25 @@ async def test_check_in_order_reports_repeat_when_no_tickets_are_updated() -> No
 
     with pytest.raises(ConflictException, match="already been checked in"):
         await service.check_in_order("order-1", requested_by=build_user("admin-1", role=Roles.ADMIN))
+
+
+@pytest.mark.asyncio
+async def test_check_in_order_returns_current_validation_shape_without_legacy_entry_status() -> None:
+    order_id = str(ObjectId())
+    service = build_service_with_repositories(
+        sessions=[build_session_document()],
+        movies=[build_movie_document()],
+        order=build_order_document(order_id),
+        tickets=[build_ticket_document(order_id=order_id)],
+        check_in_count=1,
+    )
+
+    validation = await service.check_in_order(order_id, requested_by=build_user("admin-1", role=Roles.ADMIN))
+    payload = validation.model_dump(mode="json")
+
+    assert validation.validity_code == VALIDATION_STATE_ALREADY_USED
+    assert validation.is_valid_for_entry is False
+    assert validation.can_check_in is False
+    assert validation.checked_in_tickets_count == 1
+    assert "validity_code" in payload
+    assert "entry_status_code" not in payload

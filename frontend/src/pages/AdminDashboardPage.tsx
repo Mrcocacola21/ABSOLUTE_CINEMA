@@ -370,7 +370,7 @@ export function AdminDashboardPage() {
           <span className="badge">
             {users.length} {t("common.labels.users")}
           </span>
-          <Link className="button--ghost" to="/admin/payments">
+          <Link className="button" to="/admin/payments">
             {t("admin.payments.actions.openWorkspace")}
           </Link>
           <button

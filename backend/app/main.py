@@ -22,7 +22,19 @@ from app.middleware.request_logging import RequestLoggingMiddleware
 async def lifespan(_: FastAPI):
     """Initialize and release infrastructure resources for the API lifecycle."""
     settings = get_settings()
-    configure_logging(settings.log_level)
+    configure_logging(
+        settings.log_level,
+        log_format=settings.log_format,
+        file_enabled=settings.log_file_enabled,
+        file_level=settings.log_file_level,
+        payments_level=settings.payment_log_level,
+        audit_level=settings.audit_log_level,
+        app_log_file=settings.app_log_file,
+        payments_log_file=settings.payments_log_file,
+        audit_log_file=settings.audit_log_file,
+        max_bytes=settings.log_rotation_max_bytes,
+        backup_count=settings.log_rotation_backup_count,
+    )
     await mongodb_manager.connect()
     try:
         yield

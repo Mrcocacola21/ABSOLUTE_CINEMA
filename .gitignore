@@ -30,6 +30,7 @@ frontend/test-*.pdf
 
 # Runtime uploads
 backend/media/
+backend/logs/
 
 # Editor / OS
 .idea/

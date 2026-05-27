@@ -193,7 +193,20 @@ async def _async_main(reset: bool) -> None:
 
 def main() -> None:
     """Run the seed command from the command line."""
-    configure_logging(get_settings().log_level)
+    settings = get_settings()
+    configure_logging(
+        settings.log_level,
+        log_format=settings.log_format,
+        file_enabled=settings.log_file_enabled,
+        file_level=settings.log_file_level,
+        payments_level=settings.payment_log_level,
+        audit_level=settings.audit_log_level,
+        app_log_file=settings.app_log_file,
+        payments_log_file=settings.payments_log_file,
+        audit_log_file=settings.audit_log_file,
+        max_bytes=settings.log_rotation_max_bytes,
+        backup_count=settings.log_rotation_backup_count,
+    )
     args = _build_argument_parser().parse_args()
     asyncio.run(_async_main(reset=bool(args.reset)))
 

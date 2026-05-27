@@ -13,7 +13,7 @@ from app.commands.reservation_expiry import sync_expired_reservations_for_sessio
 from app.core.config import get_settings
 from app.core.constants import MovieStatuses, SessionStatuses, TicketStatuses
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
-from app.core.logging import get_logger
+from app.core.logging import get_audit_logger
 from app.db.transactions import run_transaction_with_retry
 from app.factories.schedule_factory import SessionDetailsFactory
 from app.observers.events import build_default_event_publisher
@@ -55,7 +55,7 @@ from app.services.refund import RefundService
 from app.utils.money import amount_to_minor_units
 
 MAX_SESSION_RUNTIME_BUFFER_MINUTES = 60
-logger = get_logger(__name__)
+audit_logger = get_audit_logger(__name__)
 
 
 class AdminService:
@@ -85,6 +85,17 @@ class AdminService:
         )
         self.poster_storage = PosterStorage()
 
+    def _log_admin_event(self, action: str, actor: UserRead, **context: object) -> None:
+        audit_logger.info(
+            "Admin audit event recorded",
+            extra={
+                "action": action,
+                "actor_type": "admin",
+                "actor_id": actor.id,
+                **context,
+            },
+        )
+
     async def list_movies(self, requested_by: UserRead) -> list[MovieRead]:
         """Return all movies for administration views."""
         _ = requested_by
@@ -105,7 +116,6 @@ class AdminService:
 
     async def create_movie(self, payload: MovieCreate, created_by: UserRead) -> MovieRead:
         """Create a new movie available for future scheduling."""
-        _ = created_by
         if payload.status == MovieStatuses.ACTIVE:
             raise ValidationException(
                 "New movies must start as planned or deactivated. Active status is assigned automatically after scheduling."
@@ -115,7 +125,14 @@ class AdminService:
         document["created_at"] = now
         document["updated_at"] = None
         movie = await self.movie_repository.create_movie(document)
-        return MovieRead.model_validate(movie)
+        created_movie = MovieRead.model_validate(movie)
+        self._log_admin_event(
+            "admin.movie.created",
+            created_by,
+            movie_id=created_movie.id,
+            movie_status=created_movie.status,
+        )
+        return created_movie
 
     async def update_movie(
         self,
@@ -124,7 +141,6 @@ class AdminService:
         updated_by: UserRead,
     ) -> MovieRead:
         """Update editable movie information."""
-        _ = updated_by
         now = datetime.now(tz=timezone.utc)
         await self.movie_status_manager.refresh_statuses(current_time=now)
         movie_document = await self.movie_repository.get_by_id(movie_id)
@@ -158,7 +174,15 @@ class AdminService:
             raise NotFoundException("Movie was not found.")
         if "status" in updates and movie.status == MovieStatuses.ACTIVE and updates["status"] != MovieStatuses.ACTIVE:
             await self.movie_status_manager.refresh_statuses(current_time=now)
-        return MovieRead.model_validate(updated)
+        updated_movie = MovieRead.model_validate(updated)
+        self._log_admin_event(
+            "admin.movie.updated",
+            updated_by,
+            movie_id=updated_movie.id,
+            movie_status=updated_movie.status,
+            updated_fields=sorted(updates),
+        )
+        return updated_movie
 
     async def upload_movie_poster(
         self,
@@ -167,7 +191,6 @@ class AdminService:
         updated_by: UserRead,
     ) -> MovieRead:
         """Store or replace the uploaded poster file for a movie."""
-        _ = updated_by
         now = datetime.now(tz=timezone.utc)
         movie_document = await self.movie_repository.get_by_id(movie_id)
         if movie_document is None:
@@ -187,7 +210,14 @@ class AdminService:
 
         if old_poster_file_url != new_poster_file_url:
             self.poster_storage.delete(old_poster_file_url)
-        return MovieRead.model_validate(updated)
+        updated_movie = MovieRead.model_validate(updated)
+        self._log_admin_event(
+            "admin.movie.poster_uploaded",
+            updated_by,
+            movie_id=updated_movie.id,
+            replaced_existing=old_poster_file_url is not None,
+        )
+        return updated_movie
 
     async def remove_movie_poster(
         self,
@@ -195,7 +225,6 @@ class AdminService:
         updated_by: UserRead,
     ) -> MovieRead:
         """Remove the uploaded poster file and keep poster_url available as fallback."""
-        _ = updated_by
         now = datetime.now(tz=timezone.utc)
         movie_document = await self.movie_repository.get_by_id(movie_id)
         if movie_document is None:
@@ -214,11 +243,16 @@ class AdminService:
             raise NotFoundException("Movie was not found.")
 
         self.poster_storage.delete(movie.poster_file_url)
-        return MovieRead.model_validate(updated)
+        updated_movie = MovieRead.model_validate(updated)
+        self._log_admin_event(
+            "admin.movie.poster_removed",
+            updated_by,
+            movie_id=updated_movie.id,
+        )
+        return updated_movie
 
     async def deactivate_movie(self, movie_id: str, deactivated_by: UserRead) -> MovieRead:
         """Soft-disable a movie while keeping existing sessions and tickets intact."""
-        _ = deactivated_by
         now = datetime.now(tz=timezone.utc)
         await self.movie_status_manager.refresh_statuses(current_time=now)
         movie = await self._get_movie_or_not_found(movie_id)
@@ -236,7 +270,14 @@ class AdminService:
         )
         if updated is None:
             raise NotFoundException("Movie was not found.")
-        return MovieRead.model_validate(updated)
+        deactivated_movie = MovieRead.model_validate(updated)
+        self._log_admin_event(
+            "admin.movie.deactivated",
+            deactivated_by,
+            movie_id=deactivated_movie.id,
+            movie_status=deactivated_movie.status,
+        )
+        return deactivated_movie
 
     async def delete_movie(self, movie_id: str, deleted_by: UserRead) -> DeleteResultRead:
         """Delete a movie only when no sessions reference it.
@@ -244,7 +285,6 @@ class AdminService:
         We keep movie deletion conservative because session and ticket history should not lose
         their source movie record. If a movie has ever been scheduled, admins should deactivate it.
         """
-        _ = deleted_by
         movie = await self.movie_repository.get_by_id(movie_id)
         if movie is None:
             raise NotFoundException("Movie was not found.")
@@ -256,6 +296,7 @@ class AdminService:
         deleted = await self.movie_repository.delete_movie(movie_id)
         if not deleted:
             raise NotFoundException("Movie was not found.")
+        self._log_admin_event("admin.movie.deleted", deleted_by, movie_id=movie_id)
         return DeleteResultRead(id=movie_id)
 
     async def list_sessions(self, requested_by: UserRead) -> list[SessionDetailsRead]:
@@ -292,7 +333,6 @@ class AdminService:
 
     async def create_session(self, payload: SessionCreate, created_by: UserRead) -> SessionDetailsRead:
         """Create a new session slot for an existing movie."""
-        _ = created_by
         now = datetime.now(tz=timezone.utc)
         await self.movie_status_manager.refresh_statuses(current_time=now)
 
@@ -319,10 +359,19 @@ class AdminService:
         )
         await self.movie_status_manager.refresh_statuses(current_time=now)
         session = SessionRead.model_validate(session_document)
-        return SessionDetailsFactory.build(
+        details = SessionDetailsFactory.build(
             session=session,
             movie=await self._get_movie_or_not_found(payload.movie_id),
         )
+        self._log_admin_event(
+            "admin.session.created",
+            created_by,
+            session_id=session.id,
+            movie_id=session.movie_id,
+            session_status=session.status,
+            start_time=session.start_time.isoformat(),
+        )
+        return details
 
     async def create_sessions_batch(
         self,
@@ -335,7 +384,6 @@ class AdminService:
         each requested date is validated independently and conflicting dates are returned
         in the response instead of aborting the whole batch.
         """
-        _ = created_by
         now = datetime.now(tz=timezone.utc)
         await self.movie_status_manager.refresh_statuses(current_time=now)
 
@@ -409,7 +457,7 @@ class AdminService:
             for document in created_documents
         ]
 
-        return SessionBatchCreateRead(
+        result = SessionBatchCreateRead(
             requested_dates=payload.dates,
             requested_count=len(payload.dates),
             created_count=len(created_sessions),
@@ -417,6 +465,15 @@ class AdminService:
             created_sessions=created_sessions,
             rejected_dates=rejected_dates,
         )
+        self._log_admin_event(
+            "admin.sessions.batch_created",
+            created_by,
+            movie_id=payload.movie_id,
+            requested_count=result.requested_count,
+            created_count=result.created_count,
+            rejected_count=result.rejected_count,
+        )
+        return result
 
     async def cancel_session(self, session_id: str, cancelled_by: UserRead) -> SessionRead:
         """Cancel an existing session via a command object."""
@@ -437,6 +494,13 @@ class AdminService:
             session_id=session_id,
             refundable_tickets=refundable_tickets,
             requested_by=cancelled_by,
+        )
+        self._log_admin_event(
+            "admin.session.cancelled",
+            cancelled_by,
+            session_id=cancelled_session.id,
+            session_status=cancelled_session.status,
+            refundable_tickets_count=len(refundable_tickets),
         )
         return cancelled_session
 
@@ -475,7 +539,7 @@ class AdminService:
                     fail_on_provider_error=False,
                 )
             except Exception as exc:
-                logger.warning(
+                audit_logger.warning(
                     "Session cancellation refund could not be completed",
                     extra={
                         "session_id": session_id,
@@ -493,7 +557,6 @@ class AdminService:
         updated_by: UserRead,
     ) -> SessionDetailsRead:
         """Update a scheduled session that does not already have reserved or purchased tickets."""
-        _ = updated_by
         updates = payload.model_dump(mode="python", exclude_none=True)
         if not updates:
             raise ValidationException("At least one session field must be provided for update.")
@@ -572,14 +635,23 @@ class AdminService:
             raise ConflictException("Session can no longer be edited.")
 
         await self.movie_status_manager.refresh_statuses(current_time=now)
-        return SessionDetailsFactory.build(
-            session=SessionRead.model_validate(updated_document),
+        updated_session = SessionRead.model_validate(updated_document)
+        details = SessionDetailsFactory.build(
+            session=updated_session,
             movie=await self._get_movie_or_not_found(movie_id),
         )
+        self._log_admin_event(
+            "admin.session.updated",
+            updated_by,
+            session_id=updated_session.id,
+            movie_id=updated_session.movie_id,
+            session_status=updated_session.status,
+            updated_fields=sorted(updates),
+        )
+        return details
 
     async def delete_session(self, session_id: str, deleted_by: UserRead) -> DeleteResultRead:
         """Delete a session only when no tickets have ever been stored for it."""
-        _ = deleted_by
         now = datetime.now(tz=timezone.utc)
         await self.movie_status_manager.refresh_statuses(current_time=now)
 
@@ -605,6 +677,7 @@ class AdminService:
             operation_name="delete_session",
         )
         await self.movie_status_manager.refresh_statuses(current_time=now)
+        self._log_admin_event("admin.session.deleted", deleted_by, session_id=session_id)
         return DeleteResultRead(id=session_id)
 
     async def build_attendance_report(self, requested_by: UserRead) -> AttendanceReportRead:

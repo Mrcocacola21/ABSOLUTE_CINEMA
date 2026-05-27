@@ -9,7 +9,7 @@ from motor.motor_asyncio import AsyncIOMotorClientSession
 
 from app.core.constants import PaymentStatuses, RefundStatuses
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
-from app.core.logging import get_logger
+from app.core.logging import get_audit_logger, get_payment_logger
 from app.payments.providers.base import (
     PaymentProvider,
     PaymentProviderError,
@@ -21,7 +21,8 @@ from app.repositories.payments import PaymentRepository
 from app.repositories.refunds import RefundRepository
 from app.schemas.payment import PaymentAuditEventCreate, RefundCreate, RefundRead, normalize_provider, validate_safe_snapshot
 
-logger = get_logger(__name__)
+payment_logger = get_payment_logger(__name__)
+audit_logger = get_audit_logger(__name__)
 
 REFUND_TRANSITIONS: dict[str, set[str]] = {
     RefundStatuses.CREATED: {
@@ -162,6 +163,17 @@ class RefundService:
         )
         await self._record_refund_request_snapshot(refund.id, provider_request)
 
+        payment_logger.info(
+            "Initiating payment provider refund",
+            extra={
+                "payment_id": payment_id,
+                "refund_id": refund.id,
+                "provider": normalize_provider(self.payment_provider.name),
+                "amount_minor": refund.amount_minor,
+                "currency": refund.currency,
+                "requested_by": requested_by,
+            },
+        )
         try:
             provider_result = await self.payment_provider.refund_payment(provider_request)
         except PaymentProviderError as exc:
@@ -171,7 +183,7 @@ class RefundService:
                 failure_message=exc.message,
                 response_payload_snapshot=self._provider_error_snapshot(exc),
             )
-            logger.warning(
+            payment_logger.warning(
                 "Payment provider failed refund creation",
                 extra={
                     "payment_id": payment_id,
@@ -184,7 +196,19 @@ class RefundService:
                 raise ConflictException("Payment provider failed to create refund.") from exc
             return failed
 
-        return await self.apply_provider_result(refund.id, provider_result)
+        applied = await self.apply_provider_result(refund.id, provider_result)
+        payment_logger.info(
+            "Payment provider refund processed",
+            extra={
+                "payment_id": applied.payment_id,
+                "refund_id": applied.id,
+                "provider": applied.provider,
+                "refund_status": applied.status,
+                "amount_minor": applied.amount_minor,
+                "currency": applied.currency,
+            },
+        )
+        return applied
 
     async def refund_order_amount(
         self,
@@ -461,8 +485,6 @@ class RefundService:
         safe_context: dict[str, Any] | None = None,
         db_session: AsyncIOMotorClientSession | None = None,
     ) -> None:
-        if self.payment_audit_event_repository is None:
-            return
         event = PaymentAuditEventCreate(
             action=action,
             actor_type=actor_type,
@@ -477,6 +499,12 @@ class RefundService:
             reason=reason,
             safe_context=safe_context,
         )
+        audit_logger.info(
+            "Payment audit event recorded",
+            extra=event.model_dump(mode="python"),
+        )
+        if self.payment_audit_event_repository is None:
+            return
         await self.payment_audit_event_repository.create_event(
             {**event.model_dump(mode="python"), "created_at": datetime.now(tz=timezone.utc)},
             db_session=db_session,

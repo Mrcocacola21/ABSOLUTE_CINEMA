@@ -369,10 +369,52 @@ Important backend environment variables:
 - `RESERVATION_HOLD_MINUTES`
 - `PAYMENT_PROVIDER`
 - `PAYMENT_WEBHOOK_SECRET`
+- `LOG_LEVEL`
+- `LOG_FORMAT`
+- `LOG_FILE_ENABLED`
+- `APP_LOG_FILE`
+- `PAYMENTS_LOG_FILE`
+- `AUDIT_LOG_FILE`
+- `LOG_ROTATION_MAX_BYTES`
+- `LOG_ROTATION_BACKUP_COUNT`
 
 Important frontend environment variable:
 
 - `VITE_API_BASE_URL`, defaulting to `http://localhost:8000/api/v1` in the example file.
+
+### Backend Logging
+
+Backend logging is configured in `app.core.logging` and enabled from the FastAPI lifespan startup.
+
+Default file outputs:
+
+- `backend/logs/app.log`: regular application and request logs.
+- `backend/logs/payments.log`: payment, refund, and webhook operational events.
+- `backend/logs/audit.log`: payment audit events and important admin actions.
+
+The dedicated payment and audit loggers do not propagate into `app.log`; use those files for operational review of money movement and protected admin actions.
+
+All three files use `RotatingFileHandler`. The defaults are `10 MB` per file and `5` retained backups. Override paths and rotation through:
+
+- `LOG_FILE_ENABLED`
+- `LOG_FILE_LEVEL`
+- `PAYMENT_LOG_LEVEL`
+- `AUDIT_LOG_LEVEL`
+- `APP_LOG_FILE`
+- `PAYMENTS_LOG_FILE`
+- `AUDIT_LOG_FILE`
+- `LOG_ROTATION_MAX_BYTES`
+- `LOG_ROTATION_BACKUP_COUNT`
+
+Each record includes timestamp, level, logger name, `request_id`, message, and safe extra fields. `RequestLoggingMiddleware` reads `X-Request-ID`, `X-Correlation-ID`, or `Correlation-ID`; if none is provided, it generates a request id and returns it as `X-Request-ID`.
+
+Timestamps are emitted in UTC with a stable ISO-8601 `Z` suffix. Repeated logging setup is protected from duplicate handlers by non-incremental `dictConfig` reconfiguration guarded by a process-local lock.
+
+The default `LOG_FORMAT=text` keeps readable log lines. Set `LOG_FORMAT=json` for newline-delimited JSON records with `timestamp`, `level`, `logger`, `request_id`, `message`, and safe `metadata`.
+
+The logging formatter redacts sensitive keys and string patterns, including tokens, authorization headers, cookies, webhook signatures, provider secrets, API keys, JWT/secrets, and card/PAN/CVV-style fields. Runtime logs are ignored by git via `backend/logs/`.
+
+Logging hardening is covered by `pytest app/tests/test_logging.py app/tests/test_payment_domain.py -q`, including duplicate-handler protection, UTC timestamps, JSON mode, rotation, and payment-webhook secret leak checks.
 
 ### Run With Docker Compose
 
@@ -638,4 +680,3 @@ Do not rely on a README-stored percentage during defense. Regenerate coverage fr
 - There are no live seat updates over WebSocket/SSE.
 - Stateless JWT refresh tokens are not backed by a server-side token revocation list.
 - Some demo poster URLs point to external sources and can depend on network availability.
-

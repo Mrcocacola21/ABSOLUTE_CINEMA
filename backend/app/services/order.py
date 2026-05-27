@@ -12,6 +12,7 @@ from app.commands.reservation_expiry import sync_expired_reservations_for_sessio
 from app.core.config import get_settings
 from app.core.constants import OrderStatuses, PaymentStatuses, RefundStatuses, Roles, SessionStatuses, TicketStatuses
 from app.core.exceptions import AuthorizationException, ConflictException, NotFoundException
+from app.core.logging import get_audit_logger
 from app.observers.events import build_default_event_publisher
 from app.repositories.movies import MovieRepository
 from app.repositories.orders import OrderRepository
@@ -49,6 +50,7 @@ ORDER_REFUNDABLE_PAYMENT_STATUSES = {
     PaymentStatuses.SUCCEEDED,
     PaymentStatuses.PARTIALLY_REFUNDED,
 }
+audit_logger = get_audit_logger(__name__)
 
 
 class OrderService:
@@ -153,7 +155,6 @@ class OrderService:
 
     async def validate_order_token(self, token: str, requested_by: UserRead) -> OrderValidationRead:
         """Validate a scanned order QR token for staff use."""
-        _ = requested_by
         now = datetime.now(tz=timezone.utc)
         await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
 
@@ -189,11 +190,22 @@ class OrderService:
             )
 
         details = self._build_order_details(order=built_orders[0], now=now)
-        return self._build_validation_result(order=details, scanned_at=now)
+        result = self._build_validation_result(order=details, scanned_at=now)
+        audit_logger.info(
+            "Admin order validation completed",
+            extra={
+                "action": "admin.order.validated",
+                "actor_type": "admin",
+                "actor_id": requested_by.id,
+                "order_id": result.order_id,
+                "validity_code": result.validity_code,
+                "entry_status_code": result.entry_status_code,
+            },
+        )
+        return result
 
     async def check_in_order(self, order_id: str, requested_by: UserRead) -> OrderValidationRead:
         """Mark all currently valid unchecked tickets in an order as checked in."""
-        _ = requested_by
         now = datetime.now(tz=timezone.utc)
         await self.session_repository.sync_completed_sessions(current_time=now, updated_at=now)
 
@@ -227,7 +239,20 @@ class OrderService:
             raise NotFoundException("Order was not found.")
 
         refreshed_details = self._build_order_details(order=refreshed_orders[0], now=now)
-        return self._build_validation_result(order=refreshed_details, scanned_at=now)
+        result = self._build_validation_result(order=refreshed_details, scanned_at=now)
+        audit_logger.info(
+            "Admin order check-in completed",
+            extra={
+                "action": "admin.order.checked_in",
+                "actor_type": "admin",
+                "actor_id": requested_by.id,
+                "order_id": order_id,
+                "checked_in_count": checked_in_count,
+                "validity_code": result.validity_code,
+                "entry_status_code": result.entry_status_code,
+            },
+        )
+        return result
 
     async def _build_order_list(
         self,

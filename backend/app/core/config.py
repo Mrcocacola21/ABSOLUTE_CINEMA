@@ -34,6 +34,16 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_minutes: int = 60 * 24 * 7
     log_level: str = "INFO"
+    log_format: str = "text"
+    log_file_enabled: bool = True
+    log_file_level: str | None = None
+    payment_log_level: str | None = None
+    audit_log_level: str | None = None
+    app_log_file: str = str(Path(__file__).resolve().parents[2] / "logs" / "app.log")
+    payments_log_file: str = str(Path(__file__).resolve().parents[2] / "logs" / "payments.log")
+    audit_log_file: str = str(Path(__file__).resolve().parents[2] / "logs" / "audit.log")
+    log_rotation_max_bytes: int = 10 * 1024 * 1024
+    log_rotation_backup_count: int = 5
     cinema_timezone: str = "Europe/Kyiv"
     hall_rows_count: int = 8
     hall_seats_per_row: int = 12
@@ -93,6 +103,15 @@ class Settings(BaseSettings):
         normalized = value.strip()
         if len(normalized) < 8:
             raise ValueError("payment_webhook_secret must be at least 8 characters.")
+        return normalized
+
+    @field_validator("log_format")
+    @classmethod
+    def normalize_log_format(cls, value: str) -> str:
+        """Normalize the configured log output format."""
+        normalized = value.strip().lower()
+        if normalized not in {"text", "json"}:
+            raise ValueError("log_format must be either 'text' or 'json'.")
         return normalized
 
     @property

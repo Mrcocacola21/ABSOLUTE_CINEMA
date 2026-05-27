@@ -37,7 +37,7 @@ from app.core.exceptions import (
     ValidationException,
 )
 from app.core.config import get_settings
-from app.core.logging import get_logger
+from app.core.logging import get_audit_logger, get_payment_logger
 from app.db.transactions import run_transaction_with_retry
 from app.payments.providers.base import (
     PaymentProvider,
@@ -92,7 +92,8 @@ from app.schemas.user import UserRead
 from app.services.refund import RefundService
 from app.utils.money import amount_to_minor_units
 
-logger = get_logger(__name__)
+payment_logger = get_payment_logger(__name__)
+audit_logger = get_audit_logger(__name__)
 
 PAYMENT_TRANSITIONS: dict[str, set[str]] = {
     PaymentStatuses.CREATED: {
@@ -391,7 +392,7 @@ class PaymentService:
                 error_message=exc.message,
                 now=now,
             )
-            logger.warning(
+            payment_logger.warning(
                 "Rejected payment webhook with invalid signature",
                 extra={"provider": provider_name, "error_code": exc.code},
             )
@@ -452,7 +453,7 @@ class PaymentService:
                 updated_at=datetime.now(tz=timezone.utc),
                 error_message=str(exc)[:1000],
             )
-            logger.exception(
+            payment_logger.exception(
                 "Payment webhook processing failed",
                 extra={
                     "provider": provider_name,
@@ -636,7 +637,7 @@ class PaymentService:
         )
         await self.mark_attempt_pending(attempt.id)
 
-        logger.info(
+        payment_logger.info(
             "Initiating payment provider checkout",
             extra={
                 "payment_id": payment.id,
@@ -677,7 +678,7 @@ class PaymentService:
                 failure_code=exc.code,
                 failure_message=exc.message,
             )
-            logger.info(
+            payment_logger.info(
                 "Payment provider checkout initiation failed",
                 extra={
                     "payment_id": payment.id,
@@ -706,7 +707,7 @@ class PaymentService:
                 "has_redirect_url": provider_result.redirect_url is not None,
             },
         )
-        logger.info(
+        payment_logger.info(
             "Payment provider checkout initiated",
             extra={
                 "payment_id": updated_payment.id,
@@ -1910,7 +1911,7 @@ class PaymentService:
             )
             if updated_order is None:
                 raise DatabaseException("Payment reservation release could not update the order status.")
-        logger.info(
+        payment_logger.info(
             "Released pending reservation after terminal payment update",
             extra={
                 "order_id": order_id,
@@ -1991,12 +1992,15 @@ class PaymentService:
             return "[max_depth]"
         if isinstance(value, dict):
             sanitized: dict[str, Any] = {}
+            redacted_fields: list[str] = []
             for key, nested in list(value.items())[:50]:
                 key_string = str(key)
                 if self._is_sensitive_snapshot_key(key_string):
-                    sanitized[key_string] = "[redacted]"
+                    redacted_fields.append(key_string)
                 else:
                     sanitized[key_string] = self._sanitize_webhook_value(nested, depth=depth + 1)
+            if redacted_fields:
+                sanitized["redacted_fields"] = sorted(redacted_fields)
             return sanitized
         if isinstance(value, list):
             return [self._sanitize_webhook_value(item, depth=depth + 1) for item in value[:100]]
@@ -2337,8 +2341,6 @@ class PaymentService:
         safe_context: dict[str, Any] | None = None,
         db_session: AsyncIOMotorClientSession | None = None,
     ) -> None:
-        if self.payment_audit_event_repository is None:
-            return
         event = PaymentAuditEventCreate(
             action=action,
             actor_type=actor_type,
@@ -2353,6 +2355,12 @@ class PaymentService:
             reason=reason,
             safe_context=safe_context,
         )
+        audit_logger.info(
+            "Payment audit event recorded",
+            extra=event.model_dump(mode="python"),
+        )
+        if self.payment_audit_event_repository is None:
+            return
         await self.payment_audit_event_repository.create_event(
             {**event.model_dump(mode="python"), "created_at": datetime.now(tz=timezone.utc)},
             db_session=db_session,

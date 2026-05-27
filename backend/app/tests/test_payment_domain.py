@@ -8,6 +8,7 @@ import hmac
 import inspect
 import json
 import logging
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -28,7 +29,7 @@ from app.core.exceptions import (
     NotFoundException,
     ValidationException,
 )
-from app.core.logging import RedactingFormatter, sanitize_for_logging
+from app.core.logging import RedactingFormatter, configure_logging, sanitize_for_logging
 from app.payments.providers.base import (
     PaymentProviderError,
     ProviderPaymentCreateRequest,
@@ -794,6 +795,82 @@ def test_redacting_formatter_masks_sensitive_payment_log_strings() -> None:
     assert "signed-webhook-secret" not in rendered
     assert "access-token-secret" not in rendered
     assert "<redacted>" in rendered
+
+
+@pytest.mark.asyncio
+async def test_payment_webhook_logging_does_not_leak_real_flow_secrets(tmp_path: Path) -> None:
+    app_log = tmp_path / "app.log"
+    payments_log = tmp_path / "payments.log"
+    audit_log = tmp_path / "audit.log"
+    configure_logging(
+        "INFO",
+        app_log_file=str(app_log),
+        payments_log_file=str(payments_log),
+        audit_log_file=str(audit_log),
+    )
+
+    audit_events = FakePaymentAuditEventRepository()
+    webhook_events = FakePaymentWebhookEventRepository()
+    service, _, _ = build_payment_service(
+        payment_webhook_event_repository=webhook_events,
+        payment_audit_event_repository=audit_events,
+    )
+    raw_body, _ = sign_fake_webhook_payload(
+        {
+            "event_id": "evt-secret-leak-probe",
+            "event_type": "payment.updated",
+            "authorization": "Bearer body-authorization-secret",
+            "provider_secret": "body-provider-secret",
+            "webhook_signature": "body-webhook-signature-secret",
+            "payment": {
+                "id": "fake-pay-payment-1",
+                "status": "paid",
+                "amount_minor": 12345,
+                "currency": "UAH",
+                "client_secret": "body-client-secret",
+            },
+        }
+    )
+
+    with pytest.raises(AuthenticationException):
+        await service.process_provider_webhook(
+            raw_body=raw_body,
+            headers={
+                "authorization": "Bearer header-authorization-secret",
+                "x-fake-payment-signature": "header-webhook-signature-secret",
+                "provider-secret": "header-provider-secret",
+            },
+        )
+    _flush_configured_logging_handlers()
+
+    app_output = app_log.read_text(encoding="utf-8")
+    payments_output = payments_log.read_text(encoding="utf-8")
+    audit_output = audit_log.read_text(encoding="utf-8")
+    combined_output = "\n".join([app_output, payments_output, audit_output])
+
+    assert "Rejected payment webhook with invalid signature" in payments_output
+    assert "webhook.rejected_invalid_signature" in audit_output
+    assert audit_events.created_count == 1
+    assert webhook_events.created_count == 1
+
+    for raw_secret in (
+        "body-authorization-secret",
+        "body-provider-secret",
+        "body-webhook-signature-secret",
+        "body-client-secret",
+        "header-authorization-secret",
+        "header-webhook-signature-secret",
+        "header-provider-secret",
+    ):
+        assert raw_secret not in combined_output
+        assert raw_secret not in str(webhook_events.events)
+        assert raw_secret not in str(audit_events.events)
+
+
+def _flush_configured_logging_handlers() -> None:
+    for logger_name in ("", "cinema_showcase", "cinema_showcase.payments", "cinema_showcase.audit"):
+        for handler in logging.getLogger(logger_name).handlers:
+            handler.flush()
 
 
 def build_payment_service(

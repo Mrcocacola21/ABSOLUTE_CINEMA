@@ -28,6 +28,17 @@ USER_EMAIL = "user@example.com"
 DEFAULT_TEST_MONGODB_URI = "mongodb://127.0.0.1:27017/?replicaSet=rs0&directConnection=true"
 DEFAULT_TEST_DB_NAME = "cinema_showcase_test"
 UNSAFE_DATABASE_NAMES = {"cinema_showcase"}
+TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
+
+
+def _integration_mongodb_required() -> bool:
+    return os.environ.get("REQUIRE_INTEGRATION_MONGODB", "").strip().lower() in TRUTHY_ENV_VALUES
+
+
+def _unavailable_integration_mongodb(message: str) -> None:
+    if _integration_mongodb_required():
+        raise RuntimeError(message)
+    pytest.skip(message)
 
 
 def build_localized_text(value: str, *, en: str | None = None) -> dict[str, str]:
@@ -169,7 +180,7 @@ async def purchase_ticket_and_complete(
 def integration_settings() -> dict[str, str]:
     """Point the application to a dedicated MongoDB test database."""
     db_name = os.environ.get("TEST_MONGODB_DB_NAME", DEFAULT_TEST_DB_NAME)
-    mongodb_uri = os.environ.get("TEST_MONGODB_URI", DEFAULT_TEST_MONGODB_URI)
+    mongodb_uri = os.environ.get("TEST_MONGODB_URI") or os.environ.get("MONGODB_URI") or DEFAULT_TEST_MONGODB_URI
     if db_name in UNSAFE_DATABASE_NAMES:
         raise RuntimeError(
             "Refusing to run integration tests against the development database "
@@ -189,12 +200,14 @@ def integration_settings() -> dict[str, str]:
         mongo_client.admin.command("ping")
         topology = mongo_client.admin.command("hello")
         if not topology.get("setName"):
-            pytest.skip(
+            _unavailable_integration_mongodb(
                 "MongoDB replica set support is required for transactional integration tests. "
                 "Start the local single-node replica set first."
             )
+    except RuntimeError:
+        raise
     except Exception as exc:  # pragma: no cover - environment dependent
-        pytest.skip(f"MongoDB is required for integration tests: {exc}")
+        _unavailable_integration_mongodb(f"MongoDB is required for integration tests: {exc}")
 
     media_root = tempfile.mkdtemp(prefix="cinema-test-media-")
     env_updates["MEDIA_ROOT"] = media_root

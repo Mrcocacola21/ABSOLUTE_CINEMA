@@ -12,6 +12,8 @@ from app.db.collections import DatabaseCollections
 from app.security.order_validation import create_order_validation_token
 from app.tests.integration.conftest import API_PREFIX, purchase_order_and_complete
 
+ADMIN_SELF_SERVICE_ERROR = "Customer self-service routes are not available to administrator accounts."
+
 
 async def _purchase_order(
     client: httpx.AsyncClient,
@@ -25,6 +27,69 @@ async def _purchase_order(
         session_id,
         seats,
     )
+
+
+@pytest.mark.asyncio
+async def test_customer_self_service_order_detail_remains_available(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Customer Self Service Movie", duration_minutes=120)
+    session = await create_session(movie_id=movie["id"], start_hour=11, duration_minutes=150, price=215)
+    order = await _purchase_order(
+        client,
+        user_auth["headers"],
+        session["id"],
+        [{"seat_row": 1, "seat_number": 4}],
+    )
+
+    response = await client.get(
+        f"{API_PREFIX}/users/me/orders/{order['id']}",
+        headers=user_auth["headers"],
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"]["id"] == order["id"]
+    assert body["data"]["user_id"] == user_auth["user"]["id"]
+    assert body["data"]["movie_title"] == movie["title"]
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_use_customer_self_service_order_detail_or_pdf(
+    client: httpx.AsyncClient,
+    user_auth: dict[str, object],
+    admin_auth: dict[str, object],
+    create_movie,
+    create_session,
+) -> None:
+    movie = await create_movie(title="Admin Self Service Boundary Movie", duration_minutes=120)
+    session = await create_session(movie_id=movie["id"], start_hour=12, duration_minutes=150, price=225)
+    order = await _purchase_order(
+        client,
+        user_auth["headers"],
+        session["id"],
+        [{"seat_row": 1, "seat_number": 5}],
+    )
+
+    detail_response = await client.get(
+        f"{API_PREFIX}/users/me/orders/{order['id']}",
+        headers=admin_auth["headers"],
+    )
+    pdf_response = await client.get(
+        f"{API_PREFIX}/users/me/orders/{order['id']}/pdf",
+        headers=admin_auth["headers"],
+    )
+
+    for response in (detail_response, pdf_response):
+        assert response.status_code == 403
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"]["code"] == "authorization_error"
+        assert body["error"]["message"] == ADMIN_SELF_SERVICE_ERROR
 
 
 @pytest.mark.asyncio

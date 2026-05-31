@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends, Header, Request, status
 
-from app.api.dependencies.auth import get_current_admin, get_current_user
+from app.api.dependencies.auth import get_current_admin, get_current_customer, get_current_user
 from app.api.dependencies.services import get_payment_service
 from app.api.docs import (
     AUTHENTICATION_ERROR_RESPONSE,
@@ -14,7 +14,7 @@ from app.api.docs import (
     VALIDATION_ERROR_RESPONSE,
     merge_openapi_responses,
 )
-from app.core.exceptions import ConflictException
+from app.core.exceptions import AuthorizationException, ConflictException
 from app.core.responses import ApiResponse
 from app.factories.response_factory import ApiResponseFactory
 from app.schemas.payment import (
@@ -214,12 +214,10 @@ async def simulate_fake_provider_payment(
     "/payments/{payment_id}/refunds",
     response_model=ApiResponse[RefundRead],
     status_code=status.HTTP_201_CREATED,
-    summary="Create payment refund",
+    summary="Legacy payment refund route",
     description=(
-        "Create a full or partial financial refund for a succeeded payment through the configured provider adapter. "
-        "This is intentionally separate from booking cancellation: cancelling tickets changes booking state, while "
-        "this endpoint records and initiates the money movement. Omit `amount_minor` to refund the remaining "
-        "refundable amount. Administrator access is required."
+        "Legacy route kept for compatibility discovery only. Administrator financial refunds must be created "
+        "through `/admin/payments/{payment_id}/refunds` so the action happens in the explicit admin context."
     ),
     response_description="Wrapped refund record after provider-normalized processing.",
     responses=merge_openapi_responses(
@@ -235,15 +233,9 @@ async def create_payment_refund(
     current_admin: UserRead = Depends(get_current_admin),
     payment_service: PaymentService = Depends(get_payment_service),
 ) -> ApiResponse[RefundRead]:
-    """Create a provider-backed refund for a succeeded payment."""
-    refund = await payment_service.refund_payment(
-        payment_id=payment_id,
-        amount_minor=payload.amount_minor,
-        reason=payload.reason,
-        requested_by=f"admin:{current_admin.id}",
-        metadata=payload.metadata,
-    )
-    return ApiResponseFactory.created(data=refund, message="Refund created.")
+    """Reject legacy non-admin-path refund creation."""
+    _ = (payment_id, payload, current_admin, payment_service)
+    raise AuthorizationException("Use the admin payment refund endpoint for administrator refund actions.")
 
 
 @router.post(
@@ -255,7 +247,8 @@ async def create_payment_refund(
         "Create a customer-facing refund request without moving money outside the payment subsystem. "
         "`scope=tickets` computes a partial refund from the selected cancelled ticket ids and creates a refund "
         "against the order payment. `scope=order` refunds the remaining refundable payment amount only after the "
-        "order has no active purchased tickets. Normal users can request refunds only for their own orders."
+        "order has no active purchased tickets. Customer self-service refund requests are limited to the "
+        "authenticated customer's own orders. Administrator refunds are exposed separately under the `admin` tag."
     ),
     response_description="Wrapped refund record with refreshed payment and order refund history.",
     responses=merge_openapi_responses(
@@ -268,7 +261,7 @@ async def create_payment_refund(
 async def request_customer_order_refund(
     order_id: str,
     payload: CustomerRefundRequest,
-    current_user: UserRead = Depends(get_current_user),
+    current_user: UserRead = Depends(get_current_customer),
     payment_service: PaymentService = Depends(get_payment_service),
 ) -> ApiResponse[CustomerRefundRead]:
     """Request a customer refund while preserving payment/order financial ownership."""

@@ -865,7 +865,7 @@ async def test_repeated_full_order_cancellation_is_rejected_cleanly(
 
 
 @pytest.mark.asyncio
-async def test_user_cannot_cancel_another_users_order_but_admin_can(
+async def test_user_cannot_cancel_another_users_order_and_admin_must_use_admin_route(
     client: httpx.AsyncClient,
     database,
     user_auth: dict[str, object],
@@ -901,6 +901,15 @@ async def test_user_cannot_cancel_another_users_order_but_admin_can(
     assert forbidden_read.status_code == 403
     assert forbidden_read.json()["error"]["message"] == "You can only access your own orders."
 
+    admin_self_read = await client.get(
+        f"{API_PREFIX}/users/me/orders/{order_id}",
+        headers=admin_auth["headers"],
+    )
+    assert admin_self_read.status_code == 403
+    assert admin_self_read.json()["error"]["message"] == (
+        "Customer self-service routes are not available to administrator accounts."
+    )
+
     forbidden_cancel = await client.patch(
         f"{API_PREFIX}/orders/{order_id}/cancel",
         headers=user_auth["headers"],
@@ -908,8 +917,17 @@ async def test_user_cannot_cancel_another_users_order_but_admin_can(
     assert forbidden_cancel.status_code == 403
     assert forbidden_cancel.json()["error"]["message"] == "You can only cancel your own orders."
 
-    admin_cancel = await client.patch(
+    admin_public_cancel = await client.patch(
         f"{API_PREFIX}/orders/{order_id}/cancel",
+        headers=admin_auth["headers"],
+    )
+    assert admin_public_cancel.status_code == 403
+    assert admin_public_cancel.json()["error"]["message"] == (
+        "Customer self-service routes are not available to administrator accounts."
+    )
+
+    admin_cancel = await client.patch(
+        f"{API_PREFIX}/admin/orders/{order_id}/cancel",
         headers=admin_auth["headers"],
     )
     assert admin_cancel.status_code == 200, admin_cancel.text

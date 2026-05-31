@@ -9,10 +9,12 @@ import type {
   LocalizedText,
   Movie,
   MovieStatus,
+  OrderDetails,
   OrderValidationResult,
   PaymentReport,
   Session,
   SessionDetails,
+  Ticket,
   TicketListItem,
   User,
 } from "@/types/domain";
@@ -176,6 +178,18 @@ export async function deleteSessionRequest(sessionId: string) {
 
 export async function listAdminTicketsRequest() {
   const { data } = await apiClient.get<ApiResponse<TicketListItem[]>>("/admin/tickets");
+  return data;
+}
+
+export async function cancelAdminTicketRequest(ticketId: string) {
+  const { data } = await apiClient.patch<ApiResponse<Ticket>>(`/admin/tickets/${encodeURIComponent(ticketId)}/cancel`);
+  return data;
+}
+
+export async function cancelAdminOrderRequest(orderId: string) {
+  const { data } = await apiClient.patch<ApiResponse<OrderDetails>>(
+    `/admin/orders/${encodeURIComponent(orderId)}/cancel`,
+  );
   return data;
 }
 

@@ -364,11 +364,12 @@ def test_get_check_in_blocker_message_maps_validation_state_to_staff_error(
     assert message in build_service()._get_check_in_blocker_message(state)
 
 
-def test_ensure_order_owner_allows_admin_to_open_any_order() -> None:
-    build_service()._ensure_order_owner(
-        order_document={"user_id": "user-1"},
-        current_user=build_user("admin-1", role=Roles.ADMIN),
-    )
+def test_ensure_order_owner_rejects_admin_self_service_access() -> None:
+    with pytest.raises(AuthorizationException, match="only access your own orders"):
+        build_service()._ensure_order_owner(
+            order_document={"user_id": "user-1"},
+            current_user=build_user("admin-1", role=Roles.ADMIN),
+        )
 
 
 def test_ensure_order_owner_rejects_other_regular_users_orders() -> None:

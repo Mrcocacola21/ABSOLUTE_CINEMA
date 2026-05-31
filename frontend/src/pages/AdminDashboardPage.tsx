@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
 import {
+  cancelAdminOrderRequest,
+  cancelAdminTicketRequest,
   cancelSessionRequest,
   createMovieRequest,
   createSessionRequest,
@@ -26,6 +28,7 @@ import {
   updateSessionRequest,
 } from "@/api/admin";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { getLocalizedText } from "@/shared/localization";
 import { isMovieActive } from "@/shared/movieStatus";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
@@ -34,7 +37,7 @@ import { AttendancePanel } from "@/widgets/admin/AttendancePanel";
 import { AdminScheduleManagement } from "@/widgets/admin/AdminScheduleManagement";
 
 export function AdminDashboardPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [movies, setMovies] = useState<Movie[]>([]);
   const [sessions, setSessions] = useState<SessionDetails[]>([]);
   const [tickets, setTickets] = useState<TicketListItem[]>([]);
@@ -325,6 +328,92 @@ export function AdminDashboardPage() {
     );
   }
 
+  async function handleCancelAdminTicket(ticket: TicketListItem) {
+    const confirmed = window.confirm(
+      t("admin.reports.bookings.cancelTicketConfirm", {
+        defaultValue: "Cancel ticket {{ticketId}} for seat {{seat}}? This admin action is audit-logged.",
+        ticketId: ticket.id,
+        seat: `${ticket.seat_row}-${ticket.seat_number}`,
+      }),
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setPendingActionLabel(t("admin.reports.bookings.cancelTicketLoading", { defaultValue: "Cancelling ticket" }));
+    setFeedback(null);
+    try {
+      await cancelAdminTicketRequest(ticket.id);
+      await refreshDashboard({ background: true });
+      setFeedback({
+        tone: "success",
+        title: t("admin.reports.bookings.cancelTicketSuccessTitle", { defaultValue: "Ticket cancelled" }),
+        message: t("admin.reports.bookings.cancelTicketSuccessMessage", {
+          defaultValue: "The admin ticket cancellation was completed and audit-logged.",
+        }),
+      });
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        title: t("admin.reports.bookings.cancelTicketErrorTitle", { defaultValue: "Ticket cancellation failed" }),
+        message: extractApiErrorMessage(
+          error,
+          t("admin.reports.bookings.cancelTicketErrorMessage", {
+            defaultValue: "The admin ticket cancellation failed.",
+          }),
+        ),
+      });
+    } finally {
+      setPendingActionLabel("");
+    }
+  }
+
+  async function handleCancelAdminOrder(order: {
+    orderId: string;
+    movieTitle: Movie["title"];
+    ticketCount: number;
+  }) {
+    const confirmed = window.confirm(
+      t("admin.reports.bookings.cancelOrderConfirm", {
+        defaultValue:
+          "Cancel order {{orderId}} for {{movie}} ({{count}} tickets)? This admin action is audit-logged.",
+        orderId: order.orderId,
+        movie: getLocalizedText(order.movieTitle, i18n.language),
+        count: order.ticketCount,
+      }),
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setPendingActionLabel(t("admin.reports.bookings.cancelOrderLoading", { defaultValue: "Cancelling order" }));
+    setFeedback(null);
+    try {
+      await cancelAdminOrderRequest(order.orderId);
+      await refreshDashboard({ background: true });
+      setFeedback({
+        tone: "success",
+        title: t("admin.reports.bookings.cancelOrderSuccessTitle", { defaultValue: "Order cancelled" }),
+        message: t("admin.reports.bookings.cancelOrderSuccessMessage", {
+          defaultValue: "The admin order cancellation was completed and audit-logged.",
+        }),
+      });
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        title: t("admin.reports.bookings.cancelOrderErrorTitle", { defaultValue: "Order cancellation failed" }),
+        message: extractApiErrorMessage(
+          error,
+          t("admin.reports.bookings.cancelOrderErrorMessage", {
+            defaultValue: "The admin order cancellation failed.",
+          }),
+        ),
+      });
+    } finally {
+      setPendingActionLabel("");
+    }
+  }
+
   async function handleDeleteSession(sessionId: string) {
     return runAdminAction(
       () => deleteSessionRequest(sessionId),
@@ -477,6 +566,9 @@ export function AdminDashboardPage() {
             users={users}
             isLoading={isReportLoading}
             errorMessage={reportErrorMessage}
+            isActionBusy={Boolean(pendingActionLabel) || isRefreshing}
+            onCancelOrder={(order) => void handleCancelAdminOrder(order)}
+            onCancelTicket={(ticket) => void handleCancelAdminTicket(ticket)}
             onRetry={() =>
               void loadAttendanceReport({
                 showLoading: true,

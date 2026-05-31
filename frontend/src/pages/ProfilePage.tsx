@@ -129,10 +129,23 @@ export function ProfilePage() {
       setIsOrdersLoading(false);
       return;
     }
+    if (currentUser.role === "admin") {
+      setOrders([]);
+      setOrdersErrorMessage("");
+      setIsOrdersLoading(false);
+      return;
+    }
     void refreshOrders();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, currentUser?.role]);
 
   async function refreshOrders(options?: { background?: boolean }) {
+    if (currentUser?.role === "admin") {
+      setOrders([]);
+      setOrdersErrorMessage("");
+      setIsOrdersLoading(false);
+      return;
+    }
+
     const background = options?.background ?? false;
     if (!background) {
       setIsOrdersLoading(true);
@@ -294,6 +307,7 @@ export function ProfilePage() {
 
   const accountStatus = formatStateLabel(currentUser.is_active ? "active" : "inactive");
   const accountRole = formatStateLabel(currentUser.role);
+  const isAdmin = currentUser.role === "admin";
   const profileInitials = getInitials(currentUser.name);
   const totalTicketsCount = orders.reduce((sum, order) => sum + order.tickets_count, 0);
   const usableTicketsCount = orders.reduce((sum, order) => sum + getOrderUsableTickets(order).length, 0);
@@ -348,14 +362,29 @@ export function ProfilePage() {
             </div>
 
             <div className="profile-hero__stats">
-              <div className="profile-hero__stat">
-                <span>{t("profile.orders.title")}</span>
-                <strong>{isOrdersLoading ? "..." : orders.length}</strong>
-              </div>
-              <div className="profile-hero__stat">
-                <span>{t("common.labels.tickets")}</span>
-                <strong>{isOrdersLoading ? "..." : totalTicketsCount}</strong>
-              </div>
+              {isAdmin ? (
+                <>
+                  <div className="profile-hero__stat">
+                    <span>{t("common.navigation.admin")}</span>
+                    <strong>{t("profile.admin.workspaceBadge")}</strong>
+                  </div>
+                  <div className="profile-hero__stat">
+                    <span>{t("profile.admin.selfServiceLabel")}</span>
+                    <strong>{t("profile.admin.customerOnlyBadge")}</strong>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="profile-hero__stat">
+                    <span>{t("profile.orders.title")}</span>
+                    <strong>{isOrdersLoading ? "..." : orders.length}</strong>
+                  </div>
+                  <div className="profile-hero__stat">
+                    <span>{t("common.labels.tickets")}</span>
+                    <strong>{isOrdersLoading ? "..." : totalTicketsCount}</strong>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </aside>
@@ -456,7 +485,29 @@ export function ProfilePage() {
           </div>
         </form>
 
-        <section className="form-card profile-panel profile-orders-panel">
+        {isAdmin ? (
+          <section className="form-card profile-panel profile-orders-panel">
+            <div className="profile-panel__header profile-panel__header--orders">
+              <div className="profile-panel__copy">
+                <h2 className="section-title">{t("profile.admin.title")}</h2>
+                <p className="profile-panel__summary">{t("profile.admin.intro")}</p>
+              </div>
+              <span className="badge">{t("common.navigation.admin")}</span>
+            </div>
+
+            <section className="profile-orders__state">
+              <div className="profile-orders__state-copy">
+                <h3 className="section-title">{t("profile.admin.customerRoutesTitle")}</h3>
+                <p>{t("profile.admin.customerRoutesMessage")}</p>
+              </div>
+
+              <Link to="/admin" className="button">
+                {t("profile.admin.openAdmin")}
+              </Link>
+            </section>
+          </section>
+        ) : (
+          <section className="form-card profile-panel profile-orders-panel">
           <div className="profile-panel__header profile-panel__header--orders">
             <div className="profile-panel__copy">
               <h2 className="section-title">{t("profile.orders.title")}</h2>
@@ -723,6 +774,7 @@ export function ProfilePage() {
             </div>
           ) : null}
         </section>
+        )}
       </section>
     </div>
   );

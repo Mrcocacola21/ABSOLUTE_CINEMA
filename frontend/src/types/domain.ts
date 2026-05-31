@@ -357,6 +357,21 @@ export interface AdminPaymentCustomer {
   email?: string | null;
 }
 
+export interface AdminPaymentTicketImpact {
+  id: string;
+  seat_row: number;
+  seat_number: number;
+  seat_label: string;
+  price: number;
+  status: TicketStatus | string;
+  purchased_at?: string | null;
+  cancelled_at?: string | null;
+  checked_in_at?: string | null;
+  refund_id?: string | null;
+  refund_status?: RefundStatus | null;
+  refund_amount_minor: number;
+}
+
 export interface AdminPaymentOrderContext {
   order_id: string;
   order_status?: OrderStatus | string | null;
@@ -369,6 +384,7 @@ export interface AdminPaymentOrderContext {
   total_price?: number | null;
   tickets_count: number;
   seats: string[];
+  tickets: AdminPaymentTicketImpact[];
   expires_at?: string | null;
 }
 

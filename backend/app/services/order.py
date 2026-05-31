@@ -103,6 +103,8 @@ class OrderService:
 
     async def cancel_order(self, order_id: str, current_user: UserRead) -> OrderDetailsRead:
         """Cancel all active reserved or purchased tickets contained in one order."""
+        if current_user.role == Roles.ADMIN:
+            raise AuthorizationException("Use the admin order cancellation endpoint for administrator actions.")
         command = OrderCancellationCommand(
             order_repository=self.order_repository,
             ticket_repository=self.ticket_repository,
@@ -110,6 +112,31 @@ class OrderService:
         )
         await command.execute(order_id=order_id, current_user=current_user)
         return await self.get_current_user_order(order_id=order_id, current_user=current_user)
+
+    async def cancel_order_as_admin(self, order_id: str, admin_user: UserRead) -> OrderDetailsRead:
+        """Cancel any order from the explicit admin context and write an audit log entry."""
+        command = OrderCancellationCommand(
+            order_repository=self.order_repository,
+            ticket_repository=self.ticket_repository,
+            session_repository=self.session_repository,
+        )
+        result = await command.execute(order_id=order_id, current_user=admin_user)
+        cancelled_count = sum(1 for ticket in result["tickets"] if ticket["status"] == TicketStatuses.CANCELLED)
+        audit_logger.info(
+            "Admin order cancellation completed",
+            extra={
+                "action": "admin.order.cancelled",
+                "actor_type": "admin",
+                "actor_id": admin_user.id,
+                "order_id": order_id,
+                "target_user_id": str(result["order"].get("user_id")),
+                "cancelled_tickets_count": cancelled_count,
+            },
+        )
+        return await self._build_order_details_from_document(
+            result["order"],
+            now=datetime.now(tz=timezone.utc),
+        )
 
     async def finalize_pending_order(self, order_id: str) -> OrderRead:
         """Internal hook for a future payment success flow."""
@@ -141,10 +168,7 @@ class OrderService:
         synced_orders = await self._sync_expired_reservations_for_orders([order_document], now=now)
         order_document = synced_orders[0] if synced_orders else order_document
 
-        built_orders = await self._build_order_list([order_document], now=now)
-        if not built_orders:
-            raise NotFoundException("Order was not found.")
-        return self._build_order_details(order=built_orders[0], now=now)
+        return await self._build_order_details_from_document(order_document, now=now)
 
     async def build_current_user_order_pdf(self, order_id: str, current_user: UserRead) -> bytes:
         """Build a PDF receipt for one order owned by the current user."""
@@ -314,6 +338,17 @@ class OrderService:
                 )
             )
         return result
+
+    async def _build_order_details_from_document(
+        self,
+        order_document: dict[str, object],
+        *,
+        now: datetime,
+    ) -> OrderDetailsRead:
+        built_orders = await self._build_order_list([order_document], now=now)
+        if not built_orders:
+            raise NotFoundException("Order was not found.")
+        return self._build_order_details(order=built_orders[0], now=now)
 
     async def _sync_expired_reservations_for_orders(
         self,
@@ -783,5 +818,5 @@ class OrderService:
 
     def _ensure_order_owner(self, *, order_document: dict[str, object], current_user: UserRead) -> None:
         """Prevent users from reading orders that do not belong to them."""
-        if current_user.role != Roles.ADMIN and order_document["user_id"] != current_user.id:
+        if order_document["user_id"] != current_user.id:
             raise AuthorizationException("You can only access your own orders.")

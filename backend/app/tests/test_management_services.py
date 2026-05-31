@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import logging
 
 import pytest
 from pydantic import ValidationError
@@ -1026,6 +1027,80 @@ async def test_order_cancellation_leaves_refund_for_explicit_customer_request(
     await service.cancel_order("order-1", current_user=build_regular_user())
 
     assert refund_service.calls == []
+
+
+@pytest.mark.asyncio
+async def test_admin_order_cancellation_writes_audit_log(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def fake_execute(self, *, order_id: str, current_user: UserRead) -> dict[str, object]:
+        _ = (self, current_user)
+        return {
+            "order": {"id": order_id, "user_id": "customer-1"},
+            "tickets": [{"status": TicketStatuses.CANCELLED}, {"status": TicketStatuses.CANCELLED}],
+        }
+
+    async def fake_build_details(self, order_document: dict[str, object], *, now: datetime) -> object:
+        _ = (self, order_document, now)
+        return object()
+
+    monkeypatch.setattr("app.services.order.OrderCancellationCommand.execute", fake_execute)
+    monkeypatch.setattr("app.services.order.OrderService._build_order_details_from_document", fake_build_details)
+    caplog.set_level(logging.INFO, logger="cinema_showcase.audit")
+    service = OrderService(
+        session_repository=FakeSessionRepository(session=build_session()),
+        ticket_repository=FakeTicketRepository(),
+        movie_repository=FakeMovieRepository(movie=build_movie()),
+        order_repository=FakeOrderRepository(),
+    )
+
+    await service.cancel_order_as_admin("order-1", admin_user=build_admin_user())
+
+    assert any(
+        record.__dict__.get("action") == "admin.order.cancelled"
+        and record.__dict__.get("actor_id") == "admin-1"
+        and record.__dict__.get("order_id") == "order-1"
+        and record.__dict__.get("cancelled_tickets_count") == 2
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_admin_ticket_cancellation_writes_audit_log(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(
+        "app.commands.ticket_cancellation.run_transaction_with_retry",
+        fake_run_transaction_with_retry,
+    )
+
+    async def fake_refresh_order_aggregate(order_id: str, **_: object) -> dict[str, object]:
+        return {"id": order_id}
+
+    monkeypatch.setattr(
+        "app.commands.ticket_cancellation.refresh_order_aggregate",
+        fake_refresh_order_aggregate,
+    )
+    caplog.set_level(logging.INFO, logger="cinema_showcase.audit")
+    service = TicketService(
+        session_repository=FakeSessionRepository(session=build_session()),
+        ticket_repository=FakeTicketRepository(ticket=build_ticket(order_id="order-1")),
+        order_repository=FakeOrderRepository(),
+        movie_repository=FakeMovieRepository(movie=build_movie()),
+        user_repository=FakeUserRepository(),
+    )
+
+    await service.cancel_ticket_as_admin("ticket-1", admin_user=build_admin_user())
+
+    assert any(
+        record.__dict__.get("action") == "admin.ticket.cancelled"
+        and record.__dict__.get("actor_id") == "admin-1"
+        and record.__dict__.get("ticket_id") == "ticket-1"
+        and record.__dict__.get("order_id") == "order-1"
+        for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio

@@ -27,7 +27,7 @@ from app.core.responses import ApiResponse
 from app.factories.response_factory import ApiResponseFactory
 from app.schemas.common import DeleteResultRead
 from app.schemas.movie import MovieCreate, MovieRead, MovieUpdate
-from app.schemas.order import OrderValidationRead
+from app.schemas.order import OrderDetailsRead, OrderValidationRead
 from app.schemas.payment import (
     AdminPaymentDetailsRead,
     AdminPaymentListItemRead,
@@ -44,7 +44,7 @@ from app.schemas.session import (
     SessionRead,
     SessionUpdate,
 )
-from app.schemas.ticket import TicketListRead
+from app.schemas.ticket import TicketListRead, TicketRead
 from app.schemas.user import UserRead
 from app.services.admin import AdminService
 from app.services.order import OrderService
@@ -610,6 +610,27 @@ async def list_tickets(
     return ApiResponseFactory.success(data=tickets, message="Admin tickets loaded.")
 
 
+@router.patch(
+    "/tickets/{ticket_id}/cancel",
+    response_model=ApiResponse[TicketRead],
+    summary="Cancel a ticket as admin",
+    description=(
+        "Cancel any eligible ticket from the explicit administrator context. "
+        "The action is audit-logged with actor, ticket, order, user, and seat context."
+    ),
+    response_description="Wrapped cancelled ticket record.",
+    responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
+)
+async def cancel_ticket(
+    ticket_id: str,
+    admin_user: UserRead = Depends(get_current_admin),
+    ticket_service: TicketService = Depends(get_ticket_service),
+) -> ApiResponse[TicketRead]:
+    """Cancel a ticket from the protected admin workspace."""
+    ticket = await ticket_service.cancel_ticket_as_admin(ticket_id=ticket_id, admin_user=admin_user)
+    return ApiResponseFactory.success(data=ticket, message="Admin ticket cancelled successfully.")
+
+
 @router.get(
     "/orders/validate/{token}",
     response_model=ApiResponse[OrderValidationRead],
@@ -628,6 +649,27 @@ async def validate_order_token(
     """Validate a scanned customer order QR token."""
     result = await order_service.validate_order_token(token=token, requested_by=admin_user)
     return ApiResponseFactory.success(data=result, message="Order validation completed.")
+
+
+@router.patch(
+    "/orders/{order_id}/cancel",
+    response_model=ApiResponse[OrderDetailsRead],
+    summary="Cancel an order as admin",
+    description=(
+        "Cancel all eligible active tickets in any order from the explicit administrator context. "
+        "The action is audit-logged with actor, order, target user, and affected ticket count context."
+    ),
+    response_description="Wrapped cancelled order details.",
+    responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
+)
+async def cancel_order(
+    order_id: str,
+    admin_user: UserRead = Depends(get_current_admin),
+    order_service: OrderService = Depends(get_order_service),
+) -> ApiResponse[OrderDetailsRead]:
+    """Cancel an order from the protected admin workspace."""
+    order = await order_service.cancel_order_as_admin(order_id=order_id, admin_user=admin_user)
+    return ApiResponseFactory.success(data=order, message="Admin order cancelled successfully.")
 
 
 @router.post(

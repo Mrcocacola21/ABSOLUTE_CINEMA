@@ -1,18 +1,28 @@
 import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useEffect } from "react";
 
 import { useAuth } from "@/features/auth/useAuth";
+import { rememberProtectedRedirect } from "@/shared/storage";
 import { StatePanel } from "@/shared/ui/StatePanel";
 import type { UserRole } from "@/types/domain";
 
 interface ProtectedRouteProps {
   requiredRole?: UserRole;
+  redirectOnRoleMismatch?: string;
 }
 
-export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
+export function ProtectedRoute({ requiredRole, redirectOnRoleMismatch }: ProtectedRouteProps) {
   const { t } = useTranslation();
   const { isAuthenticated, isAuthLoading, role } = useAuth();
   const location = useLocation();
+  const from = `${location.pathname}${location.search}`;
+
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      rememberProtectedRedirect(from);
+    }
+  }, [from, isAuthenticated, isAuthLoading]);
 
   if (isAuthLoading) {
     return (
@@ -31,13 +41,17 @@ export function ProtectedRoute({ requiredRole }: ProtectedRouteProps) {
         replace
         state={{
           statusMessage: t("auth.prompts.signInToContinue"),
-          from: `${location.pathname}${location.search}`,
+          from,
         }}
       />
     );
   }
 
   if (requiredRole && role !== requiredRole) {
+    if (redirectOnRoleMismatch) {
+      return <Navigate to={redirectOnRoleMismatch} replace />;
+    }
+
     return (
       <StatePanel
         tone="error"

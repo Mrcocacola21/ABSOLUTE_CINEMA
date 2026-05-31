@@ -59,5 +59,20 @@ export function clearAuthStorage(): void {
   window.localStorage.removeItem(STORAGE_KEYS.accessToken);
   window.localStorage.removeItem(STORAGE_KEYS.refreshToken);
   window.localStorage.removeItem(STORAGE_KEYS.userRole);
+  clearPrivateNavigationStorage();
   notifyAuthStorageChanged();
+}
+
+export function rememberProtectedRedirect(path: string): void {
+  window.sessionStorage.setItem(STORAGE_KEYS.postLoginRedirect, path);
+  window.sessionStorage.setItem(STORAGE_KEYS.lastProtectedRoute, path);
+}
+
+export function getRememberedProtectedRedirect(): string | null {
+  return window.sessionStorage.getItem(STORAGE_KEYS.postLoginRedirect);
+}
+
+export function clearPrivateNavigationStorage(): void {
+  window.sessionStorage.removeItem(STORAGE_KEYS.postLoginRedirect);
+  window.sessionStorage.removeItem(STORAGE_KEYS.lastProtectedRoute);
 }

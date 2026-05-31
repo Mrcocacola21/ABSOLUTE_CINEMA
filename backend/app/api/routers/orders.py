@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.dependencies.auth import get_current_user
+from app.api.dependencies.auth import get_current_customer, get_current_user
 from app.api.docs import (
     AUTHENTICATION_ERROR_RESPONSE,
     CONFLICT_ERROR_RESPONSE,
@@ -51,14 +51,15 @@ async def purchase_order(
     summary="Cancel an order",
     description=(
         "Cancel all still-active reserved or purchased tickets inside one grouped order before the linked session starts. "
-        "Normal users can cancel only their own orders; administrators can cancel any order."
+        "Customer self-service cancellation is limited to the authenticated customer's own orders. "
+        "Administrator order cancellation is exposed separately under the `admin` tag."
     ),
     response_description="Wrapped cancelled order details.",
     responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )
 async def cancel_order(
     order_id: str,
-    current_user: UserRead = Depends(get_current_user),
+    current_user: UserRead = Depends(get_current_customer),
     order_service: OrderService = Depends(get_order_service),
 ) -> ApiResponse[OrderDetailsRead]:
     """Cancel all active tickets in one order."""

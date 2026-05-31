@@ -5,6 +5,8 @@ export const STORAGE_KEYS = {
   refreshToken: "cinema_showcase_refresh_token",
   userRole: "cinema_showcase_user_role",
   language: "cinema_showcase_language",
+  postLoginRedirect: "cinema_showcase_post_login_redirect",
+  lastProtectedRoute: "cinema_showcase_last_protected_route",
 } as const;
 
 export const ROLES: Record<string, UserRole> = {

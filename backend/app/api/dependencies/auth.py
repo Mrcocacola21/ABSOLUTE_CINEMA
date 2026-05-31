@@ -57,3 +57,12 @@ async def get_current_admin(
     if current_user.role != Roles.ADMIN:
         raise AuthorizationException("Administrator role is required.")
     return current_user
+
+
+async def get_current_customer(
+    current_user: UserRead = Depends(get_current_user),
+) -> UserRead:
+    """Ensure that the authenticated user is using customer self-service routes as a customer."""
+    if current_user.role == Roles.ADMIN:
+        raise AuthorizationException("Customer self-service routes are not available to administrator accounts.")
+    return current_user

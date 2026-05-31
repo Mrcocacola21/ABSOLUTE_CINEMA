@@ -18,6 +18,7 @@ import { StatusBanner } from "@/shared/ui/StatusBanner";
 import type {
   AdminPaymentDetails,
   AdminPaymentListItem,
+  AdminPaymentTicketImpact,
   PaymentReport,
   PaymentReportMovieAggregate,
   PaymentReportSessionAggregate,
@@ -41,6 +42,7 @@ type Feedback = {
 };
 
 type ReportPreset = "today" | "7d" | "30d" | "month" | "all" | "custom";
+type PaymentAnalyticsTableView = "sessions" | "movies";
 
 type ReportPeriodDraft = {
   preset: ReportPreset;
@@ -62,6 +64,7 @@ const PAYMENT_STATUS_OPTIONS: PaymentStatus[] = [
 
 const REFUND_STATUS_OPTIONS: RefundStatus[] = ["created", "pending", "succeeded", "failed", "cancelled"];
 const REPORT_PRESETS: ReportPreset[] = ["today", "7d", "30d", "month", "all"];
+const PAYMENT_ANALYTICS_TABLE_VIEWS: PaymentAnalyticsTableView[] = ["sessions", "movies"];
 
 const DEFAULT_FILTERS: FilterDraft = {
   status: "",
@@ -155,13 +158,13 @@ function formatOptionalDate(value: string | null | undefined, fallback: string, 
 }
 
 function statusTone(status: string): "success" | "error" | "warning" | "info" | "neutral" {
-  if (["succeeded", "completed", "processed", "refunded"].includes(status)) {
+  if (["succeeded", "completed", "processed", "refunded", "purchased"].includes(status)) {
     return "success";
   }
   if (["failed", "cancelled", "expired", "skipped"].includes(status)) {
     return "error";
   }
-  if (["requires_action", "pending", "processing", "partially_refunded"].includes(status)) {
+  if (["requires_action", "pending", "processing", "partially_refunded", "partially_cancelled", "reserved"].includes(status)) {
     return "warning";
   }
   return "neutral";
@@ -171,11 +174,46 @@ function StatusChip({ status }: { status: string }) {
   return <span className={`admin-payment-chip admin-payment-chip--${statusTone(status)}`}>{formatStateLabel(status)}</span>;
 }
 
+function hasActionableTicketRefund(ticket: AdminPaymentTicketImpact) {
+  const actionableRefundStatuses = ["created", "pending", "succeeded"];
+  return Boolean(
+    (ticket.refund_status && actionableRefundStatuses.includes(ticket.refund_status)) ||
+      (ticket.refund_id && !ticket.refund_status),
+  );
+}
+
+function isTicketAffected(ticket: AdminPaymentTicketImpact) {
+  return ticket.status === "cancelled" || ticket.status === "expired" || hasActionableTicketRefund(ticket);
+}
+
+function isTicketActive(ticket: AdminPaymentTicketImpact) {
+  return ticket.status === "purchased" && !ticket.cancelled_at && !hasActionableTicketRefund(ticket);
+}
+
+function ticketImpactTone(ticket: AdminPaymentTicketImpact): "active" | "affected" | "pending" | "neutral" {
+  if (ticket.refund_status === "created" || ticket.refund_status === "pending") {
+    return "pending";
+  }
+  if (isTicketAffected(ticket)) {
+    return "affected";
+  }
+  if (isTicketActive(ticket)) {
+    return "active";
+  }
+  return "neutral";
+}
+
+function ticketPrimaryStatus(ticket: AdminPaymentTicketImpact) {
+  return ticket.refund_status ?? ticket.status;
+}
+
 function SnapshotBlock({
   snapshot,
+  title,
   emptyLabel,
 }: {
   snapshot: Record<string, unknown> | null | undefined;
+  title: string;
   emptyLabel: string;
 }) {
   if (!snapshot || Object.keys(snapshot).length === 0) {
@@ -184,9 +222,12 @@ function SnapshotBlock({
 
   const text = JSON.stringify(snapshot, null, 2);
   return (
-    <pre className="admin-payments-snapshot">
-      {text.length > 1200 ? `${text.slice(0, 1200)}...` : text}
-    </pre>
+    <details className="admin-payments-snapshot-shell">
+      <summary>{title}</summary>
+      <pre className="admin-payments-snapshot">
+        {text.length > 1200 ? `${text.slice(0, 1200)}...` : text}
+      </pre>
+    </details>
   );
 }
 
@@ -200,6 +241,7 @@ export function AdminPaymentsPage() {
   const [draftFilters, setDraftFilters] = useState<FilterDraft>(DEFAULT_FILTERS);
   const [payments, setPayments] = useState<AdminPaymentListItem[]>([]);
   const [details, setDetails] = useState<AdminPaymentDetails | null>(null);
+  const [analyticsTableView, setAnalyticsTableView] = useState<PaymentAnalyticsTableView>("sessions");
   const [isReportLoading, setIsReportLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailsLoading, setIsDetailsLoading] = useState(false);
@@ -323,6 +365,19 @@ export function AdminPaymentsPage() {
       return;
     }
 
+    const confirmed = window.confirm(
+      t("admin.payments.states.refundConfirm", {
+        amount:
+          refundMode === "partial" && payloadAmount
+            ? formatMinorAmount(payloadAmount, details.currency, i18n.language)
+            : formatMinorAmount(details.remaining_refundable_amount_minor, details.currency, i18n.language),
+        paymentId: details.id,
+      }),
+    );
+    if (!confirmed) {
+      return;
+    }
+
     setIsRefunding(true);
     setFeedback(null);
     try {
@@ -354,6 +409,11 @@ export function AdminPaymentsPage() {
           date: formatDateTime(report.generated_at, i18n.language),
         })
       : "";
+    const reportTableTabs = PAYMENT_ANALYTICS_TABLE_VIEWS.map((view) => ({
+      id: view,
+      label: t(`admin.payments.analytics.${view}.title`),
+      count: view === "sessions" ? report?.sessions.length ?? 0 : report?.movies.length ?? 0,
+    }));
 
     return (
       <section className="panel admin-payment-analytics">
@@ -366,6 +426,22 @@ export function AdminPaymentsPage() {
           <button className="button--ghost" type="button" onClick={() => void loadPaymentReport()} disabled={isReportLoading}>
             {t("admin.payments.analytics.actions.refresh")}
           </button>
+        </div>
+
+        <div className="admin-payment-report-view-tabs" role="tablist" aria-label={t("admin.payments.analytics.title")}>
+          {reportTableTabs.map((view) => (
+            <button
+              key={view.id}
+              type="button"
+              role="tab"
+              aria-selected={analyticsTableView === view.id}
+              className={analyticsTableView === view.id ? "is-active" : undefined}
+              onClick={() => setAnalyticsTableView(view.id)}
+            >
+              <span>{view.label}</span>
+              {report ? <strong>{t("admin.payments.analytics.resultCount", { count: view.count })}</strong> : null}
+            </button>
+          ))}
         </div>
 
         <div className="admin-payment-report-controls">
@@ -469,19 +545,22 @@ export function AdminPaymentsPage() {
 
             <p className="muted admin-payment-report__generated">{generatedLabel}</p>
 
-            <div className="admin-payment-report-grids">
-              <PaymentReportSessionTable
-                rows={report.sessions}
-                title={t("admin.payments.analytics.sessions.title")}
-                empty={t("admin.payments.analytics.sessions.empty")}
-                language={i18n.language}
-              />
-              <PaymentReportMovieTable
-                rows={report.movies}
-                title={t("admin.payments.analytics.movies.title")}
-                empty={t("admin.payments.analytics.movies.empty")}
-                language={i18n.language}
-              />
+            <div className="admin-payment-report-table-panel">
+              {analyticsTableView === "sessions" ? (
+                <PaymentReportSessionTable
+                  rows={report.sessions}
+                  title={t("admin.payments.analytics.sessions.title")}
+                  empty={t("admin.payments.analytics.sessions.empty")}
+                  language={i18n.language}
+                />
+              ) : (
+                <PaymentReportMovieTable
+                  rows={report.movies}
+                  title={t("admin.payments.analytics.movies.title")}
+                  empty={t("admin.payments.analytics.movies.empty")}
+                  language={i18n.language}
+                />
+              )}
             </div>
           </div>
         ) : null}
@@ -620,20 +699,26 @@ export function AdminPaymentsPage() {
       details.currency,
       i18n.language,
     );
+    const paymentTickets = details.order?.tickets ?? [];
+    const activeTicketCount = paymentTickets.filter(isTicketActive).length;
+    const affectedTicketCount = paymentTickets.filter(isTicketAffected).length;
 
     return (
-      <div className="admin-payment-details">
-        <section className="panel admin-payment-details__summary">
-          <div className="admin-payment-details__heading">
-            <div>
+      <section className="panel admin-payment-details">
+        <section className="admin-payment-details__summary">
+          <div className="admin-payment-details__hero">
+            <div className="admin-payment-details__title-block">
               <p className="page-eyebrow">{t("admin.payments.labels.selectedPayment")}</p>
               <h2 className="section-title">{details.id}</h2>
-              <p className="muted">{details.provider_payment_id ?? t("admin.payments.labels.noProviderRef")}</p>
+              <p>{details.provider_payment_id ?? t("admin.payments.labels.noProviderRef")}</p>
             </div>
-            <StatusChip status={details.status} />
+            <div className="admin-payment-details__status-stack">
+              <StatusChip status={details.status} />
+              {details.order?.order_status ? <StatusChip status={details.order.order_status} /> : null}
+            </div>
           </div>
 
-          <div className="admin-payment-facts">
+          <div className="admin-payment-facts admin-payment-facts--summary">
             <div>
               <span>{t("admin.payments.labels.amount")}</span>
               <strong>{formatMinorAmount(details.amount_minor, details.currency, i18n.language)}</strong>
@@ -661,81 +746,139 @@ export function AdminPaymentsPage() {
           ) : null}
         </section>
 
-        <section className="panel admin-payment-section">
-          <div className="admin-payment-section__header">
-            <div>
-              <h3>{t("admin.payments.labels.bookingContext")}</h3>
-              <p className="muted">
-                {movieTitle || details.order?.session_id || t("admin.payments.states.bookingUnavailable")}
-              </p>
+        <div className="admin-payment-details__main-grid">
+          <section className="admin-payment-section admin-payment-section--context">
+            <div className="admin-payment-section__header">
+              <div>
+                <h3>{t("admin.payments.labels.bookingContext")}</h3>
+                <p className="muted">
+                  {movieTitle || details.order?.session_id || t("admin.payments.states.bookingUnavailable")}
+                </p>
+              </div>
+              {details.order?.order_status ? <StatusChip status={details.order.order_status} /> : null}
             </div>
-            {details.order?.order_status ? <StatusChip status={details.order.order_status} /> : null}
-          </div>
-          <div className="admin-payment-facts admin-payment-facts--compact">
-            <div>
-              <span>{t("admin.payments.labels.order")}</span>
-              <strong>{details.order?.order_id ?? details.order_id}</strong>
+            <div className="admin-payment-facts admin-payment-facts--context">
+              <div>
+                <span>{t("admin.payments.labels.order")}</span>
+                <strong>{details.order?.order_id ?? details.order_id}</strong>
+              </div>
+              <div>
+                <span>{t("admin.payments.labels.session")}</span>
+                <strong>{details.order?.session_id ?? "-"}</strong>
+                <p>{formatOptionalDate(details.order?.session_start_time, "-", i18n.language)}</p>
+              </div>
+              <div>
+                <span>{t("admin.payments.labels.seats")}</span>
+                <strong>{details.order?.seats.join(", ") || "-"}</strong>
+              </div>
+              <div>
+                <span>{t("admin.payments.labels.customer")}</span>
+                <strong>{details.customer?.name ?? details.user_id}</strong>
+                <p>{details.customer?.email ?? details.user_id}</p>
+              </div>
             </div>
-            <div>
-              <span>{t("admin.payments.labels.session")}</span>
-              <strong>{details.order?.session_id ?? "-"}</strong>
-              <p>{formatOptionalDate(details.order?.session_start_time, "-", i18n.language)}</p>
-            </div>
-            <div>
-              <span>{t("admin.payments.labels.seats")}</span>
-              <strong>{details.order?.seats.join(", ") || "-"}</strong>
-            </div>
-            <div>
-              <span>{t("admin.payments.labels.customer")}</span>
-              <strong>{details.customer?.name ?? details.user_id}</strong>
-              <p>{details.customer?.email ?? details.user_id}</p>
-            </div>
-          </div>
-        </section>
 
-        <section className="panel admin-payment-section">
-          <div className="admin-payment-section__header">
-            <div>
-              <h3>{t("admin.payments.labels.refundActions")}</h3>
-              <p className="muted">
-                {details.refundable
-                  ? t("admin.payments.states.refundAllowed", { amount: remainingRefundable })
-                  : t("admin.payments.states.refundNotAllowedMessage")}
-              </p>
-            </div>
-          </div>
-          <form className="admin-refund-form" onSubmit={(event) => void handleRefundSubmit(event)}>
-            <label className="field">
-              <span>{t("admin.payments.labels.refundMode")}</span>
-              <select value={refundMode} onChange={(event) => setRefundMode(event.target.value as "full" | "partial")}>
-                <option value="full">{t("admin.payments.labels.fullRefund")}</option>
-                <option value="partial">{t("admin.payments.labels.partialRefund")}</option>
-              </select>
-            </label>
-            {refundMode === "partial" ? (
-              <label className="field">
-                <span>{t("admin.payments.labels.refundAmount")}</span>
-                <input
-                  min="0"
-                  step="0.01"
-                  type="number"
-                  value={refundAmount}
-                  onChange={(event) => setRefundAmount(event.target.value)}
-                  placeholder="100.00"
-                />
-              </label>
+            {paymentTickets.length > 0 ? (
+              <div className="admin-payment-ticket-impact">
+                <div className="admin-payment-ticket-impact__header">
+                  <div>
+                    <h4>{t("admin.payments.labels.ticketsInPayment")}</h4>
+                    <p className="muted">
+                      {t("admin.payments.states.ticketImpactSummary", {
+                        active: activeTicketCount,
+                        affected: affectedTicketCount,
+                        total: paymentTickets.length,
+                      })}
+                    </p>
+                  </div>
+                  {details.latest_refund_status ? <StatusChip status={details.latest_refund_status} /> : null}
+                </div>
+                <div className="admin-payment-ticket-impact__grid">
+                  {paymentTickets.map((ticket) => (
+                    <article
+                      className={`admin-payment-ticket-impact__row admin-payment-ticket-impact__row--${ticketImpactTone(ticket)}`}
+                      key={ticket.id}
+                    >
+                      <div className="admin-payment-ticket-impact__seat">
+                        <span>{t("admin.payments.labels.seat")}</span>
+                        <strong>{ticket.seat_label}</strong>
+                      </div>
+                      <div className="admin-payment-ticket-impact__meta">
+                        <span>{t("admin.payments.labels.ticket")}</span>
+                        <strong>{ticket.id}</strong>
+                        <p>{formatMinorAmount(Math.round(ticket.price * 100), details.currency, i18n.language)}</p>
+                      </div>
+                      <div className="admin-payment-ticket-impact__state">
+                        <StatusChip status={ticketPrimaryStatus(ticket)} />
+                        {ticket.refund_id ? (
+                          <span>
+                            {t("admin.payments.labels.refund")}: {ticket.refund_id}
+                          </span>
+                        ) : null}
+                        {ticket.refund_amount_minor > 0 ? (
+                          <span>{formatMinorAmount(ticket.refund_amount_minor, details.currency, i18n.language)}</span>
+                        ) : ticket.cancelled_at ? (
+                          <span>{formatOptionalDate(ticket.cancelled_at, "-", i18n.language)}</span>
+                        ) : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
             ) : null}
-            <label className="field">
-              <span>{t("admin.payments.labels.reason")}</span>
-              <input value={refundReason} onChange={(event) => setRefundReason(event.target.value)} />
-            </label>
-            <button className="button" type="submit" disabled={!details.refundable || isRefunding}>
-              {isRefunding ? t("admin.payments.actions.refunding") : t("admin.payments.actions.issueRefund")}
-            </button>
-          </form>
-        </section>
+          </section>
 
-        <HistorySection title={t("admin.payments.labels.attemptHistory")} empty={t("admin.payments.states.noAttempts")}>
+          <section className="admin-payment-section admin-payment-section--refund">
+            <div className="admin-payment-section__header">
+              <div>
+                <h3>{t("admin.payments.labels.refundActions")}</h3>
+                <p className="muted">
+                  {details.refundable
+                    ? t("admin.payments.states.refundAllowed", { amount: remainingRefundable })
+                    : t("admin.payments.states.refundNotAllowedMessage")}
+                </p>
+              </div>
+            </div>
+            <form className="admin-refund-form" onSubmit={(event) => void handleRefundSubmit(event)}>
+              <div className="admin-refund-form__fields">
+                <label className="field">
+                  <span>{t("admin.payments.labels.refundMode")}</span>
+                  <select
+                    value={refundMode}
+                    onChange={(event) => setRefundMode(event.target.value as "full" | "partial")}
+                  >
+                    <option value="full">{t("admin.payments.labels.fullRefund")}</option>
+                    <option value="partial">{t("admin.payments.labels.partialRefund")}</option>
+                  </select>
+                </label>
+                {refundMode === "partial" ? (
+                  <label className="field">
+                    <span>{t("admin.payments.labels.refundAmount")}</span>
+                    <input
+                      min="0"
+                      step="0.01"
+                      type="number"
+                      value={refundAmount}
+                      onChange={(event) => setRefundAmount(event.target.value)}
+                      placeholder="100.00"
+                    />
+                  </label>
+                ) : null}
+                <label className="field">
+                  <span>{t("admin.payments.labels.reason")}</span>
+                  <input value={refundReason} onChange={(event) => setRefundReason(event.target.value)} />
+                </label>
+              </div>
+              <div className="admin-refund-form__action">
+                <button className="button" type="submit" disabled={!details.refundable || isRefunding}>
+                  {isRefunding ? t("admin.payments.actions.refunding") : t("admin.payments.actions.issueRefund")}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+
+        <HistorySection title={t("admin.payments.labels.attemptHistory")} empty={t("admin.payments.states.noAttempts")} defaultOpen>
           {details.attempts.map((attempt) => (
             <article className="admin-payment-history-card" key={attempt.id}>
               <div className="admin-payment-history-card__header">
@@ -748,7 +891,11 @@ export function AdminPaymentsPage() {
                   {attempt.error_code} {attempt.error_message}
                 </p>
               ) : null}
-              <SnapshotBlock snapshot={attempt.response_payload_snapshot} emptyLabel={t("admin.payments.states.noSnapshot")} />
+              <SnapshotBlock
+                snapshot={attempt.response_payload_snapshot}
+                title={t("admin.payments.labels.safePayload")}
+                emptyLabel={t("admin.payments.states.noSnapshot")}
+              />
             </article>
           ))}
         </HistorySection>
@@ -790,11 +937,15 @@ export function AdminPaymentsPage() {
                 </span>
               </div>
               {event.error_message ? <p className="admin-payment-history-card__error">{event.error_message}</p> : null}
-              <SnapshotBlock snapshot={event.payload_snapshot} emptyLabel={t("admin.payments.states.noSnapshot")} />
+              <SnapshotBlock
+                snapshot={event.payload_snapshot}
+                title={t("admin.payments.labels.safePayload")}
+                emptyLabel={t("admin.payments.states.noSnapshot")}
+              />
             </article>
           ))}
         </HistorySection>
-      </div>
+      </section>
     );
   }
 
@@ -883,19 +1034,18 @@ export function AdminPaymentsPage() {
         </form>
       </section>
 
-      <section className="admin-payments-workspace">
-        <div className="admin-payments-list">
-          <div className="admin-payments-list__header">
-            <div>
-              <p className="page-eyebrow">{t("admin.payments.labels.paymentsList")}</p>
-              <h2 className="section-title">{t("admin.payments.labels.paymentsCount", { count: payments.length })}</h2>
-            </div>
-            {selectedPayment ? <StatusChip status={selectedPayment.status} /> : null}
+      <section className="panel admin-payments-list">
+        <div className="admin-payments-list__header">
+          <div>
+            <p className="page-eyebrow">{t("admin.payments.labels.paymentsList")}</p>
+            <h2 className="section-title">{t("admin.payments.labels.paymentsCount", { count: payments.length })}</h2>
           </div>
-          {renderPaymentList()}
+          {selectedPayment ? <StatusChip status={selectedPayment.status} /> : null}
         </div>
-        {renderDetails()}
+        {renderPaymentList()}
       </section>
+
+      {renderDetails()}
     </>
   );
 }
@@ -1022,18 +1172,22 @@ function HistorySection({
   title,
   empty,
   children,
+  defaultOpen = false,
 }: {
   title: string;
   empty: string;
   children: ReactNode;
+  defaultOpen?: boolean;
 }) {
-  const hasChildren = Children.count(children) > 0;
+  const entryCount = Children.count(children);
+  const hasChildren = entryCount > 0;
   return (
-    <section className="panel admin-payment-section">
-      <div className="admin-payment-section__header">
+    <details className="admin-payment-section admin-payment-history-section" open={defaultOpen}>
+      <summary className="admin-payment-section__header">
         <h3>{title}</h3>
-      </div>
+        <span className="badge">{entryCount}</span>
+      </summary>
       {hasChildren ? <div className="admin-payment-history-list">{children}</div> : <p className="muted">{empty}</p>}
-    </section>
+    </details>
   );
 }

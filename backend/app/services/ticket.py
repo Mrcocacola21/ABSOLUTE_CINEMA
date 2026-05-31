@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 from app.commands.reservation_expiry import sync_expired_reservations_for_session
 from app.commands.ticket_cancellation import TicketCancellationCommand
 from app.commands.ticket_purchase import TicketPurchaseCommand
-from app.core.constants import OrderStatuses, SessionStatuses, TicketStatuses
+from app.core.constants import OrderStatuses, Roles, SessionStatuses, TicketStatuses
+from app.core.exceptions import AuthorizationException
+from app.core.logging import get_audit_logger
 from app.observers.events import build_default_event_publisher
 from app.repositories.movies import MovieRepository
 from app.repositories.orders import OrderRepository
@@ -21,6 +23,8 @@ from app.schemas.ticket import TicketListRead, TicketPurchaseRequest, TicketRead
 from app.schemas.user import UserRead
 from app.security.order_validation import create_order_validation_token
 from app.services.refund import RefundService
+
+audit_logger = get_audit_logger(__name__)
 
 
 class TicketService:
@@ -58,12 +62,37 @@ class TicketService:
 
     async def cancel_ticket(self, ticket_id: str, current_user: UserRead) -> TicketRead:
         """Cancel a purchased ticket before the linked session starts."""
+        if current_user.role == Roles.ADMIN:
+            raise AuthorizationException("Use the admin ticket cancellation endpoint for administrator actions.")
         command = TicketCancellationCommand(
             session_repository=self.session_repository,
             ticket_repository=self.ticket_repository,
             order_repository=self.order_repository,
         )
         return await command.execute(ticket_id=ticket_id, current_user=current_user)
+
+    async def cancel_ticket_as_admin(self, ticket_id: str, admin_user: UserRead) -> TicketRead:
+        """Cancel any ticket from the explicit admin context and write an audit log entry."""
+        command = TicketCancellationCommand(
+            session_repository=self.session_repository,
+            ticket_repository=self.ticket_repository,
+            order_repository=self.order_repository,
+        )
+        ticket = await command.execute(ticket_id=ticket_id, current_user=admin_user)
+        audit_logger.info(
+            "Admin ticket cancellation completed",
+            extra={
+                "action": "admin.ticket.cancelled",
+                "actor_type": "admin",
+                "actor_id": admin_user.id,
+                "ticket_id": ticket.id,
+                "order_id": ticket.order_id,
+                "target_user_id": ticket.user_id,
+                "seat_row": ticket.seat_row,
+                "seat_number": ticket.seat_number,
+            },
+        )
+        return ticket
 
     async def list_current_user_tickets(self, current_user: UserRead) -> list[TicketListRead]:
         """Return tickets belonging to the authenticated user."""

@@ -37,6 +37,8 @@ export function AppRouter() {
             <Route path="/payment/fake/:paymentId" element={<FakePaymentPage />} />
             <Route path="/payment/return" element={<PaymentReturnPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+          </Route>
+          <Route element={<ProtectedRoute requiredRole="user" redirectOnRoleMismatch="/admin" />}>
             <Route path="/me/orders/:orderId" element={<OrderDetailsPage />} />
           </Route>
           <Route element={<ProtectedRoute requiredRole="admin" />}>

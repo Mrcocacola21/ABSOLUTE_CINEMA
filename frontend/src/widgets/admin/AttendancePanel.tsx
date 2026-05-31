@@ -78,6 +78,12 @@ interface BookingOrderGroup {
   tickets: TicketListItem[];
 }
 
+interface BookingOrderActionTarget {
+  orderId: string;
+  movieTitle: LocalizedText;
+  ticketCount: number;
+}
+
 const attendanceStatusFilters: AttendanceStatusFilter[] = ["all", "scheduled", "completed", "cancelled"];
 const attendanceSortOptions: AttendanceSortOption[] = ["latest", "highest", "lowest"];
 const attendancePeriodPresets: AttendancePeriodPreset[] = ["today", "next7Days", "next30Days", "thisMonth", "allTime"];
@@ -101,6 +107,9 @@ interface AttendancePanelProps {
   isLoading?: boolean;
   errorMessage?: string;
   onRetry?: () => void;
+  isActionBusy?: boolean;
+  onCancelOrder?: (order: BookingOrderActionTarget) => void;
+  onCancelTicket?: (ticket: TicketListItem) => void;
 }
 
 function formatPercent(value: number, language: string): string {
@@ -124,6 +133,10 @@ function getAttendanceRowTone(session: AttendanceSessionSummary): string {
   }
 
   return "balanced";
+}
+
+function isAdminCancellableTicket(ticket: TicketListItem): boolean {
+  return ticket.is_cancellable && !ticket.cancelled_at && !ticket.checked_in_at;
 }
 
 function getBookingSessionLabel(movieTitle: LocalizedText, startTime: string, language: string): string {
@@ -329,6 +342,9 @@ export function AttendancePanel({
   isLoading = false,
   errorMessage = "",
   onRetry,
+  isActionBusy = false,
+  onCancelOrder,
+  onCancelTicket,
 }: AttendancePanelProps) {
   const { t, i18n } = useTranslation();
   const [statusFilter, setStatusFilter] = useState<AttendanceStatusFilter>("all");
@@ -1455,6 +1471,7 @@ export function AttendancePanel({
           <div className="admin-booking-order-list">
             {visibleBookingOrders.map((order) => {
               const orderTicketsInView = getTicketsInCurrentBookingView(order);
+              const hasCancellableTickets = order.tickets.some(isAdminCancellableTicket);
 
               return (
               <article key={order.orderId} className="admin-booking-order-card">
@@ -1498,6 +1515,22 @@ export function AttendancePanel({
                       >
                         {t("common.actions.viewDetails")}
                       </Link>
+                    ) : null}
+                    {onCancelOrder && hasCancellableTickets ? (
+                      <button
+                        className="button--danger admin-booking-order-card__details"
+                        type="button"
+                        disabled={isActionBusy}
+                        onClick={() =>
+                          onCancelOrder({
+                            orderId: order.orderId,
+                            movieTitle: order.movieTitle,
+                            ticketCount: order.tickets.length,
+                          })
+                        }
+                      >
+                        {t("admin.reports.bookings.cancelOrder", { defaultValue: "Cancel order" })}
+                      </button>
                     ) : null}
                   </div>
                 </div>
@@ -1577,6 +1610,16 @@ export function AttendancePanel({
                                 defaultValue: "Cancelled {{date}}",
                               })}
                             </span>
+                          ) : null}
+                          {onCancelTicket && isAdminCancellableTicket(ticket) ? (
+                            <button
+                              className="button--danger admin-booking-order-card__details"
+                              type="button"
+                              disabled={isActionBusy}
+                              onClick={() => onCancelTicket(ticket)}
+                            >
+                              {t("common.actions.cancelTicket")}
+                            </button>
                           ) : null}
                         </div>
                       </article>

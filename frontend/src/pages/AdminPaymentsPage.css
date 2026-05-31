@@ -5,20 +5,23 @@
 
 .admin-payments-filters,
 .admin-payment-analytics,
-.admin-payments-workspace,
 .admin-payments-list,
 .admin-payment-details {
   min-width: 0;
 }
 
-.admin-payment-details > .panel,
 .admin-payment-section {
   min-width: 0;
 }
 
-.admin-payment-details > .panel > *,
+.admin-payment-details > *,
 .admin-payment-section > * {
   min-width: 0;
+}
+
+.admin-payments-filters {
+  display: grid;
+  gap: 16px;
 }
 
 .admin-payments-filters form {
@@ -26,13 +29,6 @@
   grid-template-columns: minmax(220px, 1.4fr) repeat(3, minmax(150px, 0.8fr)) auto;
   gap: 14px;
   align-items: end;
-}
-
-.admin-payments-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
-  gap: 18px;
-  align-items: start;
 }
 
 .admin-payment-analytics {
@@ -53,6 +49,62 @@
   grid-template-columns: minmax(260px, 1fr) repeat(2, minmax(150px, 0.25fr));
   gap: 14px;
   align-items: end;
+}
+
+.admin-payment-report-view-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.admin-payment-report-view-tabs button {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--text-muted);
+  background: transparent;
+  text-align: left;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.admin-payment-report-view-tabs button span,
+.admin-payment-report-view-tabs button strong {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-payment-report-view-tabs button span {
+  color: #fff;
+  font-weight: 800;
+}
+
+.admin-payment-report-view-tabs button strong {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-payment-report-view-tabs button:hover,
+.admin-payment-report-view-tabs button.is-active {
+  border-color: rgba(244, 166, 98, 0.32);
+  background: rgba(244, 166, 98, 0.12);
+  color: #fff;
 }
 
 .admin-payment-report-presets {
@@ -130,6 +182,10 @@
   align-items: start;
 }
 
+.admin-payment-report-table-panel {
+  min-width: 0;
+}
+
 .admin-payment-report-table-card {
   display: grid;
   gap: 12px;
@@ -188,14 +244,21 @@
   font-size: 0.84rem;
 }
 
-.admin-payments-list,
-.admin-payment-details {
+.admin-payments-list {
   display: grid;
   gap: 16px;
 }
 
+.admin-payment-details {
+  display: grid;
+  gap: 0;
+  align-content: start;
+  background:
+    radial-gradient(circle at top right, rgba(244, 166, 98, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.065) 0%, rgba(255, 255, 255, 0.04) 100%);
+}
+
 .admin-payments-list__header,
-.admin-payment-details__heading,
 .admin-payment-section__header,
 .admin-payment-history-card__header {
   display: flex;
@@ -205,7 +268,11 @@
 }
 
 .admin-payments-table-wrap {
-  overflow: auto;
+  --admin-payment-table-header-height: 48px;
+  --admin-payment-table-row-height: 94px;
+  max-height: calc(var(--admin-payment-table-header-height) + (var(--admin-payment-table-row-height) * 4));
+  overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.035);
@@ -226,20 +293,24 @@
 }
 
 .admin-payments-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   color: var(--text-soft);
   font-size: 0.76rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(33, 30, 32, 0.98);
+}
+
+.admin-payments-table tbody tr {
+  height: var(--admin-payment-table-row-height);
+  transition: background 0.18s ease;
 }
 
 .admin-payments-table tbody td {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.admin-payments-table tbody tr {
-  transition: background 0.18s ease;
 }
 
 .admin-payments-table tbody tr:hover,
@@ -307,25 +378,100 @@
 .admin-payment-details__summary,
 .admin-payment-section {
   display: grid;
-  gap: 16px;
+  gap: 18px;
+  padding: 22px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-payment-details__summary {
+  padding-top: 0;
+}
+
+.admin-payment-details__hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+  padding: 2px 0 6px;
+}
+
+.admin-payment-details__title-block {
+  min-width: 0;
+}
+
+.admin-payment-details__title-block .section-title {
+  margin-top: 2px;
+  font-size: clamp(1.26rem, 2vw, 1.72rem);
+  overflow-wrap: anywhere;
+}
+
+.admin-payment-details__title-block p:last-child {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.admin-payment-details__status-stack {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: min(360px, 100%);
+}
+
+.admin-payment-section:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.admin-payment-details__main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  gap: 20px;
+  align-items: start;
+  padding: 22px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-payment-details__main-grid .admin-payment-section {
+  padding: 0;
+  border-bottom: 0;
+}
+
+.admin-payment-section--refund .admin-refund-form {
+  grid-template-columns: 1fr;
+}
+
+.admin-payment-section--refund .admin-refund-form__action {
+  justify-content: flex-start;
 }
 
 .admin-payment-facts {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
+}
+
+.admin-payment-facts--summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .admin-payment-facts--compact {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.admin-payment-facts--context {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .admin-payment-facts > div {
   min-width: 0;
-  padding: 13px 14px;
+  padding: 15px 16px;
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.045);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.028));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 }
 
 .admin-payment-facts span {
@@ -344,8 +490,9 @@
 
 .admin-payment-facts strong {
   display: block;
-  margin-top: 5px;
+  margin-top: 7px;
   color: #fff;
+  line-height: 1.25;
 }
 
 .admin-payment-facts p {
@@ -356,9 +503,139 @@
 
 .admin-refund-form {
   display: grid;
-  grid-template-columns: minmax(140px, 0.8fr) minmax(140px, 0.8fr) minmax(180px, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
   align-items: end;
+  padding: 16px;
+  border: 1px solid rgba(244, 166, 98, 0.12);
+  border-radius: 18px;
+  background: rgba(244, 166, 98, 0.055);
+}
+
+.admin-refund-form__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-refund-form__action {
+  display: flex;
+  justify-content: flex-end;
+  align-items: end;
+}
+
+.admin-refund-form__action .button {
+  min-height: 47px;
+  white-space: nowrap;
+}
+
+.admin-payment-ticket-impact {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.admin-payment-ticket-impact__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.admin-payment-ticket-impact__header h4 {
+  margin: 0 0 5px;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.admin-payment-ticket-impact__header p {
+  margin: 0;
+}
+
+.admin-payment-ticket-impact__grid {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-payment-ticket-impact__row {
+  display: grid;
+  grid-template-columns: minmax(84px, 0.45fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.admin-payment-ticket-impact__row--active {
+  border-color: rgba(119, 194, 157, 0.24);
+  background: rgba(119, 194, 157, 0.065);
+}
+
+.admin-payment-ticket-impact__row--affected {
+  border-color: rgba(227, 123, 118, 0.26);
+  background: rgba(227, 123, 118, 0.07);
+}
+
+.admin-payment-ticket-impact__row--pending {
+  border-color: rgba(244, 166, 98, 0.28);
+  background: rgba(244, 166, 98, 0.075);
+}
+
+.admin-payment-ticket-impact__seat,
+.admin-payment-ticket-impact__meta,
+.admin-payment-ticket-impact__state {
+  min-width: 0;
+}
+
+.admin-payment-ticket-impact__seat span,
+.admin-payment-ticket-impact__meta span {
+  display: block;
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-payment-ticket-impact__seat strong {
+  display: block;
+  margin-top: 4px;
+  color: #fff;
+  font-size: 1.1rem;
+}
+
+.admin-payment-ticket-impact__meta strong,
+.admin-payment-ticket-impact__meta p,
+.admin-payment-ticket-impact__state span {
+  overflow-wrap: anywhere;
+}
+
+.admin-payment-ticket-impact__meta strong {
+  display: block;
+  margin-top: 4px;
+  color: #fff;
+}
+
+.admin-payment-ticket-impact__meta p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.admin-payment-ticket-impact__state {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  align-items: flex-end;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-align: right;
 }
 
 .admin-payment-history-list {
@@ -369,9 +646,9 @@
 .admin-payment-history-card {
   display: grid;
   gap: 10px;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 14px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.04);
 }
 
@@ -392,14 +669,65 @@
   color: #ffe1df;
 }
 
+.admin-payment-history-section {
+  gap: 0;
+}
+
+.admin-payment-history-section[open] {
+  gap: 14px;
+}
+
+summary.admin-payment-section__header {
+  cursor: pointer;
+  list-style: none;
+  padding: 0;
+}
+
+summary.admin-payment-section__header::-webkit-details-marker {
+  display: none;
+}
+
+summary.admin-payment-section__header::after {
+  content: "+";
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 900;
+}
+
+.admin-payment-history-section[open] > summary.admin-payment-section__header::after {
+  content: "-";
+}
+
+.admin-payments-snapshot-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-payments-snapshot-shell summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .admin-payments-snapshot {
-  max-height: 220px;
+  max-height: 180px;
   overflow: auto;
   margin: 0;
-  padding: 12px;
-  border-radius: 12px;
+  padding: 14px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.09);
-  background: rgba(0, 0, 0, 0.22);
+  background: rgba(0, 0, 0, 0.18);
   color: rgba(247, 243, 235, 0.82);
   font-size: 0.78rem;
   white-space: pre-wrap;
@@ -408,9 +736,9 @@
 
 @media (max-width: 1180px) {
   .admin-payments-filters form,
-  .admin-payments-workspace,
   .admin-payment-report-controls,
-  .admin-payment-report-grids {
+  .admin-payment-report-grids,
+  .admin-payment-details__main-grid {
     grid-template-columns: 1fr;
   }
 
@@ -421,18 +749,39 @@
 
 @media (max-width: 760px) {
   .admin-payment-analytics__header,
+  .admin-payment-report-view-tabs,
   .admin-payment-report-table-card__header,
   .admin-payments-list__header,
-  .admin-payment-details__heading,
+  .admin-payment-details__hero,
   .admin-payment-section__header,
   .admin-payment-history-card__header {
     display: grid;
   }
 
+  .admin-payment-details__status-stack,
+  .admin-refund-form__action {
+    justify-content: flex-start;
+  }
+
   .admin-payment-report-summary,
+  .admin-payment-report-view-tabs,
   .admin-payment-facts,
   .admin-payment-facts--compact,
+  .admin-payment-facts--summary,
+  .admin-payment-facts--context,
+  .admin-refund-form__fields,
   .admin-refund-form {
     grid-template-columns: 1fr;
+  }
+
+  .admin-payment-ticket-impact__header,
+  .admin-payment-ticket-impact__row {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .admin-payment-ticket-impact__state {
+    align-items: flex-start;
+    text-align: left;
   }
 }

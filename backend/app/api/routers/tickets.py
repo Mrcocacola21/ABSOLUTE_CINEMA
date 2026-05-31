@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.dependencies.auth import get_current_user
+from app.api.dependencies.auth import get_current_customer, get_current_user
 from app.api.docs import (
     AUTHENTICATION_ERROR_RESPONSE,
     CONFLICT_ERROR_RESPONSE,
@@ -57,7 +57,7 @@ async def purchase_ticket(
     response_description="Wrapped list of the current user's tickets.",
 )
 async def list_current_user_tickets(
-    current_user: UserRead = Depends(get_current_user),
+    current_user: UserRead = Depends(get_current_customer),
     ticket_service: TicketService = Depends(get_ticket_service),
 ) -> ApiResponse[list[TicketListRead]]:
     """Return tickets belonging to the authenticated user."""
@@ -70,16 +70,16 @@ async def list_current_user_tickets(
     response_model=ApiResponse[TicketRead],
     summary="Cancel a ticket",
     description=(
-        "Cancel a reserved or purchased ticket before the linked session starts. Normal users can cancel only "
-        "their own tickets; administrators can cancel any ticket. Repeated cancellation and tickets "
-        "for already started or completed sessions are rejected."
+        "Cancel a reserved or purchased ticket before the linked session starts. Customer self-service "
+        "cancellation is limited to the authenticated customer's own tickets. Administrator ticket "
+        "cancellation is exposed separately under the `admin` tag."
     ),
     response_description="Wrapped cancelled ticket record.",
     responses=merge_openapi_responses(NOT_FOUND_ERROR_RESPONSE, CONFLICT_ERROR_RESPONSE, VALIDATION_ERROR_RESPONSE),
 )
 async def cancel_ticket(
     ticket_id: str,
-    current_user: UserRead = Depends(get_current_user),
+    current_user: UserRead = Depends(get_current_customer),
     ticket_service: TicketService = Depends(get_ticket_service),
 ) -> ApiResponse[TicketRead]:
     """Cancel a ticket owned by the current user or by any user when performed by an admin."""

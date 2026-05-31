@@ -12,6 +12,7 @@ from app.core.constants import (
     PAYMENT_STATUS_VALUES,
     PAYMENT_WEBHOOK_PROCESSING_STATUS_VALUES,
     REFUND_STATUS_VALUES,
+    TICKET_STATUS_VALUES,
 )
 from app.schemas.common import BaseSchema
 from app.schemas.localization import LocalizedText
@@ -619,6 +620,37 @@ class AdminPaymentCustomerRead(BaseSchema):
     email: str | None = None
 
 
+class AdminPaymentTicketImpactRead(BaseSchema):
+    """Ticket-level payment/refund context for the admin payment details panel."""
+
+    id: str
+    seat_row: int = Field(ge=1)
+    seat_number: int = Field(ge=1)
+    seat_label: str
+    price: float = Field(gt=0)
+    status: str
+    purchased_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    checked_in_at: datetime | None = None
+    refund_id: str | None = None
+    refund_status: str | None = None
+    refund_amount_minor: int = Field(default=0, ge=0)
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in TICKET_STATUS_VALUES:
+            raise ValueError("Unsupported ticket status.")
+        return value
+
+    @field_validator("refund_status")
+    @classmethod
+    def validate_refund_status(cls, value: str | None) -> str | None:
+        if value is not None and value not in REFUND_STATUS_VALUES:
+            raise ValueError("Unsupported refund status.")
+        return value
+
+
 class AdminPaymentOrderContextRead(BaseSchema):
     """Booking context shown in the admin payment workspace."""
 
@@ -633,6 +665,7 @@ class AdminPaymentOrderContextRead(BaseSchema):
     total_price: float | None = None
     tickets_count: int = Field(default=0, ge=0)
     seats: list[str] = Field(default_factory=list)
+    tickets: list[AdminPaymentTicketImpactRead] = Field(default_factory=list)
     expires_at: datetime | None = None
 
 

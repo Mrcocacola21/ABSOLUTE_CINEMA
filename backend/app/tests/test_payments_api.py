@@ -15,6 +15,7 @@ from app.core.constants import (
     PaymentWebhookProcessingStatuses,
     RefundStatuses,
     Roles,
+    TicketStatuses,
 )
 from app.main import create_application
 from app.schemas.payment import (
@@ -22,6 +23,7 @@ from app.schemas.payment import (
     AdminPaymentDetailsRead,
     AdminPaymentListItemRead,
     AdminPaymentOrderContextRead,
+    AdminPaymentTicketImpactRead,
     CustomerRefundRead,
     PaymentAttemptRead,
     PaymentDetailsRead,
@@ -319,6 +321,28 @@ class FakePaymentApiService:
                 total_price=123.45,
                 tickets_count=2,
                 seats=["1-1", "1-2"],
+                tickets=[
+                    AdminPaymentTicketImpactRead(
+                        id="ticket-1",
+                        seat_row=1,
+                        seat_number=1,
+                        seat_label="1-1",
+                        price=61.72,
+                        status=TicketStatuses.PURCHASED,
+                    ),
+                    AdminPaymentTicketImpactRead(
+                        id="ticket-2",
+                        seat_row=1,
+                        seat_number=2,
+                        seat_label="1-2",
+                        price=61.73,
+                        status=TicketStatuses.CANCELLED,
+                        cancelled_at=now,
+                        refund_id="refund-1",
+                        refund_status=RefundStatuses.SUCCEEDED,
+                        refund_amount_minor=2345,
+                    ),
+                ],
                 expires_at=None,
             ),
             customer=AdminPaymentCustomerRead(
@@ -547,7 +571,7 @@ async def test_payment_simulation_endpoint_requires_auth_and_returns_webhook_res
 
 
 @pytest.mark.asyncio
-async def test_refund_endpoints_create_and_list_refunds() -> None:
+async def test_legacy_refund_create_is_rejected_and_refund_lists_remain_available() -> None:
     app = create_application()
     service = FakePaymentApiService()
     app.dependency_overrides[get_current_user] = lambda: build_user(role=Roles.ADMIN)
@@ -562,14 +586,14 @@ async def test_refund_endpoints_create_and_list_refunds() -> None:
         payment_list_response = await client.get("/api/v1/payments/payment-1/refunds")
         order_list_response = await client.get("/api/v1/orders/order-1/refunds")
 
-    assert create_response.status_code == 201, create_response.text
-    assert create_response.json()["data"]["status"] == RefundStatuses.SUCCEEDED
-    assert create_response.json()["data"]["amount_minor"] == 2345
+    assert create_response.status_code == 403, create_response.text
+    assert create_response.json()["error"]["message"] == (
+        "Use the admin payment refund endpoint for administrator refund actions."
+    )
     assert payment_list_response.status_code == 200, payment_list_response.text
     assert payment_list_response.json()["data"][0]["provider_refund_id"] == "fake-refund-refund-1"
     assert order_list_response.status_code == 200, order_list_response.text
-    assert service.refund_calls[0]["requested_by"] == "admin:user-1"
-    assert service.refund_calls[0]["metadata"] == {"source": "admin"}
+    assert service.refund_calls == []
 
 
 @pytest.mark.asyncio
@@ -595,6 +619,27 @@ async def test_customer_refund_request_endpoint_uses_authenticated_user_and_retu
     assert service.refund_calls[0]["order_id"] == "order-1"
     assert service.refund_calls[0]["payload"].scope == "tickets"
     assert service.refund_calls[0]["payload"].ticket_ids == ["ticket-1"]
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_use_customer_refund_request_endpoint() -> None:
+    app = create_application()
+    service = FakePaymentApiService()
+    app.dependency_overrides[get_current_user] = lambda: build_user(role=Roles.ADMIN)
+    app.dependency_overrides[get_payment_service] = lambda: service
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/v1/orders/order-1/refunds/request",
+            json={"scope": "tickets", "ticket_ids": ["ticket-1"]},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["message"] == (
+        "Customer self-service routes are not available to administrator accounts."
+    )
+    assert service.refund_calls == []
 
 
 @pytest.mark.asyncio
@@ -644,6 +689,8 @@ async def test_admin_payment_management_endpoints_return_lifecycle_history_and_r
     assert details["refunds"][0]["id"] == "refund-1"
     assert details["webhook_events"][0]["payment_id"] == "payment-1"
     assert details["order"]["seats"] == ["1-1", "1-2"]
+    assert details["order"]["tickets"][1]["seat_label"] == "1-2"
+    assert details["order"]["tickets"][1]["refund_status"] == RefundStatuses.SUCCEEDED
     assert refund_response.status_code == 201, refund_response.text
     assert refund_response.json()["data"]["amount_minor"] == 1234
     assert service.refund_calls[-1]["requested_by"] == "admin:user-1"

@@ -430,7 +430,7 @@ async def test_ticket_purchase_rejects_attempt_to_override_authenticated_user(
 
 
 @pytest.mark.asyncio
-async def test_user_cannot_cancel_another_users_ticket_but_admin_can(
+async def test_user_cannot_cancel_another_users_ticket_and_admin_must_use_admin_route(
     client: httpx.AsyncClient,
     database,
     admin_auth: dict[str, object],
@@ -462,8 +462,17 @@ async def test_user_cannot_cancel_another_users_ticket_but_admin_can(
     assert forbidden_cancel.status_code == 403
     assert forbidden_cancel.json()["error"]["message"] == "You can only cancel your own tickets."
 
-    admin_cancel = await client.patch(
+    admin_public_cancel = await client.patch(
         f"{API_PREFIX}/tickets/{ticket_id}/cancel",
+        headers=admin_auth["headers"],
+    )
+    assert admin_public_cancel.status_code == 403
+    assert admin_public_cancel.json()["error"]["message"] == (
+        "Customer self-service routes are not available to administrator accounts."
+    )
+
+    admin_cancel = await client.patch(
+        f"{API_PREFIX}/admin/tickets/{ticket_id}/cancel",
         headers=admin_auth["headers"],
     )
     assert admin_cancel.status_code == 200, admin_cancel.text

@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, Response
 
-from app.api.dependencies.auth import get_current_user
+from app.api.dependencies.auth import get_current_customer, get_current_user
 from app.api.docs import (
     AUTHENTICATION_ERROR_RESPONSE,
     CONFLICT_ERROR_RESPONSE,
@@ -75,7 +75,7 @@ async def get_me(current_user: UserRead = Depends(get_current_user)) -> ApiRespo
     response_description="Wrapped list of the current user's orders.",
 )
 async def list_my_orders(
-    current_user: UserRead = Depends(get_current_user),
+    current_user: UserRead = Depends(get_current_customer),
     order_service: OrderService = Depends(get_order_service),
 ) -> ApiResponse[list[OrderListRead]]:
     """Return grouped orders belonging to the authenticated user."""
@@ -92,7 +92,7 @@ async def list_my_orders(
 )
 async def get_my_order(
     order_id: str,
-    current_user: UserRead = Depends(get_current_user),
+    current_user: UserRead = Depends(get_current_customer),
     order_service: OrderService = Depends(get_order_service),
 ) -> ApiResponse[OrderDetailsRead]:
     """Return one grouped order belonging to the authenticated user."""
@@ -108,7 +108,7 @@ async def get_my_order(
 )
 async def download_my_order_pdf(
     order_id: str,
-    current_user: UserRead = Depends(get_current_user),
+    current_user: UserRead = Depends(get_current_customer),
     order_service: OrderService = Depends(get_order_service),
 ) -> Response:
     """Return a PDF receipt for one grouped order belonging to the authenticated user."""

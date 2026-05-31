@@ -17,7 +17,7 @@ export function AppLayout() {
 
   function handleLogout() {
     logout();
-    navigate("/", { replace: true });
+    navigate("/", { replace: true, state: null });
   }
 
   return (

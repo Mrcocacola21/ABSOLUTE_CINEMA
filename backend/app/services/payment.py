@@ -64,6 +64,7 @@ from app.schemas.payment import (
     AdminPaymentDetailsRead,
     AdminPaymentListItemRead,
     AdminPaymentOrderContextRead,
+    AdminPaymentTicketImpactRead,
     CustomerRefundRead,
     CustomerRefundRequest,
     DEFAULT_PAYMENT_CURRENCY,
@@ -2132,14 +2133,12 @@ class PaymentService:
             return None
 
         tickets = await self.ticket_repository.list_by_order(order_id)
-        seats = sorted(
-            [
-                f"{ticket['seat_row']}-{ticket['seat_number']}"
-                for ticket in tickets
-                if ticket.get("seat_row") is not None and ticket.get("seat_number") is not None
-            ],
-            key=lambda value: tuple(int(part) for part in value.split("-", maxsplit=1)),
-        )
+        refunds = [
+            RefundRead.model_validate(refund)
+            for refund in await self.refund_repository.list_by_order(order_id)
+        ]
+        ticket_impacts = self._build_admin_ticket_impacts(tickets=tickets, refunds=refunds)
+        seats = [ticket.seat_label for ticket in ticket_impacts]
         session_document = await self.session_repository.get_by_id(str(order_document["session_id"]))
         movie_document = None
         if session_document is not None and self.movie_repository is not None:
@@ -2157,8 +2156,55 @@ class PaymentService:
             total_price=float(order_document["total_price"]) if order_document.get("total_price") is not None else None,
             tickets_count=int(order_document.get("tickets_count") or len(tickets)),
             seats=seats,
+            tickets=ticket_impacts,
             expires_at=order_document.get("expires_at"),
         )
+
+    def _build_admin_ticket_impacts(
+        self,
+        *,
+        tickets: list[dict[str, Any]],
+        refunds: list[RefundRead],
+    ) -> list[AdminPaymentTicketImpactRead]:
+        refunds_by_ticket: dict[str, RefundRead] = {}
+        for refund in refunds:
+            for ticket_id in self._extract_refund_ticket_ids(refund):
+                refunds_by_ticket.setdefault(ticket_id, refund)
+
+        def seat_sort_key(ticket: dict[str, Any]) -> tuple[int, int, str]:
+            return (
+                int(ticket.get("seat_row") or 0),
+                int(ticket.get("seat_number") or 0),
+                str(ticket.get("id") or ""),
+            )
+
+        ticket_impacts: list[AdminPaymentTicketImpactRead] = []
+        for ticket in sorted(tickets, key=seat_sort_key):
+            ticket_id = str(ticket["id"])
+            seat_row = int(ticket["seat_row"])
+            seat_number = int(ticket["seat_number"])
+            latest_refund = refunds_by_ticket.get(ticket_id)
+            ticket_impacts.append(
+                AdminPaymentTicketImpactRead(
+                    id=ticket_id,
+                    seat_row=seat_row,
+                    seat_number=seat_number,
+                    seat_label=f"{seat_row}-{seat_number}",
+                    price=float(ticket["price"]),
+                    status=str(ticket["status"]),
+                    purchased_at=ticket.get("purchased_at"),
+                    cancelled_at=ticket.get("cancelled_at"),
+                    checked_in_at=ticket.get("checked_in_at"),
+                    refund_id=latest_refund.id if latest_refund is not None else None,
+                    refund_status=latest_refund.status if latest_refund is not None else None,
+                    refund_amount_minor=(
+                        int(latest_refund.amount_minor)
+                        if latest_refund is not None
+                        else 0
+                    ),
+                )
+            )
+        return ticket_impacts
 
     def _build_admin_refund_aggregate(
         self,

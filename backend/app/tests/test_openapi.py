@@ -135,7 +135,7 @@ def test_openapi_describes_demo_auth_booking_and_profile_flows() -> None:
     assert "Development/demo-only" in payment_simulation["description"]
     assert "same webhook processor" in payment_simulation["description"]
     assert payment_refund_create["security"] == [{"OAuth2PasswordBearer": []}]
-    assert "financial refund" in payment_refund_create["description"]
+    assert "/admin/payments/{payment_id}/refunds" in payment_refund_create["description"]
     assert customer_refund_request["security"] == [{"OAuth2PasswordBearer": []}]
     assert "partial refund" in customer_refund_request["description"]
     assert "remaining refundable payment amount" in customer_refund_request["description"]
@@ -192,6 +192,8 @@ def test_openapi_documents_admin_movie_session_and_reporting_schemas() -> None:
         "OrderValidationRead",
         "AdminPaymentListItemRead",
         "AdminPaymentDetailsRead",
+        "AdminPaymentOrderContextRead",
+        "AdminPaymentTicketImpactRead",
         "PaymentReportRead",
         "PaymentReportSummaryRead",
         "PaymentReportSessionAggregateRead",
@@ -208,6 +210,8 @@ def test_openapi_documents_admin_movie_session_and_reporting_schemas() -> None:
     attendance_details = schemas["AttendanceSessionDetailsRead"]
     order_validation = schemas["OrderValidationRead"]
     admin_order_validation = spec["paths"]["/api/v1/admin/orders/validate/{token}"]["get"]
+    admin_order_cancel = spec["paths"]["/api/v1/admin/orders/{order_id}/cancel"]["patch"]
+    admin_ticket_cancel = spec["paths"]["/api/v1/admin/tickets/{ticket_id}/cancel"]["patch"]
 
     assert movie_create["additionalProperties"] is False
     assert movie_create["properties"]["status"]["enum"] == ["planned", "active", "deactivated"]
@@ -223,8 +227,12 @@ def test_openapi_documents_admin_movie_session_and_reporting_schemas() -> None:
     assert admin_order_validation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "ApiResponse_OrderValidationRead_"
     )
+    assert "audit-logged" in admin_order_cancel["description"]
+    assert "audit-logged" in admin_ticket_cancel["description"]
     assert "remaining_refundable_amount_minor" in schemas["AdminPaymentListItemRead"]["properties"]
     assert "webhook_events" in schemas["AdminPaymentDetailsRead"]["properties"]
+    assert "tickets" in schemas["AdminPaymentOrderContextRead"]["properties"]
+    assert "refund_status" in schemas["AdminPaymentTicketImpactRead"]["properties"]
     assert "summary" in schemas["PaymentReportRead"]["properties"]
     assert "gross_revenue_minor" in schemas["PaymentReportSummaryRead"]["properties"]
     assert "refunded_amount_minor" in schemas["PaymentReportSessionAggregateRead"]["properties"]

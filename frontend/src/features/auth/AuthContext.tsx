@@ -20,7 +20,7 @@ interface AuthContextValue {
   role: UserRole | null;
   isAuthenticated: boolean;
   isAuthLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => void;
   refreshCurrentUser: () => Promise<void>;
 }
@@ -119,6 +119,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setCurrentUser(me.data);
       setRole(me.data.role);
       storeRole(me.data.role);
+      return me.data;
     } catch (error) {
       if (storedNewTokens) {
         clearAuthStorage();

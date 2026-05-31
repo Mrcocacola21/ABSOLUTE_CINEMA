@@ -4,86 +4,183 @@
 }
 
 .admin-validation-hero {
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+}
+
+.admin-validation-hero__copy {
+  min-width: 0;
+  max-width: 820px;
+}
+
+.admin-validation-hero .button--ghost {
+  white-space: nowrap;
 }
 
 .admin-validation-form {
   display: grid;
+  grid-template-columns: minmax(220px, 0.32fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: end;
+}
+
+.admin-validation-form__intro {
+  min-width: 0;
+}
+
+.admin-validation-form__intro h2 {
+  margin: 0 0 6px;
+  color: #fff;
+  font-size: 1.05rem;
+}
+
+.admin-validation-form__intro p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.admin-validation-form__controls {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: end;
+  min-width: 0;
 }
 
 .admin-validation-form .field {
   min-width: 0;
 }
 
+.admin-validation-form input {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .admin-validation-form .button {
   min-height: 48px;
+  white-space: nowrap;
 }
 
 .admin-validation-result {
   display: grid;
-  gap: 18px;
+  gap: 20px;
   border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .admin-validation-result.is-valid {
   border-color: rgba(119, 194, 157, 0.28);
-  background:
-    radial-gradient(circle at top right, rgba(119, 194, 157, 0.1), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.035));
+  box-shadow: inset 4px 0 0 rgba(119, 194, 157, 0.7);
 }
 
-.admin-validation-result.is-invalid {
-  border-color: rgba(227, 123, 118, 0.28);
-  background:
-    radial-gradient(circle at top right, rgba(227, 123, 118, 0.1), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.035));
-}
-
+.admin-validation-result.is-invalid,
 .admin-validation-result.is-cancelled,
 .admin-validation-result.is-invalid_token,
 .admin-validation-result.is-order_not_found,
 .admin-validation-result.is-order_unavailable {
   border-color: rgba(227, 123, 118, 0.28);
-  background:
-    radial-gradient(circle at top right, rgba(227, 123, 118, 0.1), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.035));
+  box-shadow: inset 4px 0 0 rgba(227, 123, 118, 0.68);
 }
 
 .admin-validation-result.is-expired,
 .admin-validation-result.is-already_used {
   border-color: rgba(244, 166, 98, 0.28);
-  background:
-    radial-gradient(circle at top right, rgba(244, 166, 98, 0.11), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.035));
+  box-shadow: inset 4px 0 0 rgba(244, 166, 98, 0.72);
 }
 
-.admin-validation-result__status,
-.admin-validation-ticket {
+.admin-validation-result__topline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, auto);
+  gap: 18px;
+  align-items: start;
+}
+
+.admin-validation-decision {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.admin-validation-decision.is-allowed {
+  border-color: rgba(119, 194, 157, 0.24);
+  background: rgba(119, 194, 157, 0.075);
+}
+
+.admin-validation-decision.is-denied {
+  border-color: rgba(227, 123, 118, 0.22);
+  background: rgba(227, 123, 118, 0.065);
+}
+
+.admin-validation-decision strong {
+  display: block;
+  color: #fff;
+  font-size: 1.05rem;
+}
+
+.admin-validation-decision p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.admin-validation-result__status {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-validation-meta-pill {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 32px;
   align-items: center;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.78rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .admin-validation-result__headline {
   display: grid;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.4fr);
+  gap: 16px;
+  align-items: end;
+  padding-bottom: 2px;
+}
+
+.admin-validation-result__headline .section-title {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
 }
 
 .admin-validation-result__headline p {
   margin: 0;
   color: var(--text-muted);
+  line-height: 1.45;
 }
 
 .admin-validation-action {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 12px;
   align-items: center;
-  padding: 16px;
+  padding: 15px 16px;
   border-radius: 18px;
   border: 1px solid rgba(119, 194, 157, 0.22);
   background: rgba(119, 194, 157, 0.08);
@@ -92,37 +189,75 @@
 .admin-validation-action p {
   margin: 0;
   color: var(--text-muted);
+  line-height: 1.45;
 }
 
-.admin-validation-facts {
+.admin-validation-section {
+  display: grid;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-validation-section__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.admin-validation-section__header h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 1.02rem;
+}
+
+.admin-validation-section__header p {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+}
+
+.admin-validation-facts,
+.admin-validation-context__grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
-.admin-validation-facts > div {
+.admin-validation-facts > div,
+.admin-validation-context__grid > div {
   display: grid;
   gap: 6px;
   min-width: 0;
   padding: 14px 16px;
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.035);
 }
 
-.admin-validation-facts span {
+.admin-validation-facts span,
+.admin-validation-context__grid span,
+.admin-validation-ticket__identity span,
+.admin-validation-ticket__state span {
   color: var(--text-soft);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.admin-validation-facts strong {
+.admin-validation-facts strong,
+.admin-validation-context__grid strong,
+.admin-validation-ticket strong,
+.admin-validation-ticket p {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+
+.admin-validation-facts strong,
+.admin-validation-context__grid strong {
   color: #fff;
+  line-height: 1.25;
 }
 
 .admin-validation-ticket-list {
@@ -131,30 +266,76 @@
 }
 
 .admin-validation-ticket {
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(190px, 0.9fr) minmax(150px, 0.7fr) minmax(230px, 0.85fr);
+  gap: 14px;
+  align-items: center;
   padding: 14px 16px;
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
 }
 
 .admin-validation-ticket.is-valid {
-  border-color: rgba(119, 194, 157, 0.22);
+  border-color: rgba(119, 194, 157, 0.24);
+  background: rgba(119, 194, 157, 0.055);
 }
 
 .admin-validation-ticket.is-invalid {
   border-color: rgba(227, 123, 118, 0.2);
 }
 
+.admin-validation-ticket.is-used {
+  border-color: rgba(244, 166, 98, 0.24);
+  background: rgba(244, 166, 98, 0.055);
+}
+
+.admin-validation-ticket__identity,
+.admin-validation-ticket__state,
+.admin-validation-ticket__entry {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.admin-validation-ticket__identity strong {
+  color: #fff;
+  font-size: 1rem;
+}
+
+.admin-validation-ticket__identity p,
+.admin-validation-ticket__state p,
+.admin-validation-ticket__entry p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.admin-validation-ticket__state strong {
+  color: #fff;
+}
+
+.admin-validation-ticket__entry {
+  justify-items: end;
+  text-align: right;
+}
+
 .order-detail-validity {
   display: inline-flex;
+  width: fit-content;
   align-items: center;
   min-height: 34px;
   padding: 7px 11px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   font-weight: 800;
+  white-space: nowrap;
+}
+
+.order-detail-validity--primary {
+  min-height: 38px;
+  padding: 8px 13px;
 }
 
 .order-detail-validity.is-valid {
@@ -163,12 +344,7 @@
   color: #dffce9;
 }
 
-.order-detail-validity.is-invalid {
-  border-color: rgba(227, 123, 118, 0.25);
-  background: rgba(227, 123, 118, 0.12);
-  color: #ffe1df;
-}
-
+.order-detail-validity.is-invalid,
 .order-detail-validity.is-cancelled,
 .order-detail-validity.is-invalid_token,
 .order-detail-validity.is-order_not_found,
@@ -185,19 +361,53 @@
   color: #ffe9cc;
 }
 
-.admin-validation-ticket__time {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .admin-validation-form,
-  .admin-validation-facts {
+  .admin-validation-result__topline,
+  .admin-validation-result__headline,
+  .admin-validation-action {
     grid-template-columns: 1fr;
   }
 
+  .admin-validation-result__status {
+    justify-content: flex-start;
+  }
+
+  .admin-validation-facts,
+  .admin-validation-context__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .admin-validation-ticket {
+    grid-template-columns: minmax(0, 1fr);
     align-items: flex-start;
-    flex-direction: column;
+  }
+
+  .admin-validation-ticket__entry {
+    justify-items: start;
+    text-align: left;
+  }
+}
+
+@media (max-width: 700px) {
+  .admin-validation-hero,
+  .admin-validation-form__controls,
+  .admin-validation-decision,
+  .admin-validation-facts,
+  .admin-validation-context__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-validation-hero .button--ghost,
+  .admin-validation-form .button {
+    width: 100%;
+  }
+
+  .admin-validation-section__header {
+    display: grid;
+  }
+
+  .order-detail-validity {
+    white-space: normal;
   }
 }

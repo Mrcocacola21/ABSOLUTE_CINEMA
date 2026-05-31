@@ -105,6 +105,14 @@ async def test_non_admin_cannot_mutate_admin_movies_or_sessions(
             f"{API_PREFIX}/admin/sessions/{session['id']}",
             headers=user_auth["headers"],
         ),
+        await client.patch(
+            f"{API_PREFIX}/admin/tickets/{ObjectId()}/cancel",
+            headers=user_auth["headers"],
+        ),
+        await client.patch(
+            f"{API_PREFIX}/admin/orders/{ObjectId()}/cancel",
+            headers=user_auth["headers"],
+        ),
     ]
 
     for response in responses:

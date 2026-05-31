@@ -4,6 +4,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/useAuth";
 import { extractApiErrorMessage } from "@/shared/apiErrors";
+import { resolvePostLoginRedirect } from "@/shared/routeAccess";
+import { clearPrivateNavigationStorage, getRememberedProtectedRedirect } from "@/shared/storage";
 import { StatusBanner } from "@/shared/ui/StatusBanner";
 
 export function LoginPage() {
@@ -30,16 +32,21 @@ export function LoginPage() {
     setErrorMessage("");
     setIsSubmitting(true);
     try {
-      await login(email.trim(), password);
-      const redirectPath =
+      const user = await login(email.trim(), password);
+      const locationStateRedirect =
         typeof location.state === "object" &&
         location.state &&
         "from" in location.state &&
         typeof location.state.from === "string" &&
         location.state.from.startsWith("/")
           ? location.state.from
-          : "/profile";
-      navigate(redirectPath);
+          : null;
+      const redirectPath = resolvePostLoginRedirect(
+        locationStateRedirect ?? getRememberedProtectedRedirect(),
+        user.role,
+      );
+      clearPrivateNavigationStorage();
+      navigate(redirectPath, { replace: true, state: null });
     } catch (error) {
       setErrorMessage(extractApiErrorMessage(error, t("auth.login.failed")));
     } finally {

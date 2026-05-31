@@ -1283,7 +1283,10 @@ async def test_admin_payment_details_aggregate_attempts_refunds_webhooks_and_boo
         "provider_refund_id": "fake-refund-1",
         "reason": "customer_request",
         "requested_by": "admin-1",
-        "request_payload_snapshot": {"operation": "refund_payment"},
+        "request_payload_snapshot": {
+            "operation": "refund_payment",
+            "metadata": {"scope": "tickets", "ticket_ids": ["ticket-1"]},
+        },
         "response_payload_snapshot": {"status": RefundStatuses.SUCCEEDED},
         "failure_code": None,
         "failure_message": None,
@@ -1342,6 +1345,10 @@ async def test_admin_payment_details_aggregate_attempts_refunds_webhooks_and_boo
     assert details.webhook_events[0].provider_event_id == "evt-paid-1"
     assert details.order is not None
     assert details.order.seats == ["1-1"]
+    assert details.order.tickets[0].id == "ticket-1"
+    assert details.order.tickets[0].seat_label == "1-1"
+    assert details.order.tickets[0].refund_id == "refund-1"
+    assert details.order.tickets[0].refund_status == RefundStatuses.SUCCEEDED
 
 
 @pytest.mark.asyncio

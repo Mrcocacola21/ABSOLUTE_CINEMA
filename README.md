@@ -1,8 +1,48 @@
 # Cinema Showcase
 
+<p align="left">
+  <img alt="FastAPI backend" src="https://img.shields.io/badge/backend-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white">
+  <img alt="React frontend" src="https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB?style=flat-square&logo=react&logoColor=1f2937">
+  <img alt="MongoDB transactions" src="https://img.shields.io/badge/database-MongoDB%20replica%20set-47A248?style=flat-square&logo=mongodb&logoColor=white">
+  <img alt="Docker Compose" src="https://img.shields.io/badge/runtime-Docker%20Compose-2496ED?style=flat-square&logo=docker&logoColor=white">
+  <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-f5c542?style=flat-square">
+</p>
+
 Cinema Showcase is an academic full-stack web application for operating a small one-hall cinema. It models the practical workflow of a cinema website: customers browse movies and sessions, reserve seats, initiate payment, receive order/ticket documents, and staff validate entry at the hall.
 
 The repository contains a FastAPI backend, a React/Vite frontend, MongoDB persistence, Docker development infrastructure, deterministic demo data, and a backend test suite with unit and integration coverage.
+
+## Quick Links
+
+- [Project overview](#project-overview)
+- [Tech stack](#tech-stack)
+- [Setup and run](#setup-and-run)
+- [Demo seed and demo data](#demo-seed-and-demo-data)
+- [Testing](#testing)
+- [Contributing](CONTRIBUTING.md)
+- [License](#license)
+
+## Project Status
+
+Cinema Showcase is a portfolio-ready coursework/demo project. It is not wired to real payment acquiring or production hosting, but it is structured to demonstrate real full-stack architecture, transaction-safe booking flows, admin operations, and defensible backend boundaries.
+
+## Why This Project Stands Out
+
+- Multi-ticket order and reservation model with temporary seat holds, expiry, payment finalization, cancellation, and refund paths.
+- MongoDB replica-set transaction support for booking, payment, cancellation, and expiry flows.
+- Admin tooling for schedule planning, attendance reporting, payment inspection, refunds, and QR/order validation.
+- Provider-style fake payment workflow with signed webhooks, deduplication, audit events, and seeded payment states for demos.
+- Deterministic demo data that covers successful, pending, failed, cancelled, expired, refunded, and partially refunded workflows.
+
+## Demo Preview
+
+Screenshots are not committed yet. Good future preview targets would be:
+
+- public home/catalog and movie detail pages;
+- session seat map and checkout flow;
+- fake payment outcome page;
+- admin chronoboard, attendance report, and payment workspace;
+- QR/order validation screen.
 
 ## Project Overview
 
@@ -167,7 +207,7 @@ The following are not implemented as production features and should not be prese
 - real payment provider integration;
 - real hosted checkout or card input UI;
 - email delivery for receipts or account events;
-- frontend automated test suite;
+- broader frontend automated test coverage;
 - background worker or scheduler for expiry/session completion;
 - live seat updates over WebSocket/SSE;
 - production object storage for uploaded posters/PDFs;
@@ -607,14 +647,15 @@ pytest app/tests/test_payment_providers.py -o addopts= -q
 
 ### Frontend Checks
 
-There is currently no frontend test script in `frontend/package.json`.
-
-Use TypeScript and production build validation:
+Frontend checks are configured in `frontend/package.json`.
 
 ```powershell
 cd frontend
+npm test
 npm run build
 ```
+
+The current frontend test coverage is lightweight, so the production build remains the main frontend validation step.
 
 ## Coverage
 
@@ -673,10 +714,14 @@ Do not rely on a README-stored percentage during defense. Regenerate coverage fr
 - The only payment provider is the fake provider. There is no live acquiring provider or real card collection form.
 - Fresh orders created through the UI remain pending until a provider webhook is processed; the local fake payment page can generate demo webhook outcomes.
 - Reservation expiry and session status synchronization are request-driven. There is no background worker/scheduler.
-- Frontend automated tests are not currently configured.
+- Frontend automated test coverage is currently lightweight.
 - Uploaded media uses local filesystem storage.
 - Order PDFs are generated on demand; they are not stored as durable documents.
 - Attendance PDFs are generated client-side from the admin UI.
 - There are no live seat updates over WebSocket/SSE.
 - Stateless JWT refresh tokens are not backed by a server-side token revocation list.
 - Some demo poster URLs point to external sources and can depend on network availability.
+
+## License
+
+This project is released under the MIT License. See [LICENSE](LICENSE).

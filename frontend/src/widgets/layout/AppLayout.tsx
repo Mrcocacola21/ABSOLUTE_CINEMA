@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/features/auth/useAuth";
 import { STORAGE_KEYS } from "@/shared/constants";
+import { AppFooter } from "@/widgets/layout/AppFooter";
 
 export function AppLayout() {
   const { t, i18n } = useTranslation();
@@ -119,9 +120,7 @@ export function AppLayout() {
       <main className="content">
         <Outlet />
       </main>
-      <footer className="footer">
-        {t("common.brand.title")}. {t("common.brand.tagline")}
-      </footer>
+      <AppFooter />
     </div>
   );
 }

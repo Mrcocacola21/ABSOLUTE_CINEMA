@@ -36,13 +36,31 @@ Cinema Showcase is a portfolio-ready coursework/demo project. It is not wired to
 
 ## Demo Preview
 
-Screenshots are not committed yet. Good future preview targets would be:
+Real screenshots from the seeded local demo data:
 
-- public home/catalog and movie detail pages;
-- session seat map and checkout flow;
-- fake payment outcome page;
-- admin chronoboard, attendance report, and payment workspace;
-- QR/order validation screen.
+### Home Page
+
+![Cinema Showcase home page](docs/screenshots/home-page.png)
+
+### Movie Details
+
+![Movie details page for Suzume](docs/screenshots/movie-details.png)
+
+### Session Seat Map
+
+![Session details page with seat map](docs/screenshots/session-seat-map.png)
+
+### Admin Chronoboard
+
+![Admin chronoboard timeline](docs/screenshots/admin-chronoboard.png)
+
+### Admin Payment Analytics
+
+![Admin payment analytics dashboard](docs/screenshots/admin-payments.png)
+
+### Staff Order Validation
+
+![Admin order validation workflow](docs/screenshots/admin-order-validation.png)
 
 ## Project Overview
 
